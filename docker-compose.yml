@@ -1,0 +1,105 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      TYPESENSE_HOST: typesense
+    volumes:
+      - ./:/app
+    depends_on:
+      - typesense
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  etl-gold:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_gold.py"]
+    depends_on:
+      - api
+    restart: "no"
+
+  etl-all:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_etl.py"]
+    depends_on:
+      - api
+    restart: "no"
+
+  indexer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      TYPESENSE_HOST: typesense
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/index_typesense.py"]
+    depends_on:
+      - api
+      - typesense
+    restart: "no"
+
+  etl-bronze:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_bronze.py"]
+    depends_on:
+      - api
+    restart: "no"
+
+  etl-silver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_silver.py"]
+    depends_on:
+      - etl-bronze
+    restart: "no"
+
+  typesense:
+    image: typesense/typesense:0.25.1
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+
+volumes:
+  typesense-data: {}

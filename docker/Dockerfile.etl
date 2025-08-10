@@ -1,0 +1,24 @@
+FROM python:3.10-slim
+
+ENV POETRY_VERSION=1.8.3 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# ETL needs Java for PySpark
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
+
+WORKDIR /app
+ENV PYTHONPATH=/app/src
+COPY pyproject.toml poetry.lock* ./
+RUN poetry config virtualenvs.create false \
+ && poetry install --only main --no-interaction --no-ansi
+
+COPY . .
+
+# Default command runs the Gold ETL runner
+CMD ["python", "scripts/run_gold.py"]

@@ -1,4 +1,4 @@
-.PHONY: help install test lint format clean run-etl api-dev docker-up docker-down
+.PHONY: help install test lint format clean run-etl api-dev run-api etl-full etl-bronze etl-silver etl-gold docker-up docker-down
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -6,8 +6,8 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Install all dependencies with Poetry
-	poetry install --with dev,data
+install: ## Install all dependencies with Poetry (including dev tools)
+	poetry install --with dev
 	poetry run pre-commit install
 
 test: ## Run test suite with coverage
@@ -37,23 +37,26 @@ clean: ## Clean up generated files
 	rm -rf build/
 	rm -rf *.egg-info
 
-run-etl: ## Run the complete ETL pipeline
+run-etl: ## Run the complete ETL pipeline (Bronze -> Silver -> Gold)
 	poetry run python scripts/run_etl.py
 
 run-bronze: ## Run only Bronze layer ETL
-	poetry run python -m src.de_challenge.etl.bronze.main
+	poetry run python scripts/run_bronze.py
 
 run-silver: ## Run only Silver layer ETL
-	poetry run python -m src.de_challenge.etl.silver.main
+	poetry run python scripts/run_silver.py
 
 run-gold: ## Run only Gold layer ETL
-	poetry run python -m src.de_challenge.etl.gold.main
+	poetry run python scripts/run_gold.py
 
 api-dev: ## Start FastAPI in development mode
-	poetry run uvicorn src.de_challenge.api.main:app --reload --host 0.0.0.0 --port 8000
+	poetry run uvicorn de_challenge.api.main:app --reload --host 0.0.0.0 --port 8000
+
+run-api: ## Alias: start FastAPI in development mode
+	$(MAKE) api-dev
 
 api-prod: ## Start FastAPI in production mode
-	poetry run gunicorn src.de_challenge.api.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+	poetry run gunicorn de_challenge.api.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 
 docker-build: ## Build Docker images
 	docker-compose build
@@ -83,3 +86,16 @@ setup-dev: ## Complete development environment setup
 	cp .env.example .env
 	make init-db
 	@echo "✅ Development environment ready!"
+
+# Aliases matching README
+etl-full: ## Alias: Run the complete ETL pipeline
+	$(MAKE) run-etl
+
+etl-bronze: ## Alias: Run only Bronze layer ETL
+	$(MAKE) run-bronze
+
+etl-silver: ## Alias: Run only Silver layer ETL
+	$(MAKE) run-silver
+
+etl-gold: ## Alias: Run only Gold layer ETL
+	$(MAKE) run-gold

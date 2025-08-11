@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql import types as T
 from pyspark.sql.window import Window
 
 from de_challenge.core.config import settings
@@ -64,6 +65,25 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
         if c in df.columns:
             df = df.withColumn(c, F.trim(F.col(c).cast("string")))
 
+    # Stable row fingerprint to track validation results and build quarantine set
+    # Use a deterministic concatenation of required fields with normalized types
+    parts = []
+    for c in [
+        "invoice_no",
+        "stock_code",
+        "description",
+        "quantity",
+        "unit_price",
+        "invoice_timestamp",
+        "customer_id",
+        "country",
+    ]:
+        if c == "invoice_timestamp" and c in df.columns:
+            parts.append(F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit("")))
+        else:
+            parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
+    df = df.withColumn("row_id", F.sha2(F.concat_ws("||", *parts), 256))
+
     return df
 
 
@@ -73,6 +93,7 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
     """
     # Select only the required columns to feed the model
     cols = [
+        "row_id",
         "invoice_no",
         "stock_code",
         "description",
@@ -106,6 +127,7 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
                 if item.has_errors:
                     continue
                 yield {
+                    "row_id": d.get("row_id"),
                     "invoice_no": item.invoice_no,
                     "stock_code": item.stock_code,
                     "description": item.description,
@@ -120,16 +142,34 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
                 continue
 
     rdd = sdf.rdd.mapPartitions(validate_partition)
-    return df.sparkSession.createDataFrame(rdd)
+
+    # Define schema explicitly to avoid inference failures on empty RDDs
+    schema = T.StructType(
+        [
+            T.StructField("row_id", T.StringType(), True),
+            T.StructField("invoice_no", T.StringType(), True),
+            T.StructField("stock_code", T.StringType(), True),
+            T.StructField("description", T.StringType(), True),
+            T.StructField("quantity", T.IntegerType(), True),
+            T.StructField("unit_price", T.DoubleType(), True),
+            T.StructField("invoice_timestamp", T.TimestampType(), True),
+            T.StructField("customer_id", T.StringType(), True),
+            T.StructField("country", T.StringType(), True),
+        ]
+    )
+
+    # If validation drops all rows, return an empty DataFrame with the expected schema
+    first = rdd.take(1)
+    if not first:
+        return df.sparkSession.createDataFrame([], schema)
+
+    return df.sparkSession.createDataFrame(rdd, schema=schema)
 
 
 def _deduplicate(df: DataFrame) -> DataFrame:
     # Prefer latest by ingestion_timestamp if present; else by invoice_timestamp
     order_col = F.col("ingestion_timestamp") if "ingestion_timestamp" in df.columns else F.col("invoice_timestamp")
-    w = (
-        Window.partitionBy("invoice_no", "stock_code", "customer_id")
-        .orderBy(order_col.desc())
-    )
+    w = Window.partitionBy("invoice_no", "stock_code", "customer_id").orderBy(order_col.desc())
     df = df.withColumn("_rn", F.row_number().over(w)).where(F.col("_rn") == 1).drop("_rn")
     return df
 
@@ -143,6 +183,21 @@ def write_silver(df: DataFrame) -> Path:
         .option("mergeSchema", "true")
         .save(str(out_dir))
     )
+    # Also write rejected/quarantine records if present
+    if "row_id" in df.columns:
+        # Derive quarantine by anti-join with validated row_ids
+        bronze_dir = (settings.bronze_path / "sales").resolve()
+        spark = df.sparkSession
+        try:
+            bronze = spark.read.format("delta").load(str(bronze_dir))
+        except Exception:
+            bronze = spark.read.parquet(str(bronze_dir))
+        if "row_id" in bronze.columns:
+            valid_ids = df.select("row_id").dropDuplicates(["row_id"])
+            quarantine = bronze.join(valid_ids, on=["row_id"], how="left_anti")
+            qdir = (settings.silver_path / "quarantine" / "sales").resolve()
+            qdir.mkdir(parents=True, exist_ok=True)
+            quarantine.write.mode("overwrite").format("delta").save(str(qdir))
     return out_dir
 
 

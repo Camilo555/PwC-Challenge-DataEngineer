@@ -246,9 +246,11 @@ class Settings(BaseSettings):
             "spark.sql.adaptive.enabled": "true",
             "spark.sql.adaptive.coalescePartitions.enabled": "true",
             # JDBC drivers for SQLite and Postgres (download from Maven Central at runtime)
+            # Include Delta Lake JAR to ensure Delta classes are available in Spark
             "spark.jars.packages": ",".join([
                 "org.xerial:sqlite-jdbc:3.45.3.0",
                 "org.postgresql:postgresql:42.7.3",
+                "io.delta:delta-spark_2.12:3.2.1",
             ]),
         }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List
+import uuid
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
 
@@ -33,6 +34,7 @@ def _read_raw_csvs(spark: SparkSession, files: List[Path]) -> DataFrame:
             f"No raw CSV files found under {settings.raw_data_path.resolve()}"
         )
     df = None
+    job_id = str(uuid.uuid4())
     for f in files:
         _df = (
             spark.read.option("header", True)
@@ -45,6 +47,30 @@ def _read_raw_csvs(spark: SparkSession, files: List[Path]) -> DataFrame:
         # add metadata
         _df = _df.withColumn("source_file_path", F.lit(str(f)))
         _df = _df.withColumn("ingestion_timestamp", F.current_timestamp())
+        _df = _df.withColumn("source_file_size", F.lit(int(f.stat().st_size)))
+        _df = _df.withColumn("source_file_type", F.lit(f.suffix.lower().lstrip(".")))
+        _df = _df.withColumn("ingestion_job_id", F.lit(job_id))
+        _df = _df.withColumn("schema_version", F.lit("1"))
+        # stable row fingerprint for downstream quarantine matching
+        parts = []
+        for c in [
+            "invoice_no",
+            "stock_code",
+            "description",
+            "quantity",
+            "unit_price",
+            "invoice_timestamp",
+            "customer_id",
+            "country",
+        ]:
+            if c in _df.columns:
+                if c == "invoice_timestamp":
+                    parts.append(F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit("")))
+                else:
+                    parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
+            else:
+                parts.append(F.lit(""))
+        _df = _df.withColumn("row_id", F.sha2(F.concat_ws("||", *parts), 256))
         df = _df if df is None else df.unionByName(_df, allowMissingColumns=True)
     return df
 
@@ -67,19 +93,25 @@ def ingest_bronze() -> None:
         if col not in df.columns:
             df = df.withColumn(col, F.lit(None))
 
-    # Write as Parquet partitioned by date (derived from invoice_timestamp if available)
+    # Add ingestion_date for partitioning (fallback to current_date if invoice_timestamp missing)
     dfw = df
     if "invoice_timestamp" in dfw.columns:
         dfw = dfw.withColumn("invoice_date", F.to_date("invoice_timestamp"))
+    dfw = dfw.withColumn(
+        "ingestion_date",
+        F.coalesce(F.to_date("ingestion_timestamp"), F.current_date()),
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (
         dfw.write.mode("overwrite")
-        .option("compression", "snappy")
-        .parquet(str(out_dir))
+        .format("delta")
+        .option("mergeSchema", "true")
+        .partitionBy("ingestion_date")
+        .save(str(out_dir))
     )
 
-    print(f"Bronze ingest complete -> {out_dir}")
+    print(f"Bronze ingest complete -> {out_dir} (format=delta)")
 
 
 def main() -> None:

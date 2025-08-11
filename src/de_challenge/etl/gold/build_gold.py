@@ -173,19 +173,41 @@ def _upsert_dimension_keys(df: DataFrame) -> Tuple[
 def build_and_load_gold() -> None:
     """Read Silver sales, create dimensions if needed, and load FactSale via JDBC with idempotency."""
     df = _read_silver_sales()
+
+    # Short-circuit if there is nothing to load
+    if df.head(1) == []:  # type: ignore[comparison-overlap]
+        print("Gold load skipped. No rows found in Silver sales.")
+        return
     prod_map, country_map, cust_map, inv_map, date_map = _upsert_dimension_keys(df)
 
     spark = df.sparkSession
 
-    # Build mapping DataFrames from dicts for joins
-    prod_df = spark.createDataFrame([(k, v) for k, v in prod_map.items()], ["stock_code", "product_key"])
-    country_df = spark.createDataFrame([(k, v) for k, v in country_map.items()], ["country", "country_key"])
-    inv_df = spark.createDataFrame([(k, v) for k, v in inv_map.items()], ["invoice_no", "invoice_key"])
+    # Build mapping DataFrames from dicts for joins (handle empty maps with explicit schemas)
+    prod_items = [(k, v) for k, v in prod_map.items()]
+    prod_df = (
+        spark.createDataFrame(prod_items, ["stock_code", "product_key"]) if prod_items else spark.createDataFrame([], "stock_code string, product_key int")
+    )
+
+    country_items = [(k, v) for k, v in country_map.items()]
+    country_df = (
+        spark.createDataFrame(country_items, ["country", "country_key"]) if country_items else spark.createDataFrame([], "country string, country_key int")
+    )
+
+    inv_items = [(k, v) for k, v in inv_map.items()]
+    inv_df = (
+        spark.createDataFrame(inv_items, ["invoice_no", "invoice_key"]) if inv_items else spark.createDataFrame([], "invoice_no string, invoice_key int")
+    )
+
     # customer_id may contain None
     cust_items = [(k, v) for k, v in cust_map.items() if k is not None]
     cust_df = spark.createDataFrame(cust_items, ["customer_id", "customer_key"]) if cust_items else spark.createDataFrame([], "customer_id string, customer_key int")
+
     date_items = [(k, v) for k, v in date_map.items()]
-    date_df = spark.createDataFrame(date_items, ["dstr", "date_key"]).withColumnRenamed("dstr", "dstr")
+    date_df = (
+        spark.createDataFrame(date_items, ["dstr", "date_key"]).withColumnRenamed("dstr", "dstr")
+        if date_items
+        else spark.createDataFrame([], "dstr string, date_key int")
+    )
 
     facts = (
         df

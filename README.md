@@ -1,194 +1,196 @@
-# 🚀 Data Engineering Challenge - Retail ETL Pipeline
+# Retail ETL Pipeline (PwC Data Engineering Challenge)
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![PySpark](https://img.shields.io/badge/PySpark-3.5+-orange.svg)](https://spark.apache.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 
-## 📋 Overview
+## Overview
 
-Production-ready ETL pipeline for retail data processing using modern data engineering best practices:
-- **Bronze-Silver-Gold** architecture with Delta Lake
-- **PySpark** for all data transformations
-- **Star Schema** data warehouse design
-- **Vector Search** with Typesense for semantic product search
-- **RESTful API** with FastAPI
-- **Docker** containerization
+End-to-end data platform implementing the Medallion (Bronze/Silver/Gold) architecture with PySpark, a star schema warehouse (SQLite in dev, PostgreSQL-ready), and a FastAPI service to query curated sales data. Typesense vector search is prepared for product embeddings.
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph LR
-    A[Raw Data] --> B[Bronze Layer]
-    B --> C[Silver Layer]
-    C --> D[Gold Layer]
-    D --> E[Data Warehouse]
-    E --> F[FastAPI]
-    D --> G[Typesense]
-    G --> F
+  A[Raw Data (CSV)] --> B[Bronze (Delta)]
+  B --> C[Silver (Delta)]
+  C --> D[Gold (Star Schema)]
+  D --> E[(SQLite/PostgreSQL)]
+  E --> F[FastAPI]
+  D --> G[Typesense]
+  G --> F
+```
 
+## Tech Stack
+- PySpark 3.5 with Delta Lake for transformations
+- SQLModel + SQLAlchemy for warehouse schema
+- FastAPI + Pydantic for API layer and validation
+- Typesense for vector/text search (optional)
+- Docker Compose for orchestration
+- Pytest, Ruff, Black, Mypy for quality
 
+## Prerequisites
+- Python 3.10+
+- Poetry 1.8+
+- Docker & Docker Compose (recommended)
+- 8GB+ RAM (Spark)
 
-🛠️ Tech Stack
+## Setup
+1) Create `.env` (or copy from example):
+```bash
+cp .env.example .env
+```
+Minimal required values:
+```
+ENVIRONMENT=development
+DATABASE_TYPE=sqlite
+DATABASE_URL=sqlite:///./data/warehouse/retail.db
+SPARK_MASTER=local[*]
+BASIC_AUTH_USERNAME=admin
+BASIC_AUTH_PASSWORD=changeme123
+TYPESENSE_API_KEY=xyz123changeme
+```
 
-ETL Framework: PySpark 3.5+ with Delta Lake
-Database: SQLite (dev) / PostgreSQL-ready (prod)
-API: FastAPI with Pydantic validation
-Vector Search: Typesense with sentence-transformers
-Containerization: Docker & Docker Compose
-Testing: Pytest with 80%+ coverage target
-Code Quality: Black, Ruff, Mypy, Pre-commit hooks
+2) Provide input data in `data/raw/` (CSV). Example file:
+```
+data/raw/sample.csv
+invoice_no,stock_code,description,quantity,unit_price,invoice_timestamp,customer_id,country
+536365,85123A,White Hanging Heart T-Light Holder,6,2.55,2010-12-01T08:26:00,10001,United Kingdom
+536366,71053,White Metal Lantern,6,3.39,2010-12-01T08:28:00,10002,France
+```
 
-📦 Installation
-Prerequisites
+Quick create (PowerShell):
+```powershell
+New-Item -ItemType Directory -Force data/raw | Out-Null; @(
+  'invoice_no,stock_code,description,quantity,unit_price,invoice_timestamp,customer_id,country',
+  '536365,85123A,White Hanging Heart T-Light Holder,6,2.55,2010-12-01T08:26:00,10001,United Kingdom',
+  '536366,71053,White Metal Lantern,6,3.39,2010-12-01T08:28:00,10002,France'
+) | Set-Content data/raw/sample.csv
 
-Python 3.10+
-Poetry (with uv backend recommended)
-Docker & Docker Compose
-8GB+ RAM (for Spark operations)
+Note: By default, Silver validation requires non-cancelled rows to have a numeric `customer_id`. Use numeric IDs like `10001`.
+```
 
-Setup
+Optional: seed demo data (skips if facts exist):
+```bash
+poetry run python scripts/seed_data.py
+```
 
-Clone the repository:
+## Quick Start
 
-bashgit clone https://github.com/Camilo555/PwC-Challenge-DataEngineer.git
-cd PwC-Challenge-DataEngineer
+### A) Docker (recommended)
+```bash
+docker compose up -d --build typesense api
+# If your Compose supports profiles directly
+docker compose --profile etl run --rm etl-all
+# Otherwise on PowerShell, enable the profile via env var
+$env:COMPOSE_PROFILES = 'etl'
+docker compose run --rm etl-all
+```
+Validate:
+```bash
+curl http://localhost:8000/api/v1/health
+# On Windows PowerShell, use curl.exe or Invoke-RestMethod for Basic Auth
+curl.exe -u admin:changeme123 "http://localhost:8000/api/v1/sales?page=1&size=10"
+```
 
+Tips:
+- Subsequent builds are much faster. `.dockerignore` reduces build context.
+- Tail API logs: `docker compose logs -f api`
 
-Install dependencies:
+### B) Local (Poetry)
+```bash
+poetry install
+poetry run python scripts/run_etl.py   # Bronze -> Silver -> Gold
+poetry run uvicorn de_challenge.api.main:app --host 0.0.0.0 --port 8000
+```
+Local ETL requires Java 17. Install Temurin JDK 17 and set JAVA_HOME in PowerShell for the session:
+```powershell
+winget install --id EclipseAdoptium.Temurin.17.JDK -e --accept-source-agreements --accept-package-agreements
+$jdk = Get-ChildItem 'C:\\Program Files\\Eclipse Adoptium\\' -Directory | Where-Object { $_.Name -like 'jdk-17*' } | Select-Object -First 1 -ExpandProperty FullName
+$env:JAVA_HOME = $jdk; $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+```
+Validate:
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+curl -u admin:changeme123 "http://127.0.0.1:8000/api/v1/sales?page=1&size=10"
+```
 
-bashpoetry install --with dev,data
+## ETL Pipeline
+- Bronze: Ingest raw CSV to Delta at `data/bronze/sales/` (no transforms; adds metadata and partitions by `ingestion_date`)
+- Silver: Clean, validate (Pydantic), deduplicate; write Delta at `data/silver/sales/`
+- Gold: Build star schema and load `FactSale` + dimensions into the warehouse via JDBC
 
-Setup environment variables:
+Make targets:
+```bash
+make etl-bronze
+make etl-silver
+make etl-gold
+make etl-full     # scripts/run_etl.py
+make run-api
+```
 
-bashcp .env.example .env
-# Edit .env with your configurations
+## API
+- Auth: HTTP Basic via `.env` (`BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`)
+- Health: `GET /api/v1/health`
+- Sales: `GET /api/v1/sales?page=1&size=10&product=85123A&country=United%20Kingdom`
 
-Initialize pre-commit hooks:
+More examples:
+```bash
+# Filter by date range (ISO8601)
+curl -u admin:changeme123 "http://localhost:8000/api/v1/sales?date_from=2010-12-01T00:00:00&date_to=2010-12-02T00:00:00&page=1&size=20"
+# Sort by total ascending
+curl -u admin:changeme123 "http://localhost:8000/api/v1/sales?product=85123A&sort=total:asc&page=1&size=10"
+```
 
-bashpoetry run pre-commit install
-🚀 Quick Start
-Run the complete ETL pipeline:
-bashmake run-etl
-Start the API server:
-bashmake api-dev
-Run tests:
-bashmake test
-Start all services with Docker:
-bashdocker-compose up -d
+Response excerpt:
+```json
+{
+  "items": [
+    {
+      "invoice_no": "536365",
+      "stock_code": "85123A",
+      "description": "White Hanging Heart T-Light Holder",
+      "quantity": 6,
+      "invoice_date": "2010-12-01T08:26:00",
+      "unit_price": 2.55,
+      "customer_id": "CUST-0001",
+      "country": "United Kingdom",
+      "total": 15.3,
+      "total_str": "15.30"
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "size": 10
+}
+```
 
+## Testing & Quality
+```bash
+make test
+make lint
+make type-check
+```
 
-📁 Project Structure
-de-challenge-retail-etl/
-├── src/
-│   └── de_challenge/
-│       ├── api/          # FastAPI application
-│       ├── core/         # Configuration & constants
-│       ├── domain/       # Business models (Pydantic)
-│       ├── data_access/  # Database models (SQLModel)
-│       ├── etl/          # PySpark ETL pipelines
-│       └── vector_search/# Typesense integration
-├── tests/                # Test suite
-├── data/                 # Data directories
-│   ├── raw/             # Input files
-│   ├── bronze/          # Raw data lake
-│   ├── silver/          # Cleaned data
-│   ├── gold/            # Business-ready data
-│   └── warehouse/       # SQLite database
-├── docker/              # Docker configurations
-├── docs/                # Documentation
-└── scripts/             # Utility scripts
+## Troubleshooting
+- 401 on `/api/v1/sales`: include `-u user:pass` with Basic Auth
+- Docker first build slow on Windows/OneDrive → use `.dockerignore` and retry
+- SQLite locked: avoid concurrent writers; close open DB viewers
+ - Spark first run downloads JDBC drivers; re-run if it fails once
+- PowerShell `curl`: use `curl.exe` or `Invoke-RestMethod` (as `curl` is an alias to `Invoke-WebRequest` and `-u` is ambiguous)
+- Silver empty: your data likely failed validation (e.g., non-numeric `customer_id`). Use numeric IDs or relax the rule.
 
+## Switch to PostgreSQL / Supabase
+- Set in `.env`:
+```
+DATABASE_TYPE=postgresql
+# Standard Postgres
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME
+# Supabase (require SSL)
+# DATABASE_URL=postgresql://USER:PASSWORD@HOST:6543/DBNAME?sslmode=require
+```
+- Spark JDBC drivers for Postgres are already configured. Gold will write to Postgres automatically via JDBC.
+- Ensure the database is reachable from the container/host and the user has DDL/DML permissions. For Supabase, keep `sslmode=require`.
 
-
-🔄 ETL Pipeline
-Bronze Layer (Raw Ingestion)
-
-Ingests CSV, JSON, and PDF files
-No transformations, only metadata addition
-Delta Lake format with ACID properties
-
-Silver Layer (Cleaning & Validation)
-
-Data cleaning with PySpark
-Business validation with Pydantic
-Deduplication and standardization
-
-Gold Layer (Star Schema)
-
-Dimension and Fact tables creation
-Optimized for analytical queries
-Ready for BI tools
-
-🔌 API Endpoints
-EndpointMethodDescription/api/v1/salesGETQuery sales fact table/api/v1/productsGETList products/api/v1/searchPOSTVector search for products/api/v1/etl/triggerPOSTManually trigger ETL/docsGETOpenAPI documentation
-
-🧪 Testing
-Run the test suite:
-bash# Unit tests
-poetry run pytest tests/unit/
-
-# Integration tests
-poetry run pytest tests/integration/
-
-# With coverage report
-poetry run pytest --cov=src/de_challenge --cov-report=html
-📊 Data Quality
-The pipeline includes comprehensive data quality checks:
-
-Schema validation
-Business rule enforcement
-Referential integrity
-Outlier detection
-Completeness metrics
-
-🐳 Docker Deployment
-bash# Build and start services
-docker-compose up --build
-
-# Services included:
-# - API (port 8000)
-# - Typesense (port 8108)
-# - PostgreSQL (optional, port 5432)
-📈 Performance Optimization
-
-Spark adaptive query execution
-Delta Lake optimization
-API response caching
-Connection pooling
-Batch processing
-
-🔐 Security
-
-Basic authentication (expandable to JWT)
-Input validation with Pydantic
-SQL injection prevention
-Environment variable management
-Docker security best practices
-
-📝 Documentation
-
-Architecture Decision Records
-API Documentation
-ETL Pipeline Guide
-Deployment Guide
-
-🤝 Contributing
-
-Fork the repository
-Create a feature branch (git checkout -b feat/amazing-feature)
-Commit changes (git commit -m 'feat: add amazing feature')
-Push to branch (git push origin feat/amazing-feature)
-Open a Pull Request
-
-📄 License
-This project is part of the PwC Data Engineering Challenge.
-👥 Team
-
-Your Name
-
-🙏 Acknowledgments
-
-PwC for the challenge opportunity
-Online Retail II dataset from UCI ML Repository
-
+## License
+Part of the PwC Data Engineering Challenge.

@@ -37,13 +37,16 @@ flowchart LR
 
 Environment variables are managed by `pydantic-settings` in `src/de_challenge/core/config.py`. A sample is provided in `.env.example`.
 
-Key variables:
+Key variables (dev defaults shown):
 - `ENVIRONMENT` = development|staging|production
 - `DATABASE_TYPE` = sqlite|postgresql
 - `DATABASE_URL` = `sqlite:///./data/warehouse/retail.db` (dev default)
 - `SPARK_MASTER` = `local[*]` (dev)
 - `TYPESENSE_API_KEY`, `TYPESENSE_HOST`, `TYPESENSE_PORT`
 - `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
+
+Notes:
+- Silver validation expects numeric `customer_id` for non-cancelled transactions. Provide numeric IDs in raw data or relax the rule in `TransactionLine.validate_business_rules`.
 
 On import, `settings.validate_paths()` creates the required directories.
 
@@ -159,10 +162,31 @@ Spark config derived in `settings.spark_config`. Defaults for dev:
 - Delta Lake enabled via extensions & catalog
 - `spark.sql.adaptive.enabled = true`
 
-Entry points (to be implemented):
-- Bronze: `python -m de_challenge.etl.bronze.ingest_structured --input data/raw/ --output data/bronze/`
-- Silver: `python -m de_challenge.etl.silver.clean_transactions --input data/bronze/ --output data/silver/`
-- Gold: `python -m de_challenge.etl.gold.load_warehouse --input data/silver/ --db data/warehouse/retail.db`
+Entry points (implemented):
+- Bronze: `python -m de_challenge.etl.bronze.ingest_bronze`
+- Silver: `python -m de_challenge.etl.silver.clean_silver`
+- Gold: `python -m de_challenge.etl.gold.build_gold`
+
+Orchestrator:
+- `scripts/run_etl.py` runs all stages (or selected via flags `--bronze/--silver/--gold`).
+
+Makefile targets:
+```
+make etl-bronze
+make etl-silver
+make etl-gold
+make etl-full
+```
+
+Docker Compose:
+```
+docker compose up -d --build typesense api
+# If your Compose supports profiles directly
+docker compose --profile etl run --rm etl-all
+# Otherwise on PowerShell, enable the profile via env var
+$env:COMPOSE_PROFILES = 'etl'
+docker compose run --rm etl-all
+```
 
 ---
 
@@ -203,6 +227,13 @@ docker compose up --build -d
 curl http://localhost:8000/health
 ```
 
+Java requirement for local ETL (PowerShell):
+```powershell
+winget install --id EclipseAdoptium.Temurin.17.JDK -e --accept-source-agreements --accept-package-agreements
+$jdk = Get-ChildItem 'C:\\Program Files\\Eclipse Adoptium\\' -Directory | Where-Object { $_.Name -like 'jdk-17*' } | Select-Object -First 1 -ExpandProperty FullName
+$env:JAVA_HOME = $jdk; $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+```
+
 Split images (faster API builds):
 
 - API image (no Java): `docker/Dockerfile.api`
@@ -211,7 +242,7 @@ Split images (faster API builds):
 Compose services (see `docker-compose.yml`):
 
 - `api` uses `docker/Dockerfile.api`
-- `etl-gold` uses `docker/Dockerfile.etl` with profile `etl`
+- `etl-all` and individual `etl-*` services use `docker/Dockerfile.etl` (profile `etl`)
 
 Common commands:
 
@@ -222,8 +253,8 @@ docker compose build api && docker compose up -d api
 # Tail API logs
 docker compose logs -f api
 
-# Run Gold ETL on-demand (reads Silver CSV/Parquet, loads warehouse; idempotent)
-docker compose run --rm --profile etl etl-gold
+# Run full ETL (Bronze -> Silver -> Gold)
+docker compose run --rm --profile etl etl-all
 ```
 
 Idempotency:
@@ -247,9 +278,9 @@ Coverage target: 80%+ for core modules.
 
 ## 10. Roadmap to Completion
 
-1) Implement SQLModel entities and Alembic migrations for star schema in `src/de_challenge/data_access/models/`.
-2) Implement SalesService queries against warehouse.
-3) Implement Bronze/Silver/Gold Spark jobs (Delta I/O + validations).
+1) Star schema entities implemented in `src/de_challenge/data_access/models/star_schema.py` with repositories.
+2) SalesService queries implemented against the warehouse.
+3) Bronze/Silver/Gold Spark jobs implemented (Delta I/O + validations).
 4) Add ETL trigger endpoint and background job orchestration.
 5) Implement Typesense embeddings, indexing, and search endpoint.
 6) Expand tests, add fixtures, CI checks.
@@ -270,3 +301,19 @@ Coverage target: 80%+ for core modules.
 - Import errors: ensure running inside Poetry environment.
 - Docker healthcheck failing: confirm `/health` returns status ok; check logs.
 - SQLite locked: close other connections; avoid concurrent writers on dev.
+
+- PowerShell Basic Auth: use `curl.exe -u user:pass` or `Invoke-RestMethod` with Authorization header.
+- Delta class not found in Docker: ensured via `spark.jars.packages` in `settings.spark_config` (Delta 3.2.1). Rebuild ETL image.
+
+## 13. Switching to PostgreSQL / Supabase
+
+- In `.env`:
+```
+DATABASE_TYPE=postgresql
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME
+# For Supabase, add SSL:
+# DATABASE_URL=postgresql://USER:PASSWORD@HOST:6543/DBNAME?sslmode=require
+```
+- The code already selects JDBC driver and URL based on `DATABASE_TYPE`. Spark is configured with Postgres JDBC dependency.
+- Gold writer will use JDBC to load `fact_sale` into Postgres instead of SQLite.
+- Ensure network access from containers and correct credentials/permissions.

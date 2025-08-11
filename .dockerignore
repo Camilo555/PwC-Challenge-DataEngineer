@@ -1,0 +1,11 @@
+.git
+.vscode
+.mypy_cache
+.pytest_cache
+__pycache__
+logs
+data
+docs
+tests
+*.ipynb
+.env

@@ -217,26 +217,22 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid database type: {v}")
         return v
     
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def is_production(self) -> bool:
         """Check if running in production environment."""
         return self.environment == Environment.PRODUCTION
     
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == Environment.DEVELOPMENT
     
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def is_postgresql(self) -> bool:
         """Check if using PostgreSQL database."""
         return self.database_type == DatabaseType.POSTGRESQL
 
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def spark_config(self) -> Dict[str, Any]:
         """Get Spark configuration as dictionary."""
         return {
@@ -256,8 +252,7 @@ class Settings(BaseSettings):
             ]),
         }
 
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def typesense_config(self) -> Dict[str, Any]:
         """Get Typesense configuration as dictionary."""
         return {
@@ -281,13 +276,12 @@ class Settings(BaseSettings):
             if async_mode:
                 return self.database_url.replace("sqlite://", "sqlite+aiosqlite://")
             return self.database_url
-        elif self.database_type == DatabaseType.POSTGRESQL:
-            if self.supabase_url:
-                # Placeholder for Supabase parsing when needed
-                pass
-            if async_mode:
-                return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
-            return self.database_url
+        # PostgreSQL
+        if self.supabase_url:
+            # Placeholder for Supabase parsing when needed
+            _ = self.supabase_url
+        if async_mode:
+            return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
         return self.database_url
 
     def validate_paths(self) -> None:
@@ -303,36 +297,12 @@ class Settings(BaseSettings):
         for path in paths:
             path.mkdir(parents=True, exist_ok=True)
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def jdbc_driver(self) -> str:
-        """Return JDBC driver class based on database type."""
-        if self.database_type == DatabaseType.SQLITE:
-            return "org.sqlite.JDBC"
-        return "org.postgresql.Driver"
+    # Duplicate computed properties removed below to avoid redefinition
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def jdbc_url(self) -> str:
-        """Return JDBC URL for Spark based on settings.database_url."""
-        if self.database_type == DatabaseType.SQLITE:
-            # Expect database_url like sqlite:///./data/warehouse/retail.db
-            url = self.database_url
-            prefix = "sqlite:///"
-            if url.startswith(prefix):
-                db_path = url[len(prefix):]
-            else:
-                db_path = url.replace("sqlite://", "")
-            p = Path(db_path).resolve()
-            return f"jdbc:sqlite:{p.as_posix()}"
-        # Postgres
-        return self.database_url.replace("postgresql://", "jdbc:postgresql://")
-
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def jdbc_properties(self) -> Dict[str, str]:
         """Return JDBC connection properties for Spark."""
-        props: Dict[str, str] = {"driver": self.jdbc_driver}
+        props: Dict[str, str] = {"driver": str(self.jdbc_driver)}
         if self.database_type == DatabaseType.POSTGRESQL:
             # Very simple parse; prefer env vars in production
             import re
@@ -342,16 +312,14 @@ class Settings(BaseSettings):
                 props["password"] = m.group(2)
         return props
 
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def jdbc_driver(self) -> str:
         """Return JDBC driver class based on database type."""
         if self.database_type == DatabaseType.SQLITE:
             return "org.sqlite.JDBC"
         return "org.postgresql.Driver"
 
-    @computed_field  # type: ignore[misc]
-    @property
+    @computed_field
     def jdbc_url(self) -> str:
         """Return JDBC URL for Spark based on settings.database_url."""
         if self.database_type == DatabaseType.SQLITE:

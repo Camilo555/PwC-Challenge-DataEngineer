@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyspark.sql import DataFrame, SparkSession, functions as F, Window
+from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql.window import Window
 
 from de_challenge.core.config import settings
 from de_challenge.etl.utils.spark import get_spark
@@ -25,7 +26,11 @@ def _read_bronze_sales(spark: SparkSession) -> DataFrame:
     src = (settings.bronze_path / "sales").resolve()
     if not src.exists():
         raise FileNotFoundError(f"Bronze dataset not found at {src}. Run Bronze ingest first.")
-    df = spark.read.parquet(str(src))
+    # Prefer Delta format (new Bronze writes Delta); fallback to Parquet for legacy data
+    try:
+        df = spark.read.format("delta").load(str(src))
+    except Exception:
+        df = spark.read.parquet(str(src))
     # Normalize lowercase columns
     for c in df.columns:
         df = df.withColumnRenamed(c, c.lower())
@@ -42,6 +47,8 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
     df = df.withColumn("quantity", F.col("quantity").cast("int"))
     df = df.withColumn("unit_price", F.col("unit_price").cast("double"))
     df = df.withColumn("invoice_timestamp", F.to_timestamp("invoice_timestamp"))
+    if "ingestion_timestamp" in df.columns:
+        df = df.withColumn("ingestion_timestamp", F.to_timestamp("ingestion_timestamp"))
 
     # Basic validations
     df = df.where(F.col("invoice_no").isNotNull())
@@ -51,11 +58,11 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
     df = df.where(F.col("unit_price").isNotNull() & (F.col("unit_price") >= 0))
     df = df.where(F.col("country").isNotNull())
 
-    # Trim strings
+    # Normalize and trim string columns (ensure string type first)
     str_cols = ["invoice_no", "stock_code", "description", "customer_id", "country"]
     for c in str_cols:
         if c in df.columns:
-            df = df.withColumn(c, F.trim(F.col(c)))
+            df = df.withColumn(c, F.trim(F.col(c).cast("string")))
 
     return df
 

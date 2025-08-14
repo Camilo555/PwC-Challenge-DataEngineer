@@ -48,17 +48,26 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
     df = df.withColumn("quantity", F.col("quantity").cast("int"))
     df = df.withColumn("unit_price", F.col("unit_price").cast("double"))
     df = df.withColumn("invoice_timestamp", F.to_timestamp("invoice_timestamp"))
-    if "ingestion_timestamp" in df.columns:
-        df = df.withColumn("ingestion_timestamp", F.to_timestamp("ingestion_timestamp"))
-
-    # Basic validations
+    
+    # Validaciones más flexibles para el dataset real
     df = df.where(F.col("invoice_no").isNotNull())
     df = df.where(F.col("stock_code").isNotNull())
     df = df.where(F.col("invoice_timestamp").isNotNull())
-    df = df.where(F.col("quantity").isNotNull() & (F.col("quantity") > 0))
-    df = df.where(F.col("unit_price").isNotNull() & (F.col("unit_price") >= 0))
+    
+    # CAMBIO: Permitir cantidades negativas (devoluciones) y cero
+    df = df.where(F.col("quantity").isNotNull())  # Solo verificar que no sea null
+    
+    # CAMBIO: Permitir precios cero (promociones, ajustes)
+    df = df.where(F.col("unit_price").isNotNull())  # Solo verificar que no sea null
+    
+    # CAMBIO: Country es requerido pero customer_id puede ser null
     df = df.where(F.col("country").isNotNull())
+    # NO filtrar por customer_id
 
+    # El customer_id puede ser nulo en el dataset real:
+    # NO filtrar por customer_id obligatorio
+    # Comentar o eliminar: df = df.where(F.col("customer_id").isNotNull())
+    
     # Normalize and trim string columns (ensure string type first)
     str_cols = ["invoice_no", "stock_code", "description", "customer_id", "country"]
     for c in str_cols:

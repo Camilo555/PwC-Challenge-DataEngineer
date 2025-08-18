@@ -4,17 +4,17 @@ Supports multiple environments and future Supabase integration.
 """
 
 from enum import Enum
-from pathlib import Path
-from typing import Optional, Dict, Any
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
-from pydantic import Field, field_validator, PostgresDsn, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(str, Enum):
     """Environment types for the application."""
-    
+
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
@@ -23,7 +23,7 @@ class Environment(str, Enum):
 
 class DatabaseType(str, Enum):
     """Supported database types."""
-    
+
     SQLITE = "sqlite"
     POSTGRESQL = "postgresql"
 
@@ -33,20 +33,20 @@ class Settings(BaseSettings):
     Application settings with support for multiple environments.
     Prepared for future Supabase (PostgreSQL) integration.
     """
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
+
     # Environment
     environment: Environment = Field(
         default=Environment.DEVELOPMENT,
         description="Current environment (development, staging, production)",
     )
-    
+
     # Database Configuration
     database_type: DatabaseType = Field(
         default=DatabaseType.SQLITE,
@@ -56,15 +56,28 @@ class Settings(BaseSettings):
         default="sqlite:///./data/warehouse/retail.db",
         description="Database connection URL",
     )
-    supabase_url: Optional[str] = Field(
+    # Supabase Integration
+    supabase_url: str | None = Field(
         default=None,
-        description="Supabase project URL for future integration",
+        description="Supabase project URL (e.g., https://xyz.supabase.co)",
     )
-    supabase_key: Optional[str] = Field(
+    supabase_key: str | None = Field(
         default=None,
-        description="Supabase API key for future integration",
+        description="Supabase anon/service role key",
     )
-    
+    supabase_service_key: str | None = Field(
+        default=None,
+        description="Supabase service role key for admin operations",
+    )
+    supabase_schema: str = Field(
+        default="retail_dwh",
+        description="Supabase schema name for star schema tables",
+    )
+    enable_supabase_rls: bool = Field(
+        default=True,
+        description="Enable Row Level Security for Supabase tables",
+    )
+
     # Spark Configuration
     spark_master: str = Field(
         default="local[*]",
@@ -90,7 +103,7 @@ class Settings(BaseSettings):
         default=200,
         description="Number of partitions for shuffles",
     )
-    
+
     # Delta Lake Configuration
     delta_log_level: str = Field(
         default="INFO",
@@ -108,7 +121,7 @@ class Settings(BaseSettings):
         default=Path("./data/gold"),
         description="Path to Gold layer data",
     )
-    
+
     # Typesense Configuration
     typesense_api_key: str = Field(
         default="xyz123changeme",
@@ -126,7 +139,7 @@ class Settings(BaseSettings):
         default="http",
         description="Typesense protocol (http/https)",
     )
-    
+
     # API Configuration
     api_host: str = Field(
         default="0.0.0.0",
@@ -148,7 +161,7 @@ class Settings(BaseSettings):
         default="info",
         description="API log level",
     )
-    
+
     # Security
     secret_key: str = Field(
         default="your-secret-key-here-change-in-production",
@@ -162,7 +175,7 @@ class Settings(BaseSettings):
         default="changeme123",
         description="Basic auth password",
     )
-    
+
     # Logging
     log_level: str = Field(
         default="INFO",
@@ -172,11 +185,11 @@ class Settings(BaseSettings):
         default="json",
         description="Log format (json/text)",
     )
-    log_file_path: Optional[Path] = Field(
+    log_file_path: Path | None = Field(
         default=Path("./logs/app.log"),
         description="Log file path",
     )
-    
+
     # Data Sources
     raw_data_path: Path = Field(
         default=Path("./data/raw"),
@@ -185,6 +198,22 @@ class Settings(BaseSettings):
     online_retail_file: str = Field(
         default="online_retail_II.xlsx",
         description="Online Retail dataset filename",
+    )
+
+    # External API Configuration
+    currency_api_key: str | None = Field(
+        default=None,
+        description="API key for currency exchange service (exchangerate-api.com)",
+    )
+    enable_external_enrichment: bool = Field(
+        default=True,
+        description="Enable external API data enrichment",
+    )
+    enrichment_batch_size: int = Field(
+        default=10,
+        description="Batch size for external API enrichment",
+        ge=1,
+        le=50,
     )
     
     # Feature Flags
@@ -200,7 +229,7 @@ class Settings(BaseSettings):
         default=False,
         description="Enable monitoring",
     )
-    
+
     @field_validator("environment")
     @classmethod
     def validate_environment(cls, v: str) -> str:
@@ -208,7 +237,7 @@ class Settings(BaseSettings):
         if v not in [e.value for e in Environment]:
             raise ValueError(f"Invalid environment: {v}")
         return v
-    
+
     @field_validator("database_type")
     @classmethod
     def validate_database_type(cls, v: str) -> str:
@@ -216,24 +245,47 @@ class Settings(BaseSettings):
         if v not in [d.value for d in DatabaseType]:
             raise ValueError(f"Invalid database type: {v}")
         return v
-    
+
     @computed_field
     def is_production(self) -> bool:
         """Check if running in production environment."""
         return self.environment == Environment.PRODUCTION
-    
+
     @computed_field
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == Environment.DEVELOPMENT
-    
+
     @computed_field
     def is_postgresql(self) -> bool:
         """Check if using PostgreSQL database."""
         return self.database_type == DatabaseType.POSTGRESQL
 
-    @computed_field
-    def spark_config(self) -> Dict[str, Any]:
+    @property
+    def is_supabase_enabled(self) -> bool:
+        """Check if Supabase integration is enabled."""
+        return (
+            self.supabase_url is not None
+            and self.supabase_key is not None
+            and self.is_postgresql
+        )
+
+    @property
+    def supabase_config(self) -> dict[str, Any]:
+        """Get Supabase configuration as dictionary."""
+        if not self.is_supabase_enabled:
+            return {}
+
+        return {
+            "url": self.supabase_url,
+            "key": self.supabase_key,
+            "service_key": self.supabase_service_key,
+            "schema": self.supabase_schema,
+            "rls_enabled": self.enable_supabase_rls,
+        }
+
+    @property
+    def spark_config(self) -> dict[str, Any]:
         """Get Spark configuration as dictionary."""
         return {
             "spark.app.name": self.spark_app_name,
@@ -254,8 +306,8 @@ class Settings(BaseSettings):
             ]),
         }
 
-    @computed_field
-    def typesense_config(self) -> Dict[str, Any]:
+    @property
+    def typesense_config(self) -> dict[str, Any]:
         """Get Typesense configuration as dictionary."""
         return {
             "api_key": self.typesense_api_key,
@@ -302,9 +354,9 @@ class Settings(BaseSettings):
     # Duplicate computed properties removed below to avoid redefinition
 
     @computed_field
-    def jdbc_properties(self) -> Dict[str, str]:
+    def jdbc_properties(self) -> dict[str, str]:
         """Return JDBC connection properties for Spark."""
-        props: Dict[str, str] = {"driver": str(self.jdbc_driver)}
+        props: dict[str, str] = {"driver": str(self.jdbc_driver)}
         if self.database_type == DatabaseType.POSTGRESQL:
             # Very simple parse; prefer env vars in production
             import re

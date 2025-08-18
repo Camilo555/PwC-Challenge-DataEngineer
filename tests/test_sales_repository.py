@@ -15,24 +15,34 @@ def seed_minimal():
         d = date(2024, 1, 2)
         dk = d.year * 10000 + d.month * 100 + d.day
         if not s.get(DimDate, dk):
-            s.add(DimDate(date_key=dk, date=d, year=2024, quarter=1, month=1, day=2))
-        prod = DimProduct(stock_code="10001", description="Test Widget")
-        cust = DimCustomer(customer_id="C001")
-        ctry = DimCountry(name="United Kingdom")
-        inv = DimInvoice(invoice_no="INV-1")
+            s.add(DimDate(
+                date_key=dk, 
+                date=d, 
+                year=2024, 
+                quarter=1, 
+                month=1, 
+                week=1,
+                day_name="Tuesday",
+                is_weekend=False,
+                is_holiday=False
+            ))
+        prod = DimProduct(stock_code="10001", description="Test Widget", category="Electronics")
+        cust = DimCustomer(customer_id="C001", customer_segment="Regular")
+        ctry = DimCountry(country_name="United Kingdom", country_code="UK", region="Europe", continent="Europe")
+        inv = DimInvoice(invoice_no="INV-1", is_cancelled=False)
         s.add_all([prod, cust, ctry, inv])
         s.flush()
         s.add(
             FactSale(
-                date_key=dk,
                 product_key=prod.product_key,  # type: ignore[attr-defined]
                 customer_key=cust.customer_key,  # type: ignore[attr-defined]
-                country_key=ctry.country_key,  # type: ignore[attr-defined]
+                date_key=dk,
                 invoice_key=inv.invoice_key,  # type: ignore[attr-defined]
+                country_key=ctry.country_key,  # type: ignore[attr-defined]
                 quantity=3,
                 unit_price=2.5,
-                total=7.5,
-                invoice_timestamp=datetime(2024, 1, 2, 12, 0, 0),
+                total_amount=7.5,
+                discount_amount=0.0
             )
         )
 

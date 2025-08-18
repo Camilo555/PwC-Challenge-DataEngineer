@@ -1,15 +1,14 @@
 """Data quality validation and metrics."""
 
+import statistics
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Dict, List, Any, Optional, Tuple, Set
-from collections import defaultdict
-import statistics
+from typing import Any
 
 from ...core.logging import get_logger
-from ...core.exceptions import DataQualityException
 
 logger = get_logger(__name__)
 
@@ -47,9 +46,9 @@ class ValidationResult:
     threshold: float
     passed: bool
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "dimension": self.dimension.value,
@@ -71,12 +70,12 @@ class QualityMetrics:
     invalid_records: int = 0
 
     # Completeness
-    missing_values: Dict[str, int] = field(default_factory=dict)
+    missing_values: dict[str, int] = field(default_factory=dict)
     completeness_rate: float = 0.0
 
     # Accuracy
-    format_errors: Dict[str, int] = field(default_factory=dict)
-    range_errors: Dict[str, int] = field(default_factory=dict)
+    format_errors: dict[str, int] = field(default_factory=dict)
+    range_errors: dict[str, int] = field(default_factory=dict)
     accuracy_rate: float = 0.0
 
     # Consistency
@@ -85,7 +84,7 @@ class QualityMetrics:
 
     # Uniqueness
     duplicate_records: int = 0
-    duplicate_keys: Set[str] = field(default_factory=set)
+    duplicate_keys: set[str] = field(default_factory=set)
     uniqueness_rate: float = 0.0
 
     # Timeliness
@@ -94,10 +93,10 @@ class QualityMetrics:
     timeliness_rate: float = 0.0
 
     # Statistical
-    outliers: Dict[str, List[Any]] = field(default_factory=dict)
-    statistics: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    outliers: dict[str, list[Any]] = field(default_factory=dict)
+    statistics: dict[str, dict[str, float]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "total_records": self.total_records,
@@ -122,11 +121,11 @@ class DataQualityReport:
     dataset_name: str
     timestamp: datetime = field(default_factory=datetime.utcnow)
     metrics: QualityMetrics = field(default_factory=QualityMetrics)
-    validation_results: List[ValidationResult] = field(default_factory=list)
+    validation_results: list[ValidationResult] = field(default_factory=list)
     thresholds: QualityThreshold = field(default_factory=QualityThreshold)
     overall_quality_score: float = 0.0
     passed: bool = False
-    recommendations: List[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
 
     def add_result(self, result: ValidationResult) -> None:
         """Add a validation result."""
@@ -161,7 +160,7 @@ class DataQualityReport:
         self.overall_quality_score = sum(scores) / sum(weights.values())
         return self.overall_quality_score
 
-    def generate_recommendations(self) -> List[str]:
+    def generate_recommendations(self) -> list[str]:
         """Generate recommendations based on validation results."""
         recommendations = []
 
@@ -204,7 +203,7 @@ class DataQualityReport:
         self.recommendations = recommendations[:10]  # Limit to top 10
         return self.recommendations
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary."""
         return {
             "dataset": self.dataset_name,
@@ -223,7 +222,7 @@ class DataQualityValidator:
     Evaluates data across multiple quality dimensions.
     """
 
-    def __init__(self, thresholds: Optional[QualityThreshold] = None) -> None:
+    def __init__(self, thresholds: QualityThreshold | None = None) -> None:
         """
         Initialize validator.
 
@@ -235,9 +234,9 @@ class DataQualityValidator:
 
     def validate_completeness(
         self,
-        data: List[Dict[str, Any]],
-        required_fields: List[str],
-        optional_fields: Optional[List[str]] = None
+        data: list[dict[str, Any]],
+        required_fields: list[str],
+        optional_fields: list[str] | None = None
     ) -> ValidationResult:
         """
         Validate data completeness.
@@ -262,14 +261,14 @@ class DataQualityValidator:
 
         total_fields = len(required_fields) * len(data)
         missing_count = 0
-        missing_by_field = defaultdict(int)
+        missing_by_field: dict[str, int] = defaultdict(int)
 
         for record in data:
-            for field in required_fields:
-                value = record.get(field)
+            for field_name in required_fields:
+                value = record.get(field_name)
                 if value is None or value == "" or value == "?":
                     missing_count += 1
-                    missing_by_field[field] += 1
+                    missing_by_field[field_name] += 1
 
         completeness = 1 - \
             (missing_count / total_fields) if total_fields > 0 else 0
@@ -292,8 +291,8 @@ class DataQualityValidator:
 
     def validate_uniqueness(
         self,
-        data: List[Dict[str, Any]],
-        key_fields: List[str]
+        data: list[dict[str, Any]],
+        key_fields: list[str]
     ) -> ValidationResult:
         """
         Validate data uniqueness.
@@ -346,8 +345,8 @@ class DataQualityValidator:
 
     def validate_accuracy(
         self,
-        data: List[Dict[str, Any]],
-        validation_rules: Dict[str, Any]
+        data: list[dict[str, Any]],
+        validation_rules: dict[str, Any]
     ) -> ValidationResult:
         """
         Validate data accuracy against rules.
@@ -371,19 +370,19 @@ class DataQualityValidator:
 
         total_checks = len(validation_rules) * len(data)
         errors = 0
-        error_by_field = defaultdict(int)
+        error_by_field: dict[str, int] = defaultdict(int)
 
         for record in data:
-            for field, rule in validation_rules.items():
-                value = record.get(field)
+            for field_name, rule in validation_rules.items():
+                value = record.get(field_name)
                 try:
                     if callable(rule):
                         if not rule(value):
                             errors += 1
-                            error_by_field[field] += 1
+                            error_by_field[field_name] += 1
                 except Exception:
                     errors += 1
-                    error_by_field[field] += 1
+                    error_by_field[field_name] += 1
 
         accuracy = 1 - (errors / total_checks) if total_checks > 0 else 0
 
@@ -405,8 +404,8 @@ class DataQualityValidator:
 
     def validate_consistency(
         self,
-        data: List[Dict[str, Any]],
-        consistency_checks: List[Tuple[str, str, Any]]
+        data: list[dict[str, Any]],
+        consistency_checks: list[tuple[str, str, Any]]
     ) -> ValidationResult:
         """
         Validate data consistency.
@@ -462,7 +461,7 @@ class DataQualityValidator:
 
     def validate_timeliness(
         self,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         date_field: str,
         max_age_days: int = 730  # 2 years
     ) -> ValidationResult:
@@ -494,11 +493,11 @@ class DataQualityValidator:
 
         for record in data:
             date_val = record.get(date_field)
-            if isinstance(date_val, (datetime, str)):
+            if isinstance(date_val, datetime | str):
                 if isinstance(date_val, str):
                     try:
                         date_val = datetime.fromisoformat(date_val)
-                    except:
+                    except ValueError:
                         continue
 
                 if date_val > now:
@@ -529,10 +528,10 @@ class DataQualityValidator:
 
     def detect_outliers(
         self,
-        data: List[Dict[str, Any]],
-        numeric_fields: List[str],
+        data: list[dict[str, Any]],
+        numeric_fields: list[str],
         z_threshold: float = 3.0
-    ) -> Dict[str, List[Any]]:
+    ) -> dict[str, list[Any]]:
         """
         Detect outliers using Z-score method.
 
@@ -546,11 +545,11 @@ class DataQualityValidator:
         """
         outliers = defaultdict(list)
 
-        for field in numeric_fields:
+        for field_name in numeric_fields:
             values = []
             for record in data:
-                val = record.get(field)
-                if isinstance(val, (int, float, Decimal)):
+                val = record.get(field_name)
+                if isinstance(val, int | float | Decimal):
                     values.append(float(val))
 
             if len(values) > 2:
@@ -561,7 +560,7 @@ class DataQualityValidator:
                     for val in values:
                         z_score = abs((val - mean) / stdev)
                         if z_score > z_threshold:
-                            outliers[field].append(val)
+                            outliers[field_name].append(val)
 
         self.metrics.outliers = dict(outliers)
         return dict(outliers)
@@ -569,11 +568,11 @@ class DataQualityValidator:
     def generate_report(
         self,
         dataset_name: str,
-        data: List[Dict[str, Any]],
-        required_fields: List[str],
-        key_fields: List[str],
-        validation_rules: Optional[Dict[str, Any]] = None,
-        consistency_checks: Optional[List[Tuple[str, str, Any]]] = None
+        data: list[dict[str, Any]],
+        required_fields: list[str],
+        key_fields: list[str],
+        validation_rules: dict[str, Any] | None = None,
+        consistency_checks: list[tuple[str, str, Any]] | None = None
     ) -> DataQualityReport:
         """
         Generate comprehensive data quality report.

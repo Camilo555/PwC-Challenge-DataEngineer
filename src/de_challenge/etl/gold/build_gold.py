@@ -14,23 +14,21 @@ Usage:
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
-from typing import Dict, Tuple
 
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 from sqlmodel import select
 
 from de_challenge.core.config import settings
-from de_challenge.etl.utils.spark import get_spark
-from de_challenge.data_access.db import session_scope, create_all
+from de_challenge.data_access.db import create_all, session_scope
 from de_challenge.data_access.models.star_schema import (
-    DimDate,
-    DimProduct,
-    DimCustomer,
     DimCountry,
+    DimCustomer,
+    DimDate,
     DimInvoice,
-    FactSale,
+    DimProduct,
 )
+from de_challenge.etl.utils.spark import get_spark
 
 
 def _date_key(d: date) -> int:
@@ -82,15 +80,15 @@ def _read_silver_sales() -> DataFrame:
     return df
 
 
-def _upsert_dimension_keys(df: DataFrame) -> Tuple[
-    Dict[str, int], Dict[str, int], Dict[str | None, int | None], Dict[str, int], Dict[str, int]
+def _upsert_dimension_keys(df: DataFrame) -> tuple[
+    dict[str, int], dict[str, int], dict[str | None, int | None], dict[str, int], dict[str, int]
 ]:
     """Insert dims if missing and return natural->surrogate mappings for
     product(stock_code), country(name), customer(customer_id or None), invoice(invoice_no), date_key(str yyyy-mm-dd) -> date_key int.
     """
     create_all()
 
-    # Collect distincts to driver (Gold build, expected manageable size) 
+    # Collect distincts to driver (Gold build, expected manageable size)
     prod_rows = (
         df.select(F.col("stock_code").alias("stock_code"), F.col("description").alias("description"))
         .dropDuplicates(["stock_code"]).collect()
@@ -100,11 +98,11 @@ def _upsert_dimension_keys(df: DataFrame) -> Tuple[
     inv_rows = df.select("invoice_no").dropDuplicates(["invoice_no"]).collect()
     date_rows = df.select(F.to_date("invoice_timestamp").alias("d")).dropDuplicates(["d"]).collect()
 
-    prod_map: Dict[str, int] = {}
-    country_map: Dict[str, int] = {}
-    customer_map: Dict[str | None, int | None] = {}
-    invoice_map: Dict[str, int] = {}
-    date_map: Dict[str, int] = {}
+    prod_map: dict[str, int] = {}
+    country_map: dict[str, int] = {}
+    customer_map: dict[str | None, int | None] = {}
+    invoice_map: dict[str, int] = {}
+    date_map: dict[str, int] = {}
 
     with session_scope() as s:
         # Products

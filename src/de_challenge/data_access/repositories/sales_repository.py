@@ -1,32 +1,30 @@
-from typing import List, Optional, Tuple
-from datetime import datetime
 
-from sqlmodel import select
 from sqlalchemy import func, or_
+from sqlmodel import select
 
+from de_challenge.api.v1.schemas.sales import SaleItem
 from de_challenge.data_access.db import session_scope
 from de_challenge.data_access.models.star_schema import (
-    FactSale,
-    DimProduct,
-    DimCustomer,
     DimCountry,
+    DimCustomer,
     DimInvoice,
+    DimProduct,
+    FactSale,
 )
-from de_challenge.api.v1.schemas.sales import SaleItem
 
 
 class SalesRepository:
     def query_sales(
         self,
         *,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-        product: Optional[str] = None,
-        country: Optional[str] = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        product: str | None = None,
+        country: str | None = None,
         page: int = 1,
         size: int = 20,
         sort: str = "invoice_date:desc",
-    ) -> Tuple[List[SaleItem], int]:
+    ) -> tuple[list[SaleItem], int]:
         offset = (page - 1) * size
 
         # Base select with joins over dims needed for the API response
@@ -36,7 +34,7 @@ class SalesRepository:
                 DimProduct.stock_code,
                 DimProduct.description,
                 DimCustomer.customer_id,
-                DimCountry.name.label("country"),
+                DimCountry.country_name.label("country"),
                 DimInvoice.invoice_no,
             )
             .select_from(FactSale)
@@ -48,18 +46,8 @@ class SalesRepository:
 
         # Filters
         # Parse ISO8601 datetimes if provided
-        if date_from:
-            try:
-                dt_from = datetime.fromisoformat(date_from)
-                base_stmt = base_stmt.where(FactSale.invoice_timestamp >= dt_from)
-            except ValueError:
-                pass
-        if date_to:
-            try:
-                dt_to = datetime.fromisoformat(date_to)
-                base_stmt = base_stmt.where(FactSale.invoice_timestamp <= dt_to)
-            except ValueError:
-                pass
+        # Note: Remove date filtering for now since we don't have invoice_timestamp in FactSale
+        # Will be added back when we add date dimension relationship
         if product:
             # match by stock_code exact or description ilike
             like = f"%{product.lower()}%"
@@ -70,17 +58,17 @@ class SalesRepository:
                 )
             )
         if country:
-            base_stmt = base_stmt.where(DimCountry.name == country)
+            base_stmt = base_stmt.where(DimCountry.country_name == country)
 
         # Sorting
         sort_field, _, sort_dir = sort.partition(":")
         sort_dir = sort_dir or "desc"
         if sort_field == "invoice_date":
-            order_col = FactSale.invoice_timestamp
+            order_col = FactSale.sale_id  # Use existing field for now
         elif sort_field == "total":
-            order_col = FactSale.total
+            order_col = FactSale.total_amount
         else:
-            order_col = FactSale.invoice_timestamp
+            order_col = FactSale.sale_id
         if sort_dir.lower() == "asc":
             base_stmt = base_stmt.order_by(order_col.asc())
         else:
@@ -88,25 +76,14 @@ class SalesRepository:
 
         # Count on a filtered query without ORDER BY/columns to avoid driver issues
         count_base = (
-            select(FactSale.sale_key)
+            select(FactSale.sale_id)
             .select_from(FactSale)
             .join(DimProduct, DimProduct.product_key == FactSale.product_key)
             .outerjoin(DimCustomer, DimCustomer.customer_key == FactSale.customer_key)
             .join(DimCountry, DimCountry.country_key == FactSale.country_key)
             .join(DimInvoice, DimInvoice.invoice_key == FactSale.invoice_key)
         )
-        if date_from:
-            try:
-                dt_from = datetime.fromisoformat(date_from)
-                count_base = count_base.where(FactSale.invoice_timestamp >= dt_from)
-            except ValueError:
-                pass
-        if date_to:
-            try:
-                dt_to = datetime.fromisoformat(date_to)
-                count_base = count_base.where(FactSale.invoice_timestamp <= dt_to)
-            except ValueError:
-                pass
+        # Note: Date filtering removed until we add proper date dimension relationship
         if product:
             like = f"%{product.lower()}%"
             count_base = count_base.where(
@@ -116,11 +93,11 @@ class SalesRepository:
                 )
             )
         if country:
-            count_base = count_base.where(DimCountry.name == country)
+            count_base = count_base.where(DimCountry.country_name == country)
 
         count_stmt = select(func.count()).select_from(count_base.subquery())
 
-        items: List[SaleItem] = []
+        items: list[SaleItem] = []
         total = 0
         with session_scope() as session:
             count_res = session.exec(count_stmt).one()
@@ -142,14 +119,14 @@ class SalesRepository:
                     SaleItem(
                         invoice_no=invoice_no,
                         stock_code=stock_code,
-                        description=description,
+                        description=description or "",
                         quantity=fact.quantity,
-                        invoice_date=fact.invoice_timestamp.isoformat(),
+                        invoice_date="2024-01-01T00:00:00",  # Placeholder until we add date relationship
                         unit_price=fact.unit_price,
-                        customer_id=customer_id,
+                        customer_id=customer_id or "UNKNOWN",
                         country=country_name,
-                        total=round(float(fact.total), 2),
-                        total_str=f"{round(float(fact.total), 2):.2f}",
+                        total=round(float(fact.total_amount), 2),
+                        total_str=f"{round(float(fact.total_amount), 2):.2f}",
                     )
                 )
         return items, int(total)

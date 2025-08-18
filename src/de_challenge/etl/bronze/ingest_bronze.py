@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List
 import uuid
+from pathlib import Path
 
-from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
 
 from de_challenge.core.config import settings
 from de_challenge.etl.utils.spark import get_spark
-
 
 REQUIRED_COLUMNS = [
     "invoice_no",
@@ -22,13 +21,13 @@ REQUIRED_COLUMNS = [
 ]
 
 
-def _list_raw_csvs(raw_dir: Path) -> List[Path]:
+def _list_raw_csvs(raw_dir: Path) -> list[Path]:
     if not raw_dir.exists():
         return []
-    return sorted(list(raw_dir.glob("**/*.csv")))
+    return sorted(raw_dir.glob("**/*.csv"))
 
 
-def _read_raw_csvs(spark: SparkSession, files: List[Path]) -> DataFrame:
+def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
     if not files:
         raise FileNotFoundError(
             f"No raw CSV files found under {settings.raw_data_path.resolve()}"

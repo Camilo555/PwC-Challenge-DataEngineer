@@ -3,12 +3,12 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from ..base import DomainEntity
 from ...core.constants import CANCELLED_INVOICE_PREFIX
+from ..base import DomainEntity
 
 
 class InvoiceStatus(str, Enum):
@@ -59,7 +59,7 @@ class Invoice(DomainEntity):
         ...,
         description="Invoice date and time",
     )
-    customer_id: Optional[str] = Field(
+    customer_id: str | None = Field(
         None,
         description="Customer identifier",
         max_length=20,
@@ -85,17 +85,17 @@ class Invoice(DomainEntity):
         description="Subtotal before tax and discounts",
         ge=0,
     )
-    tax_amount: Optional[Decimal] = Field(
+    tax_amount: Decimal | None = Field(
         None,
         description="Tax amount",
         ge=0,
     )
-    discount_amount: Optional[Decimal] = Field(
+    discount_amount: Decimal | None = Field(
         None,
         description="Discount amount",
         ge=0,
     )
-    shipping_amount: Optional[Decimal] = Field(
+    shipping_amount: Decimal | None = Field(
         None,
         description="Shipping cost",
         ge=0,
@@ -118,7 +118,7 @@ class Invoice(DomainEntity):
     )
 
     # Location
-    country: Optional[str] = Field(
+    country: str | None = Field(
         None,
         description="Billing country",
         max_length=100,
@@ -134,28 +134,28 @@ class Invoice(DomainEntity):
         default=False,
         description="Whether invoice is cancelled",
     )
-    cancellation_date: Optional[datetime] = Field(
+    cancellation_date: datetime | None = Field(
         None,
         description="Cancellation date",
     )
-    cancellation_reason: Optional[str] = Field(
+    cancellation_reason: str | None = Field(
         None,
         description="Reason for cancellation",
         max_length=500,
     )
-    original_invoice_no: Optional[str] = Field(
+    original_invoice_no: str | None = Field(
         None,
         description="Original invoice for cancellations",
         max_length=20,
     )
 
     # Additional metadata
-    notes: Optional[str] = Field(
+    notes: str | None = Field(
         None,
         description="Invoice notes",
         max_length=1000,
     )
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Invoice tags for categorization",
     )
@@ -168,7 +168,7 @@ class Invoice(DomainEntity):
 
     @field_validator("country")
     @classmethod
-    def standardize_country(cls, v: Optional[str]) -> Optional[str]:
+    def standardize_country(cls, v: str | None) -> str | None:
         """Standardize country name."""
         if v:
             v = v.strip().title()
@@ -260,7 +260,7 @@ class Invoice(DomainEntity):
 
         return self.is_valid
 
-    def to_warehouse_dict(self) -> Dict[str, Any]:
+    def to_warehouse_dict(self) -> dict[str, Any]:
         """Convert invoice to warehouse-ready dictionary."""
         return {
             "invoice_no": self.invoice_no,

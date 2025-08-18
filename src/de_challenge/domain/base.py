@@ -1,9 +1,10 @@
 """Base domain model with common functionality."""
 
-from datetime import datetime
-from typing import Optional, Dict, Any, ClassVar
-from pydantic import BaseModel, Field, ConfigDict, field_validator
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DomainEntity(BaseModel, ABC):
@@ -23,11 +24,11 @@ class DomainEntity(BaseModel, ABC):
     )
 
     # Metadata fields
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default_factory=datetime.utcnow,
         description="Entity creation timestamp"
     )
-    updated_at: Optional[datetime] = Field(
+    updated_at: datetime | None = Field(
         default=None,
         description="Entity last update timestamp"
     )
@@ -60,7 +61,7 @@ class DomainEntity(BaseModel, ABC):
         self.validation_errors = []
         self.is_valid = True
 
-    def to_dict(self, exclude_none: bool = True) -> Dict[str, Any]:
+    def to_dict(self, exclude_none: bool = True) -> dict[str, Any]:
         """Convert entity to dictionary."""
         return self.model_dump(exclude_none=exclude_none)
 
@@ -69,7 +70,7 @@ class DomainEntity(BaseModel, ABC):
         return self.model_dump_json(exclude_none=True)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DomainEntity":
+    def from_dict(cls, data: dict[str, Any]) -> "DomainEntity":
         """Create entity from dictionary."""
         return cls(**data)
 

@@ -1,14 +1,13 @@
-from fastapi import FastAPI, Depends, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse
-from typing import Dict
 
-from de_challenge.core.config import settings
-from de_challenge.core.logging import get_logger
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
 from de_challenge.api.v1.routes.health import router as health_router
 from de_challenge.api.v1.routes.sales import router as sales_router
 from de_challenge.api.v1.routes.search import router as search_router  # type: ignore
+from de_challenge.api.v1.routes.supabase import router as supabase_router
+from de_challenge.core.config import settings
+from de_challenge.core.logging import get_logger
 
 security = HTTPBasic()
 logger = get_logger(__name__)
@@ -39,16 +38,17 @@ async def startup_event() -> None:
 
 
 @app.get("/", tags=["root"], status_code=status.HTTP_200_OK)
-async def root() -> Dict[str, str]:
+async def root() -> dict[str, str]:
     return {"message": "Retail ETL API is running"}
 
 @app.get("/health", tags=["health"], status_code=status.HTTP_200_OK)
-async def health() -> Dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok", "environment": settings.environment, "version": "v1"}
 
 
 # Mount versioned routers
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(sales_router, prefix="/api/v1", dependencies=[Depends(verify_basic_auth)])
+app.include_router(supabase_router, prefix="/api/v1", dependencies=[Depends(verify_basic_auth)])
 if settings.enable_vector_search:
     app.include_router(search_router, prefix="/api/v1", dependencies=[Depends(verify_basic_auth)])

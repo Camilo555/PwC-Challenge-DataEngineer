@@ -1,8 +1,7 @@
 """Service interfaces for domain layer."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from typing import Any
 
 
 class IService(ABC):
@@ -22,21 +21,21 @@ class IValidationService(IService):
         self,
         entity: Any,
         strict: bool = False
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """Validate a single entity."""
         pass
 
     @abstractmethod
     async def validate_batch(
         self,
-        entities: List[Any],
+        entities: list[Any],
         strict: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Validate batch of entities."""
         pass
 
     @abstractmethod
-    async def get_validation_report(self) -> Dict[str, Any]:
+    async def get_validation_report(self) -> dict[str, Any]:
         """Get validation report."""
         pass
 
@@ -48,7 +47,7 @@ class ITransformationService(IService):
     async def transform_entity(
         self,
         entity: Any,
-        target_schema: Optional[str] = None
+        target_schema: str | None = None
     ) -> Any:
         """Transform single entity."""
         pass
@@ -56,9 +55,9 @@ class ITransformationService(IService):
     @abstractmethod
     async def transform_batch(
         self,
-        entities: List[Any],
-        target_schema: Optional[str] = None
-    ) -> List[Any]:
+        entities: list[Any],
+        target_schema: str | None = None
+    ) -> list[Any]:
         """Transform batch of entities."""
         pass
 
@@ -78,9 +77,9 @@ class ISearchService(IService):
     async def search(
         self,
         query: str,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         limit: int = 100
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Search entities."""
         pass
 
@@ -89,14 +88,14 @@ class ISearchService(IService):
         self,
         entity: Any,
         limit: int = 10
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Find similar entities."""
         pass
 
     @abstractmethod
     async def build_index(
         self,
-        entities: List[Any]
+        entities: list[Any]
     ) -> bool:
         """Build search index."""
         pass

@@ -2,17 +2,17 @@
 
 from .config import settings
 from .constants import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_PARALLELISM,
     DataLayers,
     FileTypes,
     TableNames,
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_PARALLELISM,
 )
 from .exceptions import (
-    ETLException,
-    ValidationException,
     ConfigurationException,
     DataQualityException,
+    ETLException,
+    ValidationException,
 )
 from .logging import get_logger
 

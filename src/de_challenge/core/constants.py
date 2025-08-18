@@ -9,7 +9,7 @@ from typing import Final
 
 class DataLayers(str, Enum):
     """Medallion architecture data layers."""
-    
+
     BRONZE = "bronze"
     SILVER = "silver"
     GOLD = "gold"
@@ -17,7 +17,7 @@ class DataLayers(str, Enum):
 
 class FileTypes(str, Enum):
     """Supported file types for ingestion."""
-    
+
     CSV = "csv"
     JSON = "json"
     PARQUET = "parquet"
@@ -27,10 +27,10 @@ class FileTypes(str, Enum):
 
 class TableNames(str, Enum):
     """Database table names for star schema."""
-    
+
     # Fact tables
     FACT_SALE = "fact_sale"
-    
+
     # Dimension tables
     DIM_PRODUCT = "dim_product"
     DIM_CUSTOMER = "dim_customer"

@@ -1,17 +1,17 @@
 """Domain interfaces for dependency inversion."""
 
 from .repository_interface import (
-    IRepository,
-    ITransactionRepository,
-    IProductRepository,
     ICustomerRepository,
     IInvoiceRepository,
+    IProductRepository,
+    IRepository,
+    ITransactionRepository,
 )
 from .service_interface import (
-    IService,
-    IValidationService,
-    ITransformationService,
     ISearchService,
+    IService,
+    ITransformationService,
+    IValidationService,
 )
 
 __all__ = [

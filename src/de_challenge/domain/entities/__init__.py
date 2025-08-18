@@ -1,9 +1,9 @@
 """Domain entities module."""
 
-from .transaction import Transaction, TransactionLine, CancelledTransaction, TransactionStatus
-from .product import Product, ProductCategory, StockItem
-from .customer import Customer, CustomerSegment, CustomerMetrics
+from .customer import Customer, CustomerMetrics, CustomerSegment
 from .invoice import Invoice, InvoiceStatus, InvoiceType
+from .product import Product, ProductCategory, StockItem
+from .transaction import CancelledTransaction, Transaction, TransactionLine, TransactionStatus
 
 __all__ = [
     "Transaction",

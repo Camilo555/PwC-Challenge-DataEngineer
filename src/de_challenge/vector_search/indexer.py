@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
-from de_challenge.vector_search.typesense_client import get_typesense_client
 from de_challenge.data_access.repositories.sales_repository import SalesRepository
-
+from de_challenge.vector_search.typesense_client import get_typesense_client
 
 COLLECTION = "sales"
 
@@ -31,7 +30,7 @@ def ensure_collection() -> None:
         client.collections.create(schema)  # type: ignore[no-untyped-call]
 
 
-def index_sales(page_size: int = 1000, max_pages: int = 10) -> Dict[str, Any]:
+def index_sales(page_size: int = 1000, max_pages: int = 10) -> dict[str, Any]:
     """Index paginated sales into Typesense.
     Returns basic stats.
     """
@@ -45,7 +44,7 @@ def index_sales(page_size: int = 1000, max_pages: int = 10) -> Dict[str, Any]:
         items, total = repo.query_sales(page=page, size=page_size)
         if not items:
             break
-        docs: List[Dict[str, Any]] = []
+        docs: list[dict[str, Any]] = []
         for it in items:
             docs.append(
                 {

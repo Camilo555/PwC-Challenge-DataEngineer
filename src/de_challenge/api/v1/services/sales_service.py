@@ -1,4 +1,3 @@
-from typing import List, Tuple, Optional
 
 from de_challenge.api.v1.schemas.sales import SaleItem
 from de_challenge.data_access.repositories.sales_repository import SalesRepository
@@ -10,14 +9,14 @@ class SalesService:
     def query_sales(
         self,
         *,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-        product: Optional[str] = None,
-        country: Optional[str] = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        product: str | None = None,
+        country: str | None = None,
         page: int = 1,
         size: int = 20,
         sort: str = "invoice_date:desc",
-    ) -> Tuple[List[SaleItem], int]:
+    ) -> tuple[list[SaleItem], int]:
         repo = SalesRepository()
         return repo.query_sales(
             date_from=date_from,

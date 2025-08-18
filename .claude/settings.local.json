@@ -1,5 +1,13 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(docker:*)",
+      "Bash(poetry install:*)",
+      "Bash(java:*)",
+      "Bash(poetry run ruff:*)",
+      "Bash(git add:*)"
+    ],
     "defaultMode": "acceptEdits"
   }
 }

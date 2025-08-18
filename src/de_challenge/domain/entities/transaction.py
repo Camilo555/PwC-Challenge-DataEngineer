@@ -1,23 +1,21 @@
 """Transaction domain entity and related models."""
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List
-import re
 
 from pydantic import Field, field_validator, model_validator
-from pydantic.types import PositiveInt
 
-from ..base import DomainEntity
 from ...core.constants import (
-    STOCK_CODE_PATTERN,
     CANCELLED_INVOICE_PREFIX,
-    MIN_VALID_QUANTITY,
+    MAX_VALID_PRICE,
     MAX_VALID_QUANTITY,
     MIN_VALID_PRICE,
-    MAX_VALID_PRICE,
+    MIN_VALID_QUANTITY,
+    STOCK_CODE_PATTERN,
 )
+from ..base import DomainEntity
 
 
 class TransactionStatus(str, Enum):
@@ -48,7 +46,7 @@ class TransactionLine(DomainEntity):
         min_length=1,
         max_length=20,
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None,
         description="Product description",
         max_length=500,
@@ -70,19 +68,19 @@ class TransactionLine(DomainEntity):
         le=MAX_VALID_PRICE,
         decimal_places=2,
     )
-    customer_id: Optional[str] = Field(
+    customer_id: str | None = Field(
         None,
         description="Customer identifier",
         max_length=20,
     )
-    country: Optional[str] = Field(
+    country: str | None = Field(
         None,
         description="Country name",
         max_length=100,
     )
 
     # Derived fields
-    line_total: Optional[Decimal] = Field(
+    line_total: Decimal | None = Field(
         None,
         description="Total for this line (quantity * unit_price)",
     )
@@ -125,7 +123,7 @@ class TransactionLine(DomainEntity):
 
     @field_validator("description")
     @classmethod
-    def clean_description(cls, v: Optional[str]) -> Optional[str]:
+    def clean_description(cls, v: str | None) -> str | None:
         """Clean and validate description."""
         if v:
             v = v.strip()
@@ -139,7 +137,7 @@ class TransactionLine(DomainEntity):
 
     @field_validator("customer_id")
     @classmethod
-    def validate_customer_id(cls, v: Optional[str]) -> Optional[str]:
+    def validate_customer_id(cls, v: str | None) -> str | None:
         """Validate and clean customer ID."""
         if v:
             v = str(v).strip()
@@ -153,7 +151,7 @@ class TransactionLine(DomainEntity):
 
     @field_validator("country")
     @classmethod
-    def clean_country(cls, v: Optional[str]) -> Optional[str]:
+    def clean_country(cls, v: str | None) -> str | None:
         """Clean and standardize country name."""
         if v:
             v = v.strip().title()
@@ -240,31 +238,31 @@ class Transaction(DomainEntity):
         ...,
         description="Date and time of invoice",
     )
-    customer_id: Optional[str] = Field(
+    customer_id: str | None = Field(
         None,
         description="Customer identifier",
     )
-    country: Optional[str] = Field(
+    country: str | None = Field(
         None,
         description="Country name",
     )
 
     # Line items
-    lines: List[TransactionLine] = Field(
+    lines: list[TransactionLine] = Field(
         default_factory=list,
         description="Transaction line items",
     )
 
     # Aggregated fields
-    total_amount: Optional[Decimal] = Field(
+    total_amount: Decimal | None = Field(
         None,
         description="Total transaction amount",
     )
-    total_items: Optional[int] = Field(
+    total_items: int | None = Field(
         None,
         description="Total number of items",
     )
-    unique_products: Optional[int] = Field(
+    unique_products: int | None = Field(
         None,
         description="Number of unique products",
     )
@@ -278,15 +276,16 @@ class Transaction(DomainEntity):
         """Calculate aggregate fields from line items."""
         if self.lines:
             # Calculate totals
-            self.total_amount = sum(
+            total = sum(
                 line.line_total for line in self.lines
                 if line.line_total
             )
+            self.total_amount = total if total else Decimal('0')
             self.total_items = sum(
                 abs(line.quantity) for line in self.lines
             )
             self.unique_products = len(
-                set(line.stock_code for line in self.lines)
+                {line.stock_code for line in self.lines}
             )
 
             # Determine status
@@ -321,20 +320,20 @@ class Transaction(DomainEntity):
             self.add_validation_error("Transaction has no line items")
 
         # Rule 2: All lines should have same customer
-        customer_ids = set(
+        customer_ids = {
             line.customer_id for line in self.lines
             if line.customer_id
-        )
+        }
         if len(customer_ids) > 1:
             self.add_validation_error(
                 f"Multiple customer IDs in same transaction: {customer_ids}"
             )
 
         # Rule 3: All lines should have same country
-        countries = set(
+        countries = {
             line.country for line in self.lines
             if line.country
-        )
+        }
         if len(countries) > 1:
             self.add_validation_error(
                 f"Multiple countries in same transaction: {countries}"
@@ -346,11 +345,11 @@ class Transaction(DomainEntity):
 class CancelledTransaction(Transaction):
     """Special handling for cancelled transactions."""
 
-    cancellation_reason: Optional[str] = Field(
+    cancellation_reason: str | None = Field(
         None,
         description="Reason for cancellation",
     )
-    original_invoice_no: Optional[str] = Field(
+    original_invoice_no: str | None = Field(
         None,
         description="Original invoice number before cancellation",
     )

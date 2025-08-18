@@ -1,15 +1,14 @@
 """Product domain entity and related models."""
 
-from datetime import datetime
+import re
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List, Dict, Any
-import re
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from ..base import DomainEntity
 from ...core.constants import STOCK_CODE_PATTERN
+from ..base import DomainEntity
 
 
 class ProductCategory(str, Enum):
@@ -48,22 +47,22 @@ class StockItem(DomainEntity):
         min_length=1,
         max_length=500,
     )
-    unit_cost: Optional[Decimal] = Field(
+    unit_cost: Decimal | None = Field(
         None,
         description="Unit cost",
         ge=0,
     )
-    unit_price: Optional[Decimal] = Field(
+    unit_price: Decimal | None = Field(
         None,
         description="Standard unit price",
         ge=0,
     )
-    quantity_in_stock: Optional[int] = Field(
+    quantity_in_stock: int | None = Field(
         None,
         description="Current stock quantity",
         ge=0,
     )
-    reorder_level: Optional[int] = Field(
+    reorder_level: int | None = Field(
         None,
         description="Reorder level",
         ge=0,
@@ -117,7 +116,7 @@ class Product(DomainEntity):
         default=ProductCategory.OTHER,
         description="Product category",
     )
-    subcategory: Optional[str] = Field(
+    subcategory: str | None = Field(
         None,
         description="Product subcategory",
         max_length=100,
@@ -130,56 +129,56 @@ class Product(DomainEntity):
         ge=0,
         decimal_places=2,
     )
-    min_price: Optional[Decimal] = Field(
+    min_price: Decimal | None = Field(
         None,
         description="Minimum observed price",
         ge=0,
     )
-    max_price: Optional[Decimal] = Field(
+    max_price: Decimal | None = Field(
         None,
         description="Maximum observed price",
         ge=0,
     )
-    avg_price: Optional[Decimal] = Field(
+    avg_price: Decimal | None = Field(
         None,
         description="Average selling price",
         ge=0,
     )
 
     # Product attributes
-    color: Optional[str] = Field(
+    color: str | None = Field(
         None,
         description="Product color",
         max_length=50,
     )
-    size: Optional[str] = Field(
+    size: str | None = Field(
         None,
         description="Product size",
         max_length=50,
     )
-    material: Optional[str] = Field(
+    material: str | None = Field(
         None,
         description="Product material",
         max_length=100,
     )
-    brand: Optional[str] = Field(
+    brand: str | None = Field(
         None,
         description="Product brand",
         max_length=100,
     )
 
     # Metrics
-    total_sold: Optional[int] = Field(
+    total_sold: int | None = Field(
         None,
         description="Total quantity sold",
         ge=0,
     )
-    total_returned: Optional[int] = Field(
+    total_returned: int | None = Field(
         None,
         description="Total quantity returned",
         ge=0,
     )
-    return_rate: Optional[float] = Field(
+    return_rate: float | None = Field(
         None,
         description="Return rate percentage",
         ge=0,
@@ -201,11 +200,11 @@ class Product(DomainEntity):
     )
 
     # Search optimization
-    search_keywords: List[str] = Field(
+    search_keywords: list[str] = Field(
         default_factory=list,
         description="Keywords for search optimization",
     )
-    embedding_text: Optional[str] = Field(
+    embedding_text: str | None = Field(
         None,
         description="Text used for embedding generation",
     )
@@ -343,7 +342,7 @@ class Product(DomainEntity):
 
         return self.is_valid
 
-    def to_search_document(self) -> Dict[str, Any]:
+    def to_search_document(self) -> dict[str, Any]:
         """Convert product to search document for indexing."""
         return {
             "id": self.stock_code,

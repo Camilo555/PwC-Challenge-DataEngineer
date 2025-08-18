@@ -1,11 +1,11 @@
 """Customer domain entity and related models."""
 
-from datetime import datetime, date
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Any
 
-from pydantic import Field, field_validator, model_validator, EmailStr
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 from ..base import DomainEntity
 
@@ -53,37 +53,37 @@ class CustomerMetrics(DomainEntity):
     )
 
     # Date metrics
-    first_purchase_date: Optional[datetime] = Field(
+    first_purchase_date: datetime | None = Field(
         None,
         description="Date of first purchase",
     )
-    last_purchase_date: Optional[datetime] = Field(
+    last_purchase_date: datetime | None = Field(
         None,
         description="Date of last purchase",
     )
-    days_since_last_purchase: Optional[int] = Field(
+    days_since_last_purchase: int | None = Field(
         None,
         description="Days since last purchase",
         ge=0,
     )
 
     # Behavioral metrics
-    avg_transaction_value: Optional[Decimal] = Field(
+    avg_transaction_value: Decimal | None = Field(
         None,
         description="Average transaction value",
         ge=0,
     )
-    avg_items_per_transaction: Optional[float] = Field(
+    avg_items_per_transaction: float | None = Field(
         None,
         description="Average items per transaction",
         ge=0,
     )
-    purchase_frequency_days: Optional[float] = Field(
+    purchase_frequency_days: float | None = Field(
         None,
         description="Average days between purchases",
         ge=0,
     )
-    return_rate: Optional[float] = Field(
+    return_rate: float | None = Field(
         None,
         description="Return rate percentage",
         ge=0,
@@ -91,25 +91,25 @@ class CustomerMetrics(DomainEntity):
     )
 
     # RFM metrics
-    recency_score: Optional[int] = Field(
+    recency_score: int | None = Field(
         None,
         description="Recency score (1-5)",
         ge=1,
         le=5,
     )
-    frequency_score: Optional[int] = Field(
+    frequency_score: int | None = Field(
         None,
         description="Frequency score (1-5)",
         ge=1,
         le=5,
     )
-    monetary_score: Optional[int] = Field(
+    monetary_score: int | None = Field(
         None,
         description="Monetary value score (1-5)",
         ge=1,
         le=5,
     )
-    rfm_score: Optional[float] = Field(
+    rfm_score: float | None = Field(
         None,
         description="Combined RFM score",
         ge=1,
@@ -143,9 +143,10 @@ class CustomerMetrics(DomainEntity):
 
         # RFM score
         if all([self.recency_score, self.frequency_score, self.monetary_score]):
-            self.rfm_score = (
-                self.recency_score + self.frequency_score + self.monetary_score
-            ) / 3
+            recency = self.recency_score or 0
+            frequency = self.frequency_score or 0
+            monetary = self.monetary_score or 0
+            self.rfm_score = (recency + frequency + monetary) / 3
 
         return self
 
@@ -182,16 +183,16 @@ class Customer(DomainEntity):
     )
 
     # Profile information
-    email: Optional[EmailStr] = Field(
+    email: EmailStr | None = Field(
         None,
         description="Customer email address",
     )
-    name: Optional[str] = Field(
+    name: str | None = Field(
         None,
         description="Customer name",
         max_length=200,
     )
-    company: Optional[str] = Field(
+    company: str | None = Field(
         None,
         description="Company name",
         max_length=200,
@@ -204,17 +205,17 @@ class Customer(DomainEntity):
         min_length=1,
         max_length=100,
     )
-    region: Optional[str] = Field(
+    region: str | None = Field(
         None,
         description="Geographic region",
         max_length=100,
     )
-    city: Optional[str] = Field(
+    city: str | None = Field(
         None,
         description="City",
         max_length=100,
     )
-    postal_code: Optional[str] = Field(
+    postal_code: str | None = Field(
         None,
         description="Postal code",
         max_length=20,
@@ -225,23 +226,23 @@ class Customer(DomainEntity):
         default=CustomerSegment.NEW,
         description="Customer segment",
     )
-    lifetime_value: Optional[Decimal] = Field(
+    lifetime_value: Decimal | None = Field(
         None,
         description="Customer lifetime value",
         ge=0,
     )
-    acquisition_channel: Optional[str] = Field(
+    acquisition_channel: str | None = Field(
         None,
         description="How customer was acquired",
         max_length=100,
     )
 
     # Preferences
-    preferred_categories: List[str] = Field(
+    preferred_categories: list[str] = Field(
         default_factory=list,
         description="Preferred product categories",
     )
-    preferred_payment_method: Optional[str] = Field(
+    preferred_payment_method: str | None = Field(
         None,
         description="Preferred payment method",
         max_length=50,
@@ -262,17 +263,17 @@ class Customer(DomainEntity):
     )
 
     # Metrics
-    metrics: Optional[CustomerMetrics] = Field(
+    metrics: CustomerMetrics | None = Field(
         None,
         description="Customer behavioral metrics",
     )
 
     # Dates
-    registration_date: Optional[datetime] = Field(
+    registration_date: datetime | None = Field(
         None,
         description="Customer registration date",
     )
-    last_active_date: Optional[datetime] = Field(
+    last_active_date: datetime | None = Field(
         None,
         description="Last activity date",
     )
@@ -383,7 +384,7 @@ class Customer(DomainEntity):
 
         return self.is_valid
 
-    def to_analytics_dict(self) -> Dict[str, Any]:
+    def to_analytics_dict(self) -> dict[str, Any]:
         """Convert customer to analytics-ready dictionary."""
         result = {
             "customer_id": self.customer_id,
@@ -395,13 +396,16 @@ class Customer(DomainEntity):
 
         if self.metrics:
             result.update({
-                "total_transactions": self.metrics.total_transactions,
-                "total_spent": float(self.metrics.total_spent),
-                "avg_transaction_value": float(self.metrics.avg_transaction_value)
-                if self.metrics.avg_transaction_value else None,
-                "days_since_last_purchase": self.metrics.days_since_last_purchase,
-                "return_rate": self.metrics.return_rate,
-                "rfm_score": self.metrics.rfm_score,
+                "total_transactions": str(self.metrics.total_transactions),
+                "total_spent": str(float(self.metrics.total_spent)),
+                "avg_transaction_value": str(float(self.metrics.avg_transaction_value))
+                if self.metrics.avg_transaction_value else "None",
+                "days_since_last_purchase": str(self.metrics.days_since_last_purchase)
+                if self.metrics.days_since_last_purchase is not None else "None",
+                "return_rate": str(self.metrics.return_rate)
+                if self.metrics.return_rate is not None else "None",
+                "rfm_score": str(self.metrics.rfm_score)
+                if self.metrics.rfm_score is not None else "None",
             })
 
         return result

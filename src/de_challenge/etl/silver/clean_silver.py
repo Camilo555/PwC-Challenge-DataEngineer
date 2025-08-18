@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql import types as T
 from pyspark.sql.window import Window
 
 from de_challenge.core.config import settings
-from de_challenge.etl.utils.spark import get_spark
 from de_challenge.domain.entities.transaction import TransactionLine
-
+from de_challenge.etl.utils.spark import get_spark
 
 REQUIRED_COLUMNS = [
     "invoice_no",
@@ -48,18 +48,18 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
     df = df.withColumn("quantity", F.col("quantity").cast("int"))
     df = df.withColumn("unit_price", F.col("unit_price").cast("double"))
     df = df.withColumn("invoice_timestamp", F.to_timestamp("invoice_timestamp"))
-    
+
     # Validaciones más flexibles para el dataset real
     df = df.where(F.col("invoice_no").isNotNull())
     df = df.where(F.col("stock_code").isNotNull())
     df = df.where(F.col("invoice_timestamp").isNotNull())
-    
+
     # CAMBIO: Permitir cantidades negativas (devoluciones) y cero
     df = df.where(F.col("quantity").isNotNull())  # Solo verificar que no sea null
-    
+
     # CAMBIO: Permitir precios cero (promociones, ajustes)
     df = df.where(F.col("unit_price").isNotNull())  # Solo verificar que no sea null
-    
+
     # CAMBIO: Country es requerido pero customer_id puede ser null
     df = df.where(F.col("country").isNotNull())
     # NO filtrar por customer_id
@@ -67,7 +67,7 @@ def _cast_and_clean(df: DataFrame) -> DataFrame:
     # El customer_id puede ser nulo en el dataset real:
     # NO filtrar por customer_id obligatorio
     # Comentar o eliminar: df = df.where(F.col("customer_id").isNotNull())
-    
+
     # Normalize and trim string columns (ensure string type first)
     str_cols = ["invoice_no", "stock_code", "description", "customer_id", "country"]
     for c in str_cols:
@@ -117,7 +117,6 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
 
     def validate_partition(iter_rows):
         from decimal import Decimal
-        import datetime as dt
 
         for row in iter_rows:
             d = row.asDict(recursive=True)

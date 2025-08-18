@@ -3,21 +3,21 @@ Custom exception classes for the application.
 Provides specific error types for better error handling and debugging.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class BaseApplicationException(Exception):
     """Base exception class for all application exceptions."""
-    
+
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize base exception.
-        
+
         Args:
             message: Error message
             error_code: Optional error code for categorization
@@ -27,8 +27,8 @@ class BaseApplicationException(Exception):
         self.error_code = error_code or self.__class__.__name__
         self.details = details or {}
         super().__init__(self.message)
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for API responses."""
         return {
             "error": self.error_code,
@@ -39,41 +39,41 @@ class BaseApplicationException(Exception):
 
 class ConfigurationException(BaseApplicationException):
     """Raised when configuration is invalid or missing."""
-    
+
     pass
 
 
 class ETLException(BaseApplicationException):
     """Base exception for ETL-related errors."""
-    
+
     pass
 
 
 class IngestionException(ETLException):
     """Raised when data ingestion fails."""
-    
+
     pass
 
 
 class TransformationException(ETLException):
     """Raised when data transformation fails."""
-    
+
     pass
 
 
 class ValidationException(BaseApplicationException):
     """Raised when data validation fails."""
-    
+
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
+        field: str | None = None,
         value: Any = None,
         **kwargs: Any
     ) -> None:
         """
         Initialize validation exception.
-        
+
         Args:
             message: Error message
             field: Field that failed validation
@@ -91,17 +91,17 @@ class ValidationException(BaseApplicationException):
 
 class DataQualityException(ValidationException):
     """Raised when data quality checks fail."""
-    
+
     def __init__(
         self,
         message: str,
-        failed_records: Optional[int] = None,
-        total_records: Optional[int] = None,
+        failed_records: int | None = None,
+        total_records: int | None = None,
         **kwargs: Any
     ) -> None:
         """
         Initialize data quality exception.
-        
+
         Args:
             message: Error message
             failed_records: Number of failed records
@@ -121,19 +121,25 @@ class DataQualityException(ValidationException):
 
 class DatabaseException(BaseApplicationException):
     """Raised when database operations fail."""
-    
+
+    pass
+
+
+class DatabaseConnectionError(DatabaseException):
+    """Raised when database connection fails."""
+
     pass
 
 
 class RepositoryException(DatabaseException):
     """Raised when repository operations fail."""
-    
+
     pass
 
 
 class APIException(BaseApplicationException):
     """Base exception for API-related errors."""
-    
+
     def __init__(
         self,
         message: str,
@@ -142,7 +148,7 @@ class APIException(BaseApplicationException):
     ) -> None:
         """
         Initialize API exception.
-        
+
         Args:
             message: Error message
             status_code: HTTP status code
@@ -154,75 +160,75 @@ class APIException(BaseApplicationException):
 
 class AuthenticationException(APIException):
     """Raised when authentication fails."""
-    
+
     def __init__(self, message: str = "Authentication failed", **kwargs: Any) -> None:
         super().__init__(message, status_code=401, **kwargs)
 
 
 class AuthorizationException(APIException):
     """Raised when authorization fails."""
-    
+
     def __init__(self, message: str = "Insufficient permissions", **kwargs: Any) -> None:
         super().__init__(message, status_code=403, **kwargs)
 
 
 class NotFoundException(APIException):
     """Raised when requested resource is not found."""
-    
+
     def __init__(self, message: str = "Resource not found", **kwargs: Any) -> None:
         super().__init__(message, status_code=404, **kwargs)
 
 
 class RateLimitException(APIException):
     """Raised when rate limit is exceeded."""
-    
+
     def __init__(self, message: str = "Rate limit exceeded", **kwargs: Any) -> None:
         super().__init__(message, status_code=429, **kwargs)
 
 
 class VectorSearchException(BaseApplicationException):
     """Raised when vector search operations fail."""
-    
+
     pass
 
 
 class EmbeddingException(VectorSearchException):
     """Raised when embedding generation fails."""
-    
+
     pass
 
 
 class IndexException(VectorSearchException):
     """Raised when index operations fail."""
-    
+
     pass
 
 
 class SparkException(ETLException):
     """Raised when Spark operations fail."""
-    
+
     pass
 
 
 class DeltaLakeException(ETLException):
     """Raised when Delta Lake operations fail."""
-    
+
     pass
 
 
 class FileProcessingException(BaseApplicationException):
     """Raised when file processing fails."""
-    
+
     def __init__(
         self,
         message: str,
-        file_path: Optional[str] = None,
-        file_type: Optional[str] = None,
+        file_path: str | None = None,
+        file_type: str | None = None,
         **kwargs: Any
     ) -> None:
         """
         Initialize file processing exception.
-        
+
         Args:
             message: Error message
             file_path: Path to the problematic file

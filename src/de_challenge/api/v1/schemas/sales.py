@@ -1,5 +1,5 @@
+
 from pydantic import BaseModel, Field
-from typing import List
 
 
 class SaleItem(BaseModel):
@@ -16,7 +16,7 @@ class SaleItem(BaseModel):
 
 
 class PaginatedSales(BaseModel):
-    items: List[SaleItem]
+    items: list[SaleItem]
     total: int
     page: int
     size: int

@@ -1,10 +1,9 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import Session, SQLModel, create_engine
 
 from de_challenge.core.config import settings
-
 
 _engine = create_engine(settings.get_database_url(async_mode=False), echo=False, future=True)
 
@@ -16,11 +15,11 @@ def get_engine():
 def create_all() -> None:
     """Create all SQLModel tables in the configured database."""
     from de_challenge.data_access.models.star_schema import (  # noqa: F401
-        DimDate,
-        DimProduct,
-        DimCustomer,
         DimCountry,
+        DimCustomer,
+        DimDate,
         DimInvoice,
+        DimProduct,
         FactSale,
     )
     SQLModel.metadata.create_all(_engine)

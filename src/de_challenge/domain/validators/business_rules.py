@@ -1,25 +1,25 @@
 """Business rules validation for domain entities."""
 
 import re
-from datetime import datetime, timedelta
-from decimal import Decimal
-from typing import List, Dict, Any, Optional, Tuple, Union
 from collections import defaultdict
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
 from ...core.constants import (
-    STOCK_CODE_PATTERN,
     CANCELLED_INVOICE_PREFIX,
-    MIN_VALID_QUANTITY,
+    MAX_VALID_PRICE,
     MAX_VALID_QUANTITY,
     MIN_VALID_PRICE,
-    MAX_VALID_PRICE,
+    MIN_VALID_QUANTITY,
+    STOCK_CODE_PATTERN,
 )
-from ...core.exceptions import ValidationException, DataQualityException
+from ...core.exceptions import ValidationException
 from ...core.logging import get_logger
-from ..entities.transaction import Transaction, TransactionLine
-from ..entities.product import Product
 from ..entities.customer import Customer, CustomerMetrics
 from ..entities.invoice import Invoice
+from ..entities.product import Product
+from ..entities.transaction import Transaction, TransactionLine
 
 logger = get_logger(__name__)
 
@@ -39,13 +39,13 @@ class BusinessRuleValidator:
                         If False, mark invalid but continue.
         """
         self.strict_mode = strict_mode
-        self.validation_stats: Dict[str, int] = defaultdict(int)
+        self.validation_stats: dict[str, int] = defaultdict(int)
 
     def validate_transaction_line(
         self,
         line: TransactionLine,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[bool, List[str]]:
+        context: dict[str, Any] | None = None
+    ) -> tuple[bool, list[str]]:
         """
         Validate a transaction line against business rules.
 
@@ -110,8 +110,8 @@ class BusinessRuleValidator:
     def validate_transaction(
         self,
         transaction: Transaction,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[bool, List[str]]:
+        context: dict[str, Any] | None = None
+    ) -> tuple[bool, list[str]]:
         """
         Validate a complete transaction.
 
@@ -138,23 +138,23 @@ class BusinessRuleValidator:
         # Cross-line validation
         if transaction.lines:
             # All lines should have same customer
-            customer_ids = set(
+            customer_ids = {
                 line.customer_id for line in transaction.lines
                 if line.customer_id
-            )
+            }
             if len(customer_ids) > 1:
                 errors.append(f"Multiple customer IDs: {customer_ids}")
 
             # All lines should have same date
-            dates = set(line.invoice_date.date() for line in transaction.lines)
+            dates = {line.invoice_date.date() for line in transaction.lines}
             if len(dates) > 1:
                 errors.append(f"Multiple dates in transaction: {dates}")
 
             # All lines should have same country
-            countries = set(
+            countries = {
                 line.country for line in transaction.lines
                 if line.country
-            )
+            }
             if len(countries) > 1:
                 errors.append(f"Multiple countries: {countries}")
 
@@ -172,8 +172,8 @@ class BusinessRuleValidator:
     def validate_product(
         self,
         product: Product,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[bool, List[str]]:
+        context: dict[str, Any] | None = None
+    ) -> tuple[bool, list[str]]:
         """
         Validate a product entity.
 
@@ -227,8 +227,8 @@ class BusinessRuleValidator:
     def validate_customer(
         self,
         customer: Customer,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[bool, List[str]]:
+        context: dict[str, Any] | None = None
+    ) -> tuple[bool, list[str]]:
         """
         Validate a customer entity.
 
@@ -283,8 +283,8 @@ class BusinessRuleValidator:
     def validate_invoice(
         self,
         invoice: Invoice,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[bool, List[str]]:
+        context: dict[str, Any] | None = None
+    ) -> tuple[bool, list[str]]:
         """
         Validate an invoice entity.
 
@@ -395,7 +395,7 @@ class BusinessRuleValidator:
     def _validate_customer_metrics(
         self,
         metrics: CustomerMetrics
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """Validate customer metrics."""
         errors = []
 
@@ -414,7 +414,7 @@ class BusinessRuleValidator:
 
         return (len(errors) == 0, errors)
 
-    def get_validation_report(self) -> Dict[str, Any]:
+    def get_validation_report(self) -> dict[str, Any]:
         """Get validation statistics report."""
         total_validated = sum(
             v for k, v in self.validation_stats.items()
@@ -444,9 +444,9 @@ class BusinessRuleValidator:
 
 # Convenience functions
 def validate_transaction(
-    transaction: Union[Transaction, TransactionLine],
+    transaction: Transaction | TransactionLine,
     strict: bool = False
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """Validate a transaction or transaction line."""
     validator = BusinessRuleValidator(strict_mode=strict)
 
@@ -456,30 +456,30 @@ def validate_transaction(
         return validator.validate_transaction_line(transaction)
 
 
-def validate_product(product: Product, strict: bool = False) -> Tuple[bool, List[str]]:
+def validate_product(product: Product, strict: bool = False) -> tuple[bool, list[str]]:
     """Validate a product."""
     validator = BusinessRuleValidator(strict_mode=strict)
     return validator.validate_product(product)
 
 
-def validate_customer(customer: Customer, strict: bool = False) -> Tuple[bool, List[str]]:
+def validate_customer(customer: Customer, strict: bool = False) -> tuple[bool, list[str]]:
     """Validate a customer."""
     validator = BusinessRuleValidator(strict_mode=strict)
     return validator.validate_customer(customer)
 
 
-def validate_invoice(invoice: Invoice, strict: bool = False) -> Tuple[bool, List[str]]:
+def validate_invoice(invoice: Invoice, strict: bool = False) -> tuple[bool, list[str]]:
     """Validate an invoice."""
     validator = BusinessRuleValidator(strict_mode=strict)
     return validator.validate_invoice(invoice)
 
 
 def bulk_validate(
-    entities: List[Any],
+    entities: list[Any],
     entity_type: str,
     strict: bool = False,
     batch_size: int = 1000
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate multiple entities in batches.
 

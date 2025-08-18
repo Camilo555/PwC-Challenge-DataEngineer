@@ -1,0 +1,23 @@
+# Global code ownership
+* @Camilo555
+
+# Core application files
+/src/de_challenge/core/ @Camilo555
+/src/de_challenge/domain/ @Camilo555
+
+# Data access layer
+/src/de_challenge/data_access/ @Camilo555
+
+# ETL pipelines
+/src/de_challenge/etl/ @Camilo555
+
+# API layer
+/src/de_challenge/api/ @Camilo555
+
+# Tests require review
+/tests/ @Camilo555
+
+# Configuration files
+/pyproject.toml @Camilo555
+/docker-compose.yml @Camilo555
+/.github/ @Camilo555

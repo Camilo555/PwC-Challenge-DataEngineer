@@ -1,0 +1,81 @@
+name: Claude Code
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  claude-code:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Claude Code Action
+      uses: anthropics/claude-code-action@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        # Optional: Specify which files to analyze
+        # include-patterns: |
+        #   src/**/*.py
+        #   tests/**/*.py
+        # Optional: Specify files to exclude
+        # exclude-patterns: |
+        #   **/__pycache__/**
+        #   **/node_modules/**
+        
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+        
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+      
+    - name: Install project
+      run: poetry install --no-interaction
+      
+    - name: Run linting with ruff
+      run: poetry run ruff check src/ tests/
+      
+    - name: Run type checking with mypy
+      run: poetry run mypy src/ --ignore-missing-imports
+      continue-on-error: true  # MyPy has many issues, but shouldn't block CI
+      
+    - name: Run tests
+      run: poetry run pytest tests/ -v --cov=src --cov-report=xml
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      if: success()
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false

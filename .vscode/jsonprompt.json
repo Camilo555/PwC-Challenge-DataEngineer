@@ -500,5 +500,109 @@
         "complexity": "Number and quality of optional features implemented",
         "organization": "Working solution delivered on time with clear structure",
         "innovation": "Creative solutions, performance optimizations, extra features"
+    },
+    "implementation_roadmap": {
+        "phase_1_setup": {
+            "duration": "4-6 hours",
+            "tasks": [
+                "Initialize Poetry project with all dependencies",
+                "Set up project structure with 4-layer architecture",
+                "Configure Docker Compose with Typesense",
+                "Set up basic FastAPI application with health check"
+            ]
+        },
+        "phase_2_etl_bronze": {
+            "duration": "8-10 hours",
+            "tasks": [
+                "Implement PySpark session configuration",
+                "Create bronze layer ingestion for CSV/JSON/PDF files",
+                "Add metadata columns (ingestion_timestamp, source_file_path, etc.)",
+                "Implement partitioning by ingestion_date",
+                "Create Mermaid diagram for Bronze layer"
+            ]
+        },
+        "phase_3_etl_silver": {
+            "duration": "10-12 hours",
+            "tasks": [
+                "Create Pydantic domain models with validation",
+                "Implement data cleaning and standardization",
+                "Add deduplication logic",
+                "Create error handling and quarantine system",
+                "Create Mermaid diagram for Silver layer"
+            ]
+        },
+        "phase_4_etl_gold": {
+            "duration": "12-15 hours",
+            "tasks": [
+                "Design star schema with 1 fact + 5 dimension tables",
+                "Create SQLModel database models",
+                "Implement dimension building with surrogate keys",
+                "Build fact table with proper grain",
+                "Set up JDBC connection to SQLite",
+                "Create Mermaid diagram for Gold layer"
+            ]
+        },
+        "phase_5_api": {
+            "duration": "10-12 hours",
+            "tasks": [
+                "Implement 4-layer FastAPI architecture",
+                "Add Basic Authentication to all endpoints",
+                "Create CRUD operations with batch support",
+                "Implement schema auto-creation on startup",
+                "Add comprehensive error handling"
+            ]
+        },
+        "phase_6_vector_search": {
+            "duration": "6-8 hours",
+            "tasks": [
+                "Set up sentence-transformers for embeddings",
+                "Configure Typesense collection schema",
+                "Implement vector embedding generation",
+                "Create search endpoint with mandatory filters",
+                "Test vector search functionality"
+            ]
+        },
+        "phase_7_finalization": {
+            "duration": "4-6 hours",
+            "tasks": [
+                "Create comprehensive README with setup instructions",
+                "Add overall architecture Mermaid diagram",
+                "Implement optional features (tests, logging, etc.)",
+                "Final testing and deployment verification",
+                "Create submission documentation"
+            ]
+        }
+    },
+    "critical_success_factors": {
+        "data_processing": "ETL MUST use DataFrame API (PySpark/Pandas/Polars), never SQL for transformations",
+        "architecture_separation": "Domain models (Pydantic) MUST be separate from Data Access models (SQLModel)",
+        "star_schema_completeness": "Exactly 1 fact table + 5 dimension tables required",
+        "authentication_coverage": "Basic Auth required on ALL API endpoints without exception",
+        "vector_search_filters": "At least ONE filter must be implemented in search functionality",
+        "file_type_support": "Must handle CSV, JSON, AND PDF files in ingestion pipeline",
+        "schema_management": "API must auto-create database schemas if they don't exist",
+        "containerization": "Docker Compose must orchestrate all services successfully"
+    },
+    "data_quality_framework": {
+        "bronze_layer_checks": [
+            "File existence and readability validation",
+            "Basic schema inference and type detection",
+            "Metadata completeness verification",
+            "Ingestion timestamp consistency"
+        ],
+        "silver_layer_checks": [
+            "Pydantic model validation for business rules",
+            "Null value handling based on business logic",
+            "Duplicate detection and resolution",
+            "Data type standardization verification",
+            "Range and format validations"
+        ],
+        "gold_layer_checks": [
+            "Referential integrity between fact and dimensions",
+            "Surrogate key uniqueness and consistency",
+            "Fact table grain validation",
+            "Dimension table completeness",
+            "Business metric calculation accuracy"
+        ]
     }
 }

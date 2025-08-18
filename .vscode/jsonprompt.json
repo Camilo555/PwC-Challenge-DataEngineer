@@ -1,1303 +1,504 @@
 {
-    "version": "7.0-EnhancedGuide-EN-CompleteAlignment",
-    "name": "Senior Data Architect & Engineering Expert Guide - Complete DE Challenge Implementation",
+    "version": "8.0-ProductionReady-EN",
+    "name": "Senior Data Architect & Engineering Expert Guide - Complete Implementation",
     "project_metadata": {
         "project_name": "de-challenge-retail-etl",
         "repository_name": "data-engineering-challenge-2025",
+        "python_version": "3.10.12",
         "estimated_duration": "40-60 hours",
         "complexity_level": "Senior",
-        "deliverable_date": "As per deadline"
+        "github_visibility": "public"
     },
-    "role": {
-        "title": "Senior Data Architect & Engineering Expert Guide",
-        "experience_level": "10+ years",
-        "mindset": "Strategic architect focused on scalable, production-ready solutions with clear documentation and future extensibility",
-        "specialty": "Modern data engineering with PySpark ETL, cloud-ready architecture, and MLOps integration",
-        "communication_style": "Educational, proactive, and detail-oriented with emphasis on best practices"
-    },
-    "technical_clarifications": {
+    "critical_requirements_summary": {
+        "absolutely_mandatory": [
+            "PySpark ONLY for ETL transformations (pandas/polars acceptable as alternatives)",
+            "SQL/SQLAlchemy ONLY for schema creation, NOT for data transformations",
+            "Pydantic models for domain entities (business logic)",
+            "SQLModel for data access layer (database tables)",
+            "Star schema: minimum 1 fact table + 5 dimension tables",
+            "Typesense vector search with AT LEAST ONE filter",
+            "FastAPI with layered architecture (4 layers minimum)",
+            "Basic Auth on ALL endpoints",
+            "Docker Compose for orchestration",
+            "Mermaid diagrams for EACH medallion layer + overall architecture",
+            "Type hints on ALL code",
+            "GitHub public repository"
+        ],
         "critical_distinctions": {
-            "spark_usage": "PySpark is MANDATORY for all ETL/ELT transformations. This means reading, transforming, and writing data. NOT for schema creation.",
-            "sql_usage": "SQL/SQLAlchemy is ONLY for creating database schemas, tables, relationships, and constraints. NOT for data transformations.",
-            "pydantic_role": "Pydantic validates data quality during ETL and defines business domain models. Separate from SQLModel database entities.",
-            "future_ready": "Architecture must support easy migration from SQLite to Supabase (PostgreSQL) without major refactoring."
-        },
-        "architecture_layers": {
-            "bronze": "Raw data ingestion with PySpark - NO transformations, only metadata addition",
-            "silver": "Data cleaning and validation with PySpark + Pydantic validation",
-            "gold": "Star schema creation with PySpark, then loaded to SQLite via JDBC"
+            "etl_vs_sql": "ETL transformations MUST use DataFrame API (PySpark/Pandas/Polars), NOT SQL queries",
+            "domain_vs_data": "Domain entities (Pydantic) ≠ Data Access entities (SQLModel) - MUST be separate",
+            "schema_creation": "API must auto-create schemas if they don't exist on startup",
+            "data_types": "Must handle CSV, JSON, and PDF files"
         }
     },
-    "project_structure": {
-        "root_directory": "de-challenge-retail-etl/",
-        "structure": {
-            "src/de_challenge/": {
-                "api/": {
-                    "v1/": {
-                        "routes/": [
-                            "sales.py",
-                            "raw_data.py",
-                            "search.py",
-                            "auth.py"
-                        ],
-                        "services/": [
-                            "sales_service.py",
-                            "etl_service.py",
-                            "search_service.py"
-                        ],
-                        "schemas/": [
-                            "request_models.py",
-                            "response_models.py"
-                        ]
-                    }
-                },
-                "core/": {
-                    "config.py": "Centralized configuration with Pydantic BaseSettings",
-                    "constants.py": "Application constants and enums",
-                    "exceptions.py": "Custom exception classes",
-                    "logging.py": "Logging configuration"
-                },
-                "domain/": {
-                    "entities/": [
-                        "transaction.py",
-                        "product.py",
-                        "customer.py"
-                    ],
-                    "validators/": [
-                        "business_rules.py",
-                        "data_quality.py"
-                    ],
-                    "interfaces/": [
-                        "repository_interface.py",
-                        "service_interface.py"
-                    ]
-                },
-                "data_access/": {
-                    "models/": [
-                        "fact_tables.py",
-                        "dimension_tables.py"
-                    ],
-                    "repositories/": [
-                        "base_repository.py",
-                        "fact_repository.py",
-                        "dimension_repository.py"
-                    ],
-                    "database.py": "Database connection and session management",
-                    "migrations/": "Alembic migrations for schema versioning"
-                },
-                "etl/": {
-                    "bronze/": [
-                        "ingest_structured.py",
-                        "ingest_unstructured.py",
-                        "metadata_enrichment.py"
-                    ],
-                    "silver/": [
-                        "clean_transactions.py",
-                        "validate_data.py",
-                        "deduplicate.py"
-                    ],
-                    "gold/": [
-                        "build_dimensions.py",
-                        "build_facts.py",
-                        "load_warehouse.py"
-                    ],
-                    "orchestration/": [
-                        "pipeline_manager.py",
-                        "job_scheduler.py"
-                    ],
-                    "utils/": [
-                        "spark_session.py",
-                        "delta_helpers.py",
-                        "pdf_extractor.py"
-                    ]
-                },
-                "vector_search/": {
-                    "embeddings/": [
-                        "text_encoder.py",
-                        "model_manager.py"
-                    ],
-                    "typesense_client.py": "Typesense connection and operations",
-                    "indexer.py": "Index management and synchronization"
-                },
-                "utils/": [
-                    "file_handlers.py",
-                    "validators.py",
-                    "decorators.py"
-                ]
-            },
-            "tests/": {
-                "unit/": "Unit tests for each module",
-                "integration/": "Integration tests for API and ETL",
-                "fixtures/": "Test data and mocks"
-            },
-            "data/": {
-                "raw/": "Input files location",
-                "bronze/": "Delta Lake bronze layer",
-                "silver/": "Delta Lake silver layer",
-                "gold/": "Delta Lake gold layer (before warehouse load)",
-                "warehouse/": "SQLite database file"
-            },
-            "docs/": {
-                "architecture/": [
-                    "diagrams.md",
-                    "decisions.md"
+    "technical_architecture": {
+        "medallion_layers": {
+            "bronze": {
+                "purpose": "Raw data ingestion with metadata",
+                "storage": "Delta Lake or Parquet files",
+                "transformations": "NONE - only add metadata",
+                "schema": "Schema-on-read, preserve original structure",
+                "metadata_columns": [
+                    "ingestion_timestamp",
+                    "source_file_path",
+                    "source_file_type",
+                    "source_file_size",
+                    "ingestion_job_id",
+                    "raw_record_count"
                 ],
-                "api/": "OpenAPI documentation",
-                "etl/": "ETL pipeline documentation"
-            },
-            "docker/": [
-                "Dockerfile",
-                "docker-compose.yml",
-                ".dockerignore"
-            ],
-            "scripts/": [
-                "init_db.py",
-                "seed_data.py",
-                "run_etl.py"
-            ],
-            "config/": [
-                ".env.example",
-                "logging.yaml",
-                "spark-defaults.conf"
-            ]
-        }
-    },
-    "technology_stack_detailed": {
-        "mandatory_components": {
-            "etl_framework": {
-                "name": "PySpark",
-                "version": ">=3.5.0",
-                "usage": "ALL data transformations in Bronze, Silver, and Gold layers",
-                "prohibited": "Do NOT use PySpark for schema creation or DDL operations"
-            },
-            "database": {
-                "development": "SQLite (for local development and initial delivery)",
-                "production_ready": "PostgreSQL-compatible design for Supabase migration",
-                "orm": "SQLModel for table definitions, SQLAlchemy for connections",
-                "schema_creation": "Use SQLAlchemy DDL or Alembic migrations ONLY"
-            },
-            "vector_database": {
-                "name": "Typesense",
-                "deployment": "Docker container via docker-compose",
-                "integration": "Via official Python client"
-            },
-            "api_framework": {
-                "name": "FastAPI",
-                "features": [
-                    "Async support",
-                    "Pydantic integration",
-                    "OpenAPI documentation"
-                ],
-                "authentication": "Basic Auth (mandatory), JWT ready (optional)"
-            },
-            "orchestration": {
-                "name": "Docker Compose",
-                "services": [
-                    "api",
-                    "typesense",
-                    "optional: postgres for future"
-                ]
-            },
-            "dependency_management": {
-                "name": "Poetry",
-                "backend": "uv (for fast resolution)",
-                "lock_file": "poetry.lock must be committed"
-            },
-            "data_formats": {
-                "lake": "Delta Lake (ACID transactions)",
-                "warehouse": "Relational tables via SQLModel"
-            }
-        },
-        "required_libraries": {
-            "core": [
-                "pyspark[sql]>=3.5.0",
-                "delta-spark>=3.0.0",
-                "fastapi>=0.104.0",
-                "uvicorn[standard]>=0.24.0",
-                "pydantic>=2.5.0",
-                "pydantic-settings>=2.1.0",
-                "sqlmodel>=0.0.14",
-                "alembic>=1.13.0",
-                "typesense>=0.19.0"
-            ],
-            "data_processing": [
-                "pandas>=2.1.0",
-                "polars>=0.19.0",
-                "pypdf2>=3.0.0",
-                "python-multipart>=0.0.6"
-            ],
-            "ml_embeddings": [
-                "sentence-transformers>=2.2.0",
-                "torch>=2.1.0",
-                "numpy>=1.24.0"
-            ],
-            "development": [
-                "pytest>=7.4.0",
-                "pytest-asyncio>=0.21.0",
-                "pytest-cov>=4.1.0",
-                "ruff>=0.1.0",
-                "mypy>=1.7.0",
-                "black>=23.0.0",
-                "pre-commit>=3.5.0"
-            ],
-            "future_integration": [
-                "psycopg2-binary>=2.9.0",
-                "supabase>=2.0.0"
-            ]
-        }
-    },
-    "interactive_git_workflow": {
-        "protocol": "Explain → Review → Confirm → Implement → Test → Commit",
-        "branch_strategy": "Feature branches with PR reviews",
-        "commit_convention": "Conventional Commits (feat, fix, docs, style, refactor, test, chore)",
-        "commit_checkpoints": [
-            {
-                "checkpoint": 1,
-                "name": "Project Foundation and Dependency Management",
-                "branch": "feat/project-setup",
-                "guidance_before_commit": [
-                    "**The Why:** A robust foundation prevents technical debt. Poetry with uv backend ensures reproducible builds 10x faster than pip. The directory structure follows DDD principles for maintainability.",
-                    "**The What:** Initialize Poetry project, establish directory structure following clean architecture, configure development environment with all necessary dependencies.",
-                    "**The How:** ",
-                    "1. Run `poetry init` and configure with Python 3.10+",
-                    "2. Configure Poetry to use uv: `poetry config installer.modern-installation false`",
-                    "3. Add dependency groups: default, dev, ml, future",
-                    "4. Create comprehensive .gitignore for Python, Spark, Delta, IDEs",
-                    "5. Setup pre-commit hooks for code quality",
-                    "6. Create README.md with project overview and setup instructions"
-                ],
-                "implementation_details": {
-                    "files_to_create": [
-                        "pyproject.toml",
-                        "poetry.lock",
-                        ".gitignore",
-                        ".pre-commit-config.yaml",
-                        "README.md",
-                        "Makefile",
-                        ".env.example"
-                    ],
-                    "key_configurations": {
-                        "python_version": "^3.10",
-                        "poetry_groups": [
-                            "default",
-                            "dev",
-                            "ml",
-                            "test"
-                        ],
-                        "gitignore_sections": [
-                            "Python",
-                            "Spark",
-                            "Delta",
-                            "Environment",
-                            "IDE",
-                            "Data"
-                        ]
-                    }
-                },
-                "code_review_checklist": {
-                    "dependency_management": [
-                        "✓ Poetry configured with uv backend?",
-                        "✓ All dependencies have version constraints?",
-                        "✓ Dev dependencies separated from production?",
-                        "✓ poetry.lock file generated and committed?"
-                    ],
-                    "project_structure": [
-                        "✓ Directory structure follows clean architecture?",
-                        "✓ Source code under src/ for proper packaging?",
-                        "✓ Tests directory mirrors source structure?",
-                        "✓ Documentation directory established?"
-                    ],
-                    "development_setup": [
-                        "✓ .env.example includes all required variables?",
-                        "✓ Pre-commit hooks configured?",
-                        "✓ Makefile includes common commands?",
-                        "✓ README has clear setup instructions?"
-                    ],
-                    "quality_gates": [
-                        "✓ Ruff configured for linting?",
-                        "✓ Black configured for formatting?",
-                        "✓ Mypy configured for type checking?",
-                        "✓ Pytest configured with coverage targets?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(core): initialize project with poetry, clean architecture, and quality tools",
-                    "files_affected": "~15 files",
-                    "decisions_to_make": [
-                        "Python version (3.10 vs 3.11)",
-                        "Optional dependencies to include initially",
-                        "Pre-commit hook strictness level",
-                        "Coverage threshold for tests (suggest 80%)"
-                    ]
+                "implementation": {
+                    "structured_data": "spark.read.option('header', 'true').option('inferSchema', 'true')",
+                    "unstructured_data": "PyPDF2 for text extraction → DataFrame conversion",
+                    "partitioning": "By ingestion_date (YYYY-MM-DD format)"
                 }
             },
-            {
-                "checkpoint": 2,
-                "name": "Centralized Configuration and Supabase Readiness",
-                "branch": "feat/configuration",
-                "guidance_before_commit": [
-                    "**The Why:** Configuration as code with environment-based overrides enables seamless deployment across environments. Preparing for Supabase now prevents future refactoring.",
-                    "**The What:** Create a configuration module that handles both SQLite (dev) and PostgreSQL (future prod) connections, Spark settings, and service configurations.",
-                    "**The How:**",
-                    "1. Define Settings class with Pydantic BaseSettings",
-                    "2. Implement database URL builder supporting both SQLite and PostgreSQL",
-                    "3. Create Spark configuration with memory and parallelism settings",
-                    "4. Add Typesense configuration with API keys and endpoints",
-                    "5. Implement configuration validation on startup"
+            "silver": {
+                "purpose": "Cleaned, validated, deduplicated data",
+                "storage": "Delta Lake or Parquet files",
+                "transformations": [
+                    "Data type standardization",
+                    "Null handling",
+                    "Deduplication",
+                    "Business validation with Pydantic",
+                    "Data quality checks"
                 ],
-                "implementation_details": {
-                    "configuration_layers": {
-                        "base": "Default settings for all environments",
-                        "development": "SQLite, local Spark, debug logging",
-                        "staging": "PostgreSQL, cluster Spark, info logging",
-                        "production": "Supabase, optimized Spark, warning logging"
+                "validation_implementation": {
+                    "method": "Pandas UDF with Pydantic models",
+                    "error_handling": "Separate error column for validation failures",
+                    "quarantine": "Invalid records to separate location"
+                }
+            },
+            "gold": {
+                "purpose": "Business-ready star schema",
+                "storage": "SQLite database (initially) → PostgreSQL-ready",
+                "star_schema": {
+                    "fact_table": {
+                        "name": "fact_sales",
+                        "grain": "One row per product per invoice",
+                        "columns": [
+                            "sale_id (PK)",
+                            "product_key (FK)",
+                            "customer_key (FK)",
+                            "date_key (FK)",
+                            "invoice_key (FK)",
+                            "country_key (FK)",
+                            "quantity",
+                            "unit_price",
+                            "total_amount",
+                            "discount_amount"
+                        ]
                     },
-                    "environment_variables": [
-                        "DATABASE_TYPE=(sqlite|postgresql)",
-                        "DATABASE_URL=sqlite:///./data/warehouse/retail.db",
-                        "SUPABASE_URL=https://xxx.supabase.co (future)",
-                        "SUPABASE_KEY=xxx (future)",
-                        "SPARK_MASTER=local[*]",
-                        "SPARK_MEMORY=4g",
-                        "TYPESENSE_API_KEY=xxx",
-                        "TYPESENSE_HOST=localhost",
-                        "LOG_LEVEL=INFO"
-                    ]
-                },
-                "code_review_checklist": {
-                    "configuration": [
-                        "✓ Settings class uses Pydantic v2 features?",
-                        "✓ Configuration supports multiple environments?",
-                        "✓ Database URL builder handles SQLite and PostgreSQL?",
-                        "✓ Sensitive data excluded from version control?"
-                    ],
-                    "validation": [
-                        "✓ All settings have appropriate validators?",
-                        "✓ Configuration fails fast on invalid values?",
-                        "✓ Default values provided where appropriate?",
-                        "✓ Settings documented with descriptions?"
-                    ],
-                    "supabase_ready": [
-                        "✓ PostgreSQL connection string format supported?",
-                        "✓ Connection pooling configuration included?",
-                        "✓ SSL/TLS settings configurable?",
-                        "✓ Migration path from SQLite documented?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(core): implement multi-environment configuration with Supabase readiness",
-                    "files_affected": "~8 files"
-                }
-            },
-            {
-                "checkpoint": 3,
-                "name": "Domain-Driven Data Modeling with Pydantic",
-                "branch": "feat/domain-models",
-                "guidance_before_commit": [
-                    "**The Why:** Domain models represent business concepts, not database tables. They enforce business rules and serve as the single source of truth for data validation throughout ETL pipelines.",
-                    "**The What:** Create Pydantic models for business entities that will be used in ETL validation, NOT for database schema definition.",
-                    "**The How:**",
-                    "1. Analyze Online Retail II dataset to identify business entities",
-                    "2. Create base model with common fields (timestamps, validation)",
-                    "3. Implement specific models: Transaction, Product, Customer, Invoice",
-                    "4. Add business rule validators (price > 0, valid stock codes, etc.)",
-                    "5. Create model factories for testing"
-                ],
-                "implementation_details": {
-                    "domain_entities": {
-                        "Transaction": {
-                            "fields": [
-                                "invoice_no",
-                                "stock_code",
-                                "description",
-                                "quantity",
-                                "invoice_date",
-                                "unit_price",
-                                "customer_id",
-                                "country"
-                            ],
-                            "validators": [
-                                "quantity_positive_or_return",
-                                "price_non_negative",
-                                "valid_stock_code_format"
-                            ]
-                        },
-                        "Product": {
-                            "fields": [
+                    "dimension_tables": [
+                        {
+                            "name": "dim_product",
+                            "columns": [
+                                "product_key (PK)",
                                 "stock_code",
                                 "description",
                                 "category",
-                                "unit_price"
-                            ],
-                            "validators": [
-                                "unique_stock_code",
-                                "description_not_empty"
+                                "subcategory",
+                                "brand"
                             ]
                         },
-                        "Customer": {
-                            "fields": [
+                        {
+                            "name": "dim_customer",
+                            "columns": [
+                                "customer_key (PK)",
                                 "customer_id",
-                                "country",
-                                "first_purchase_date",
-                                "total_purchases"
-                            ],
-                            "validators": [
-                                "valid_customer_id",
-                                "country_code_valid"
-                            ]
-                        }
-                    },
-                    "validation_rules": [
-                        "Stock codes must match pattern: ^[A-Z0-9]{5,7}$",
-                        "Cancelled invoices start with 'C'",
-                        "Quantity can be negative only for returns",
-                        "Unit price must be positive for sales"
-                    ]
-                },
-                "code_review_checklist": {
-                    "domain_modeling": [
-                        "✓ Models represent business concepts, not tables?",
-                        "✓ Inheritance used appropriately for shared fields?",
-                        "✓ Models are immutable (frozen=True where appropriate)?",
-                        "✓ Clear separation from data access models?"
-                    ],
-                    "validation": [
-                        "✓ All business rules implemented as validators?",
-                        "✓ Validators have clear error messages?",
-                        "✓ Edge cases handled (nulls, extremes)?",
-                        "✓ Validation performance acceptable for large datasets?"
-                    ],
-                    "documentation": [
-                        "✓ Each model has docstring with business meaning?",
-                        "✓ Field descriptions explain business context?",
-                        "✓ Validation rules documented?",
-                        "✓ Examples provided in docstrings?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(domain): implement business domain models with comprehensive validation",
-                    "files_affected": "~10 files"
-                }
-            },
-            {
-                "checkpoint": 4,
-                "name": "Data Access Layer with Star Schema",
-                "branch": "feat/data-access",
-                "guidance_before_commit": [
-                    "**The Why:** The repository pattern decouples business logic from data persistence. Star schema optimizes analytical queries. SQLModel provides type-safe ORM operations.",
-                    "**The What:** Create SQLModel table definitions for star schema and repository pattern implementation. These are DATABASE entities, separate from domain models.",
-                    "**The How:**",
-                    "1. Design star schema with proper fact and dimension tables",
-                    "2. Create SQLModel table classes with relationships",
-                    "3. Implement base repository with generic CRUD",
-                    "4. Create specific repositories for each table",
-                    "5. Setup database initialization and migration"
-                ],
-                "implementation_details": {
-                    "star_schema_design": {
-                        "fact_tables": {
-                            "FactSale": {
-                                "columns": [
-                                    "sale_id",
-                                    "product_key",
-                                    "customer_key",
-                                    "date_key",
-                                    "invoice_key",
-                                    "country_key",
-                                    "quantity",
-                                    "unit_price",
-                                    "total_amount"
-                                ],
-                                "grain": "One row per product per invoice",
-                                "indexes": [
-                                    "date_key",
-                                    "product_key",
-                                    "customer_key"
-                                ]
-                            }
-                        },
-                        "dimension_tables": {
-                            "DimProduct": [
-                                "product_key",
-                                "stock_code",
-                                "description",
-                                "category",
-                                "subcategory"
-                            ],
-                            "DimCustomer": [
-                                "customer_key",
-                                "customer_id",
-                                "country",
-                                "segment",
+                                "customer_segment",
+                                "registration_date",
                                 "lifetime_value"
-                            ],
-                            "DimDate": [
-                                "date_key",
+                            ]
+                        },
+                        {
+                            "name": "dim_date",
+                            "columns": [
+                                "date_key (PK)",
                                 "date",
                                 "year",
                                 "quarter",
                                 "month",
                                 "week",
-                                "day_of_week",
-                                "is_weekend"
-                            ],
-                            "DimCountry": [
-                                "country_key",
+                                "day_name",
+                                "is_weekend",
+                                "is_holiday"
+                            ]
+                        },
+                        {
+                            "name": "dim_country",
+                            "columns": [
+                                "country_key (PK)",
                                 "country_code",
                                 "country_name",
                                 "region",
-                                "subregion"
-                            ],
-                            "DimInvoice": [
-                                "invoice_key",
+                                "continent"
+                            ]
+                        },
+                        {
+                            "name": "dim_invoice",
+                            "columns": [
+                                "invoice_key (PK)",
                                 "invoice_no",
                                 "invoice_date",
                                 "is_cancelled",
                                 "payment_method"
                             ]
                         }
-                    },
-                    "repository_methods": {
-                        "base": [
-                            "create",
-                            "read",
-                            "update",
-                            "delete",
-                            "exists",
-                            "count"
-                        ],
-                        "fact": [
-                            "bulk_insert",
-                            "get_by_date_range",
-                            "aggregate_by_dimension"
-                        ],
-                        "dimension": [
-                            "upsert",
-                            "get_or_create",
-                            "soft_delete"
-                        ]
-                    }
-                },
-                "code_review_checklist": {
-                    "schema_design": [
-                        "✓ Star schema properly normalized?",
-                        "✓ Surrogate keys used for all dimensions?",
-                        "✓ Natural keys preserved for business reference?",
-                        "✓ Appropriate indexes defined?"
-                    ],
-                    "sqlmodel_implementation": [
-                        "✓ Tables inherit from SQLModel?",
-                        "✓ Relationships properly defined?",
-                        "✓ Column types appropriate for data?",
-                        "✓ Constraints and validations included?"
-                    ],
-                    "repository_pattern": [
-                        "✓ Repositories follow interface segregation?",
-                        "✓ Transaction management implemented?",
-                        "✓ Error handling comprehensive?",
-                        "✓ Connection pooling configured?"
-                    ],
-                    "postgresql_compatibility": [
-                        "✓ No SQLite-specific features used?",
-                        "✓ Data types compatible with PostgreSQL?",
-                        "✓ Schema can be migrated to Supabase?",
-                        "✓ Prepared for connection string switch?"
+                    ]
+                }
+            }
+        }
+    },
+    "implementation_details": {
+        "etl_framework_specifics": {
+            "pyspark_configuration": {
+                "spark.app.name": "RetailETL",
+                "spark.master": "local[*]",
+                "spark.driver.memory": "4g",
+                "spark.executor.memory": "4g",
+                "spark.sql.adaptive.enabled": "true",
+                "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+                "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+            },
+            "transformation_patterns": {
+                "bronze_to_silver": [
+                    "df.filter(col('quantity').isNotNull())",
+                    "df.withColumn('invoice_date', to_timestamp('InvoiceDate', 'MM/dd/yyyy HH:mm'))",
+                    "df.dropDuplicates(['Invoice', 'StockCode', 'CustomerID'])",
+                    "df.withColumn('is_cancelled', col('Invoice').startswith('C'))"
+                ],
+                "silver_to_gold": [
+                    "Build dimensions first using window functions for surrogate keys",
+                    "Use broadcast joins for dimension lookups",
+                    "Aggregate facts at proper grain",
+                    "Write to SQLite using JDBC: df.write.jdbc(url, table, mode='overwrite')"
+                ]
+            }
+        },
+        "api_layer_specifics": {
+            "layered_architecture": {
+                "layer_1_routes": {
+                    "location": "src/de_challenge/api/v1/routes/",
+                    "responsibility": "HTTP request handling, input validation",
+                    "example_endpoints": [
+                        "POST /api/v1/seed - Initial data seeding",
+                        "GET /api/v1/sales - Query fact table",
+                        "POST /api/v1/raw-data - Create raw data entry",
+                        "GET /api/v1/raw-data/{id} - Read raw data",
+                        "PUT /api/v1/raw-data/{id} - Update raw data",
+                        "DELETE /api/v1/raw-data/{id} - Delete raw data",
+                        "POST /api/v1/raw-data/batch - Batch operations",
+                        "GET /api/v1/search - Vector search with filters"
                     ]
                 },
-                "commit": {
-                    "message": "feat(data): implement star schema with SQLModel and repository pattern",
-                    "files_affected": "~15 files"
+                "layer_2_services": {
+                    "location": "src/de_challenge/api/v1/services/",
+                    "responsibility": "Business logic orchestration",
+                    "patterns": [
+                        "Unit of Work",
+                        "Command Query Separation"
+                    ]
+                },
+                "layer_3_domain": {
+                    "location": "src/de_challenge/domain/",
+                    "responsibility": "Business entities and validation rules",
+                    "implementation": "Pydantic BaseModel classes with validators"
+                },
+                "layer_4_data_access": {
+                    "location": "src/de_challenge/data_access/",
+                    "responsibility": "Database interaction",
+                    "implementation": "SQLModel for ORM, Repository pattern"
                 }
             },
-            {
-                "checkpoint": 5,
-                "name": "ETL Bronze Layer with PySpark",
-                "branch": "feat/etl-bronze",
-                "guidance_before_commit": [
-                    "**The Why:** Bronze layer preserves raw data fidelity with lineage metadata. PySpark handles large-scale data efficiently. Delta Lake provides ACID transactions and time travel.",
-                    "**The What:** Implement PySpark jobs for ingesting CSV, JSON, and PDF files into Delta Lake Bronze layer with NO transformations.",
-                    "**The How:**",
-                    "1. Create SparkSession builder with Delta Lake configuration",
-                    "2. Implement readers for each file type (CSV, JSON, PDF)",
-                    "3. Add ingestion metadata (timestamp, source, version)",
-                    "4. Write to Delta Lake with proper partitioning",
-                    "5. Implement error handling and quarantine"
-                ],
-                "implementation_details": {
-                    "spark_configuration": {
-                        "app_name": "RetailETL_Bronze",
-                        "master": "local[*]",
-                        "configs": [
-                            "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension",
-                            "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog",
-                            "spark.sql.adaptive.enabled=true",
-                            "spark.sql.adaptive.coalescePartitions.enabled=true"
-                        ]
-                    },
-                    "ingestion_strategy": {
-                        "csv": "spark.read.option('header', 'true').option('inferSchema', 'true')",
-                        "json": "spark.read.option('multiLine', 'true')",
-                        "pdf": "Use Pandas UDF with PyPDF2 for text extraction"
-                    },
-                    "metadata_columns": [
-                        "ingestion_timestamp",
-                        "source_file_path",
-                        "source_file_size",
-                        "source_file_type",
-                        "ingestion_job_id",
-                        "schema_version"
-                    ],
-                    "delta_configuration": {
-                        "partition_by": "ingestion_date",
-                        "optimize_write": true,
-                        "auto_compact": true
-                    }
-                },
-                "code_review_checklist": {
-                    "pyspark_usage": [
-                        "✓ PySpark used for ALL data operations?",
-                        "✓ NO SQL used for data manipulation?",
-                        "✓ Spark session properly configured?",
-                        "✓ Memory and parallelism optimized?"
-                    ],
-                    "bronze_layer": [
-                        "✓ Raw data preserved without modification?",
-                        "✓ Metadata columns added correctly?",
-                        "✓ Partitioning strategy appropriate?",
-                        "✓ Delta Lake ACID properties utilized?"
-                    ],
-                    "error_handling": [
-                        "✓ Corrupt files handled gracefully?",
-                        "✓ Quarantine folder for bad data?",
-                        "✓ Logging comprehensive?",
-                        "✓ Job monitoring implemented?"
-                    ],
-                    "performance": [
-                        "✓ Broadcast joins where appropriate?",
-                        "✓ Caching used effectively?",
-                        "✓ Partition pruning enabled?",
-                        "✓ Statistics collected for optimization?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(etl): implement bronze layer ingestion with PySpark and Delta Lake",
-                    "files_affected": "~12 files"
+            "authentication": {
+                "basic_auth_implementation": {
+                    "dependency": "from fastapi.security import HTTPBasic, HTTPBasicCredentials",
+                    "validation": "secrets.compare_digest for timing attack prevention",
+                    "application": "Depends(get_current_user) on all routes"
                 }
-            },
-            {
-                "checkpoint": 6,
-                "name": "ETL Silver Layer with PySpark and Pydantic Validation",
-                "branch": "feat/etl-silver",
-                "guidance_before_commit": [
-                    "**The Why:** Silver layer creates clean, validated, deduplicated data. PySpark transformations ensure scalability. Pydantic validation enforces business rules at scale.",
-                    "**The What:** Transform Bronze data using PySpark, validate with Pydantic models, and write to Silver Delta Lake.",
-                    "**The How:**",
-                    "1. Read Bronze Delta tables with PySpark",
-                    "2. Apply cleaning transformations (nulls, types, formats)",
-                    "3. Implement Pandas UDF for Pydantic validation",
-                    "4. Deduplicate based on business keys",
-                    "5. Write to Silver Delta Lake with SCD Type 1"
-                ],
-                "implementation_details": {
-                    "transformation_pipeline": [
-                        "Remove completely null rows",
-                        "Standardize date formats",
-                        "Clean product descriptions",
-                        "Normalize country names",
-                        "Handle cancelled invoices",
-                        "Calculate derived fields"
-                    ],
-                    "pydantic_validation_udf": {
-                        "implementation": "Pandas UDF that applies domain model validation",
-                        "error_handling": "Capture validation errors in separate column",
-                        "performance": "Batch validation for efficiency"
-                    },
-                    "deduplication_strategy": {
-                        "keys": [
-                            "invoice_no",
-                            "stock_code",
-                            "customer_id"
-                        ],
-                        "method": "Keep latest based on ingestion_timestamp",
-                        "window_functions": "Use row_number() over partition"
-                    },
-                    "quality_metrics": [
-                        "Records processed",
-                        "Records validated",
-                        "Records rejected",
-                        "Validation error distribution"
-                    ]
-                },
-                "code_review_checklist": {
-                    "transformations": [
-                        "✓ All transformations use PySpark functions?",
-                        "✓ NO raw SQL for transformations?",
-                        "✓ Business rules correctly implemented?",
-                        "✓ Data types properly cast?"
-                    ],
-                    "validation": [
-                        "✓ Pydantic models used for validation?",
-                        "✓ Validation errors captured and logged?",
-                        "✓ Invalid records quarantined?",
-                        "✓ Validation performance acceptable?"
-                    ],
-                    "data_quality": [
-                        "✓ Deduplication logic correct?",
-                        "✓ Null handling appropriate?",
-                        "✓ Outliers identified and handled?",
-                        "✓ Data profiling implemented?"
-                    ],
-                    "silver_standards": [
-                        "✓ Data conforms to business model?",
-                        "✓ Schema evolution handled?",
-                        "✓ Slowly changing dimensions considered?",
-                        "✓ Audit columns maintained?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(etl): implement silver layer with PySpark transformations and Pydantic validation",
-                    "files_affected": "~10 files"
-                }
-            },
-            {
-                "checkpoint": 7,
-                "name": "ETL Gold Layer Star Schema with PySpark",
-                "branch": "feat/etl-gold",
-                "guidance_before_commit": [
-                    "**The Why:** Gold layer provides business-ready analytical data. Star schema optimizes query performance. PySpark builds the schema, then loads to SQLite warehouse.",
-                    "**The What:** Build fact and dimension tables using PySpark from Silver data, then load to SQLite using JDBC.",
-                    "**The How:**",
-                    "1. Create dimension builders with PySpark",
-                    "2. Generate surrogate keys for dimensions",
-                    "3. Build fact table with foreign key lookups",
-                    "4. Validate referential integrity",
-                    "5. Load to SQLite via Spark JDBC connector"
-                ],
-                "implementation_details": {
-                    "dimension_building": {
-                        "DimDate": "Generate from date range in data",
-                        "DimProduct": "Distinct products with categorization",
-                        "DimCustomer": "Aggregate customer metrics",
-                        "DimCountry": "Enhance with region data",
-                        "DimInvoice": "Extract invoice attributes"
-                    },
-                    "surrogate_key_strategy": {
-                        "method": "Hash-based for deterministic keys",
-                        "implementation": "SHA-256 of natural key",
-                        "null_handling": "Special key -1 for unknown"
-                    },
-                    "fact_table_build": {
-                        "joins": "Broadcast join dimensions to facts",
-                        "aggregations": "Pre-calculate common metrics",
-                        "optimization": "Partition by date for performance"
-                    },
-                    "warehouse_loading": {
-                        "connection": "JDBC to SQLite/PostgreSQL",
-                        "mode": "Overwrite dimensions, append facts",
-                        "batch_size": "10000 records per batch",
-                        "error_handling": "Transaction rollback on failure"
-                    }
-                },
-                "code_review_checklist": {
-                    "star_schema": [
-                        "✓ All dimensions have surrogate keys?",
-                        "✓ Fact table at correct grain?",
-                        "✓ Referential integrity maintained?",
-                        "✓ No data anomalies in joins?"
-                    ],
-                    "pyspark_implementation": [
-                        "✓ Dimensions built with PySpark?",
-                        "✓ Facts assembled with PySpark?",
-                        "✓ NO SQL for transformations?",
-                        "✓ Optimization techniques applied?"
-                    ],
-                    "warehouse_load": [
-                        "✓ JDBC connection properly configured?",
-                        "✓ Transaction management implemented?",
-                        "✓ Load performance acceptable?",
-                        "✓ Incremental load supported?"
-                    ],
-                    "metrics": [
-                        "✓ Row counts validated?",
-                        "✓ Sum checks performed?",
-                        "✓ Referential integrity verified?",
-                        "✓ Performance benchmarked?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(etl): build gold layer star schema with PySpark and load to warehouse",
-                    "files_affected": "~15 files"
-                }
-            },
-            {
-                "checkpoint": 8,
-                "name": "FastAPI with Clean Architecture",
-                "branch": "feat/api-implementation",
-                "guidance_before_commit": [
-                    "**The Why:** Layered architecture ensures maintainability and testability. FastAPI provides high performance with automatic documentation. Clean separation enables easy testing and modification.",
-                    "**The What:** Implement REST API with proper layering: Routes → Services → Repositories.",
-                    "**The How:**",
-                    "1. Setup FastAPI application with versioning",
-                    "2. Implement authentication middleware",
-                    "3. Create route handlers for each resource",
-                    "4. Implement service layer with business logic",
-                    "5. Connect to repositories for data access"
-                ],
-                "implementation_details": {
-                    "api_structure": {
-                        "routes": {
-                            "/api/v1/sales": "Query fact table with filters",
-                            "/api/v1/raw-data": "CRUD for bronze layer",
-                            "/api/v1/products": "Dimension management",
-                            "/api/v1/search": "Vector search endpoint",
-                            "/api/v1/etl/trigger": "Manual ETL trigger"
+            }
+        },
+        "vector_search_specifics": {
+            "typesense_configuration": {
+                "collection_schema": {
+                    "name": "products",
+                    "fields": [
+                        {
+                            "name": "id",
+                            "type": "string"
                         },
-                        "authentication": {
-                            "basic": "HTTPBasic for initial implementation",
-                            "jwt_ready": "Structure to add JWT easily"
+                        {
+                            "name": "stock_code",
+                            "type": "string",
+                            "facet": true
                         },
-                        "middleware": [
-                            "CORS for browser access",
-                            "Request ID for tracing",
-                            "Performance timing",
-                            "Error handling"
-                        ]
-                    },
-                    "service_layer": {
-                        "responsibilities": "Orchestrate business logic",
-                        "patterns": [
-                            "Unit of Work",
-                            "Command/Query separation"
-                        ],
-                        "error_handling": "Domain-specific exceptions"
-                    },
-                    "response_models": {
-                        "pagination": "Page, size, total",
-                        "filtering": "Field-based filters",
-                        "sorting": "Multi-field sorting",
-                        "formats": "JSON, CSV export"
-                    }
-                },
-                "code_review_checklist": {
-                    "architecture": [
-                        "✓ Clear separation of layers?",
-                        "✓ Dependencies flow inward only?",
-                        "✓ No business logic in routes?",
-                        "✓ No data access in services?"
-                    ],
-                    "api_design": [
-                        "✓ RESTful conventions followed?",
-                        "✓ Consistent error responses?",
-                        "✓ Proper HTTP status codes?",
-                        "✓ API versioning implemented?"
-                    ],
-                    "fastapi_features": [
-                        "✓ Async handlers where beneficial?",
-                        "✓ Dependency injection used?",
-                        "✓ Request/response validation?",
-                        "✓ OpenAPI documentation complete?"
-                    ],
-                    "security": [
-                        "✓ Authentication required?",
-                        "✓ Input validation comprehensive?",
-                        "✓ SQL injection prevented?",
-                        "✓ Rate limiting considered?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(api): implement FastAPI with clean architecture and authentication",
-                    "files_affected": "~20 files"
-                }
-            },
-            {
-                "checkpoint": 9,
-                "name": "Vector Search with Typesense",
-                "branch": "feat/vector-search",
-                "guidance_before_commit": [
-                    "**The Why:** Vector search enables semantic search beyond keywords. Typesense provides fast, typo-tolerant search. Integration with product descriptions enhances user experience.",
-                    "**The What:** Generate embeddings for products, index in Typesense, and create search API with filters.",
-                    "**The How:**",
-                    "1. Setup Typesense Docker container",
-                    "2. Choose and implement embedding model",
-                    "3. Create indexing pipeline from DimProduct",
-                    "4. Implement search endpoint with filters",
-                    "5. Add synchronization mechanism"
-                ],
-                "implementation_details": {
-                    "embedding_generation": {
-                        "model": "sentence-transformers/all-MiniLM-L6-v2",
-                        "dimensions": 384,
-                        "batch_size": 32,
-                        "fields": [
-                            "description",
-                            "category"
-                        ]
-                    },
-                    "typesense_schema": {
-                        "collection": "products",
-                        "fields": [
-                            {
-                                "name": "id",
-                                "type": "string"
-                            },
-                            {
-                                "name": "stock_code",
-                                "type": "string",
-                                "facet": true
-                            },
-                            {
-                                "name": "description",
-                                "type": "string"
-                            },
-                            {
-                                "name": "description_embedding",
-                                "type": "float[]",
-                                "num_dim": 384
-                            },
-                            {
-                                "name": "category",
-                                "type": "string",
-                                "facet": true
-                            },
-                            {
-                                "name": "price",
-                                "type": "float",
-                                "facet": true
-                            },
-                            {
-                                "name": "country",
-                                "type": "string[]",
-                                "facet": true
-                            }
-                        ]
-                    },
-                    "search_features": {
-                        "vector_search": "K-nearest neighbors",
-                        "filters": [
-                            "category",
-                            "price_range",
-                            "country"
-                        ],
-                        "typo_tolerance": "Enabled with 2 typos",
-                        "result_ranking": "Hybrid text + vector"
-                    },
-                    "synchronization": {
-                        "trigger": "After Gold layer completion",
-                        "strategy": "Full rebuild or incremental",
-                        "validation": "Count and sample checks"
-                    }
-                },
-                "code_review_checklist": {
-                    "embeddings": [
-                        "✓ Model appropriate for domain?",
-                        "✓ Embedding quality validated?",
-                        "✓ Generation performance acceptable?",
-                        "✓ Batch processing implemented?"
-                    ],
-                    "typesense": [
-                        "✓ Schema properly defined?",
-                        "✓ Indexes optimized?",
-                        "✓ Connection pooling configured?",
-                        "✓ Error handling robust?"
-                    ],
-                    "search_api": [
-                        "✓ Filter parameters validated?",
-                        "✓ Results properly paginated?",
-                        "✓ Response time acceptable?",
-                        "✓ Relevance scoring explained?"
-                    ],
-                    "integration": [
-                        "✓ Sync mechanism reliable?",
-                        "✓ Data consistency maintained?",
-                        "✓ Monitoring in place?",
-                        "✓ Fallback search available?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(search): integrate Typesense vector search with product embeddings",
-                    "files_affected": "~12 files"
-                }
-            },
-            {
-                "checkpoint": 10,
-                "name": "Testing, Documentation, and Quality Assurance",
-                "branch": "feat/testing-docs",
-                "guidance_before_commit": [
-                    "**The Why:** Comprehensive testing ensures reliability. Documentation enables maintenance and onboarding. Quality tools maintain code standards.",
-                    "**The What:** Implement unit and integration tests, create documentation, setup quality checks.",
-                    "**The How:**",
-                    "1. Write unit tests for each module",
-                    "2. Create integration tests for API endpoints",
-                    "3. Implement ETL pipeline tests",
-                    "4. Setup continuous quality checks",
-                    "5. Generate comprehensive documentation"
-                ],
-                "implementation_details": {
-                    "testing_strategy": {
-                        "unit_tests": {
-                            "coverage_target": "80%",
-                            "focus_areas": [
-                                "Domain models",
-                                "Services",
-                                "Transformations"
-                            ],
-                            "mocking": "Use pytest-mock for dependencies"
+                        {
+                            "name": "description",
+                            "type": "string"
                         },
-                        "integration_tests": {
-                            "api": "Test complete request flows",
-                            "etl": "Test pipeline with sample data",
-                            "database": "Test with in-memory SQLite"
+                        {
+                            "name": "description_vector",
+                            "type": "float[]",
+                            "num_dim": 384
                         },
-                        "performance_tests": {
-                            "load_testing": "Locust for API endpoints",
-                            "etl_benchmarks": "Time and memory profiling"
+                        {
+                            "name": "category",
+                            "type": "string",
+                            "facet": true
+                        },
+                        {
+                            "name": "price_range",
+                            "type": "string",
+                            "facet": true
+                        },
+                        {
+                            "name": "country",
+                            "type": "string[]",
+                            "facet": true
                         }
-                    },
-                    "documentation": {
-                        "api": "OpenAPI/Swagger auto-generated",
-                        "code": "Docstrings with examples",
-                        "architecture": "Mermaid diagrams",
-                        "setup": "Step-by-step guide",
-                        "deployment": "Docker instructions"
-                    },
-                    "quality_tools": {
-                        "linting": "Ruff with strict rules",
-                        "formatting": "Black with line length 100",
-                        "type_checking": "Mypy with strict mode",
-                        "security": "Bandit for vulnerability scanning"
-                    }
-                },
-                "code_review_checklist": {
-                    "testing": [
-                        "✓ Unit test coverage > 80%?",
-                        "✓ Integration tests comprehensive?",
-                        "✓ Edge cases covered?",
-                        "✓ Test data realistic?"
-                    ],
-                    "documentation": [
-                        "✓ README complete with examples?",
-                        "✓ API documentation accurate?",
-                        "✓ Architecture diagrams current?",
-                        "✓ Troubleshooting guide included?"
-                    ],
-                    "code_quality": [
-                        "✓ No linting errors?",
-                        "✓ Type hints complete?",
-                        "✓ Complexity metrics acceptable?",
-                        "✓ Security scan passed?"
                     ]
                 },
-                "commit": {
-                    "message": "test(all): add comprehensive test suite and documentation",
-                    "files_affected": "~30 files"
+                "embedding_generation": {
+                    "model": "sentence-transformers/all-MiniLM-L6-v2",
+                    "batch_size": 32,
+                    "dimension": 384
+                },
+                "search_implementation": {
+                    "required_filter": "At least ONE filter must be implemented",
+                    "filter_examples": [
+                        "filter_by: 'category:electronics'",
+                        "filter_by: 'price_range:[10 TO 100]'",
+                        "filter_by: 'country:=[\"UK\", \"USA\"]'"
+                    ]
+                }
+            }
+        }
+    },
+    "docker_configuration": {
+        "docker_compose_services": {
+            "api": {
+                "build": {
+                    "context": ".",
+                    "dockerfile": "Dockerfile"
+                },
+                "ports": [
+                    "8000:8000"
+                ],
+                "environment": {
+                    "DATABASE_URL": "sqlite:///./data/warehouse/retail.db",
+                    "TYPESENSE_API_KEY": "${TYPESENSE_API_KEY}",
+                    "TYPESENSE_HOST": "typesense"
+                },
+                "volumes": [
+                    "./data:/app/data",
+                    "./logs:/app/logs"
+                ],
+                "depends_on": [
+                    "typesense"
+                ],
+                "healthcheck": {
+                    "test": "curl -f http://localhost:8000/health || exit 1",
+                    "interval": "30s",
+                    "timeout": "10s",
+                    "retries": 3
                 }
             },
-            {
-                "checkpoint": 11,
-                "name": "Containerization and Orchestration",
-                "branch": "feat/containerization",
-                "guidance_before_commit": [
-                    "**The Why:** Containers ensure consistency across environments. Docker Compose simplifies multi-service orchestration. Production-ready containers enable easy deployment.",
-                    "**The What:** Create optimized Docker images and orchestrate all services with Docker Compose.",
-                    "**The How:**",
-                    "1. Create multi-stage Dockerfile for API",
-                    "2. Setup Docker Compose with all services",
-                    "3. Configure networking and volumes",
-                    "4. Add health checks and restart policies",
-                    "5. Create different compose files for dev/prod"
+            "typesense": {
+                "image": "typesense/typesense:0.25.1",
+                "ports": [
+                    "8108:8108"
                 ],
-                "implementation_details": {
-                    "dockerfile_optimization": {
-                        "base_image": "python:3.10-slim",
-                        "multi_stage": [
-                            "builder",
-                            "runtime"
-                        ],
-                        "optimizations": [
-                            "Layer caching",
-                            "Minimal final image",
-                            "Non-root user",
-                            "Security scanning"
-                        ]
-                    },
-                    "docker_compose_services": {
-                        "api": {
-                            "build": "./docker",
-                            "ports": "8000:8000",
-                            "environment": "From .env",
-                            "depends_on": [
-                                "typesense"
-                            ],
-                            "healthcheck": "/health endpoint"
-                        },
-                        "typesense": {
-                            "image": "typesense/typesense:0.25.1",
-                            "ports": "8108:8108",
-                            "volumes": "typesense-data:/data"
-                        },
-                        "optional_postgres": {
-                            "image": "postgres:15",
-                            "comment": "Ready for Supabase migration"
-                        }
-                    },
-                    "volumes": {
-                        "data": "Persistent data storage",
-                        "logs": "Centralized logging",
-                        "config": "Configuration files"
-                    }
-                },
-                "code_review_checklist": {
-                    "docker": [
-                        "✓ Images optimized for size?",
-                        "✓ Security best practices followed?",
-                        "✓ Build cache utilized?",
-                        "✓ Health checks implemented?"
-                    ],
-                    "compose": [
-                        "✓ Service dependencies correct?",
-                        "✓ Networks properly configured?",
-                        "✓ Volumes for persistence?",
-                        "✓ Environment variables managed?"
-                    ],
-                    "production_ready": [
-                        "✓ Secrets management addressed?",
-                        "✓ Logging strategy implemented?",
-                        "✓ Monitoring considered?",
-                        "✓ Scaling approach documented?"
-                    ]
-                },
-                "commit": {
-                    "message": "chore(ops): add Docker containerization and compose orchestration",
-                    "files_affected": "~8 files"
+                "volumes": [
+                    "typesense-data:/data"
+                ],
+                "environment": {
+                    "TYPESENSE_DATA_DIR": "/data",
+                    "TYPESENSE_API_KEY": "${TYPESENSE_API_KEY}"
                 }
+            }
+        },
+        "dockerfile_multi_stage": {
+            "stage_1_builder": [
+                "FROM python:3.10-slim as builder",
+                "RUN pip install poetry",
+                "COPY pyproject.toml poetry.lock ./",
+                "RUN poetry export -f requirements.txt > requirements.txt"
+            ],
+            "stage_2_runtime": [
+                "FROM python:3.10-slim",
+                "COPY --from=builder requirements.txt .",
+                "RUN pip install -r requirements.txt",
+                "COPY src/ /app/src/",
+                "CMD [\"uvicorn\", \"src.de_challenge.main:app\", \"--host\", \"0.0.0.0\"]"
+            ]
+        }
+    },
+    "mermaid_diagrams": {
+        "bronze_layer": "```mermaid\ngraph TB\n    subgraph Input\n        CSV[CSV Files]\n        JSON[JSON Files]\n        PDF[PDF Files]\n    end\n    subgraph Bronze Processing\n        Reader[PySpark Reader]\n        Meta[Add Metadata]\n        Part[Partition by Date]\n    end\n    subgraph Bronze Storage\n        Delta[(Delta Lake/Parquet)]\n    end\n    CSV --> Reader\n    JSON --> Reader\n    PDF --> Reader\n    Reader --> Meta\n    Meta --> Part\n    Part --> Delta\n```",
+        "silver_layer": "```mermaid\ngraph TB\n    Bronze[(Bronze Layer)] --> Read[Read with PySpark]\n    Read --> Clean[Clean & Standardize]\n    Clean --> Validate{Pydantic Validation}\n    Validate -->|Valid| Dedupe[Deduplicate]\n    Validate -->|Invalid| Quarantine[(Quarantine)]\n    Dedupe --> Transform[Apply Business Rules]\n    Transform --> Silver[(Silver Layer)]\n```",
+        "gold_layer": "```mermaid\nflowchart TB\n    Silver[(Silver Layer)] --> Process[PySpark Processing]\n    Process --> Dims[Build Dimensions]\n    Process --> Facts[Build Facts]\n    Dims --> DP[dim_product]\n    Dims --> DC[dim_customer]\n    Dims --> DD[dim_date]\n    Dims --> DCO[dim_country]\n    Dims --> DI[dim_invoice]\n    Facts --> FS[fact_sales]\n    DP & DC & DD & DCO & DI --> Join[Join with Facts]\n    Join --> FS\n    FS --> Load[JDBC Load]\n    Load --> DB[(SQLite/PostgreSQL)]\n```",
+        "overall_architecture": "```mermaid\ngraph TB\n    subgraph Data Sources\n        Files[CSV/JSON/PDF]\n    end\n    subgraph Medallion Architecture\n        Bronze[Bronze - Raw]\n        Silver[Silver - Cleaned]\n        Gold[Gold - Star Schema]\n    end\n    subgraph Storage\n        Lake[(Delta Lake)]\n        Warehouse[(SQLite)]\n    end\n    subgraph Vector Search\n        Embed[Embeddings]\n        Typesense[(Typesense)]\n    end\n    subgraph API Layer\n        Routes[Routes]\n        Services[Services]\n        Domain[Domain]\n        DataAccess[Data Access]\n    end\n    Files -->|PySpark| Bronze\n    Bronze -->|PySpark| Silver\n    Silver -->|PySpark| Gold\n    Bronze & Silver --> Lake\n    Gold -->|JDBC| Warehouse\n    Warehouse --> DataAccess\n    Domain --> Services\n    Services --> Routes\n    DataAccess --> Services\n    Warehouse -->|Sync| Embed\n    Embed --> Typesense\n    Typesense --> Services\n    Routes -->|FastAPI| Client[Client]\n```"
+    },
+    "repository_structure": {
+        "root_files": [
+            "README.md - Setup instructions and documentation",
+            "pyproject.toml - Poetry configuration with dependencies",
+            "poetry.lock - Locked dependencies",
+            ".gitignore - Python, Spark, Delta, IDE, data folders",
+            ".env.example - Environment variables template",
+            "Makefile - Common commands",
+            "docker-compose.yml - Service orchestration",
+            "Dockerfile - Multi-stage build"
+        ],
+        "source_structure": {
+            "src/de_challenge/": {
+                "__init__.py": "Package initialization",
+                "main.py": "FastAPI application entry point",
+                "api/": "API layer implementation",
+                "core/": "Configuration and utilities",
+                "domain/": "Business entities (Pydantic)",
+                "data_access/": "Database layer (SQLModel)",
+                "etl/": "PySpark ETL pipelines",
+                "vector_search/": "Typesense integration"
+            }
+        }
+    },
+    "dependencies": {
+        "production": [
+            "pyspark>=3.5.0",
+            "delta-spark>=3.0.0",
+            "fastapi>=0.104.0",
+            "uvicorn[standard]>=0.24.0",
+            "pydantic>=2.5.0",
+            "pydantic-settings>=2.1.0",
+            "sqlmodel>=0.0.14",
+            "typesense>=0.19.0",
+            "pandas>=2.1.0",
+            "pypdf2>=3.0.0",
+            "python-multipart>=0.0.6",
+            "sentence-transformers>=2.2.0",
+            "python-jose[cryptography]>=3.3.0",
+            "passlib[bcrypt]>=1.7.4"
+        ],
+        "development": [
+            "pytest>=7.4.0",
+            "pytest-asyncio>=0.21.0",
+            "pytest-cov>=4.1.0",
+            "ruff>=0.1.0",
+            "black>=23.0.0",
+            "mypy>=1.7.0",
+            "pre-commit>=3.5.0",
+            "httpx>=0.25.0"
+        ]
+    },
+    "optional_features_recommendations": {
+        "already_covered": [
+            "Feature #4: PySpark for ETL (mandatory, not optional)",
+            "Feature #20: Poetry for dependency locking"
+        ],
+        "recommended_to_implement": [
+            {
+                "feature": "#6: Alembic migrations",
+                "reason": "Essential for schema versioning and Supabase migration",
+                "effort": "Low"
             },
             {
-                "checkpoint": 12,
-                "name": "Final Integration, Optional Features, and Mermaid Diagrams",
-                "branch": "feat/final-integration",
-                "guidance_before_commit": [
-                    "**The Why:** Complete integration ensures all components work together. Optional features demonstrate advanced capabilities. Comprehensive diagrams document the architecture.",
-                    "**The What:** Integrate all components, implement at least one optional feature, create all required Mermaid diagrams.",
-                    "**The How:**",
-                    "1. Run end-to-end pipeline test",
-                    "2. Implement chosen optional feature",
-                    "3. Create Mermaid diagrams for each layer",
-                    "4. Performance optimization",
-                    "5. Final documentation and cleanup"
-                ],
-                "implementation_details": {
-                    "integration_testing": {
-                        "full_pipeline": "Raw data → Bronze → Silver → Gold → API",
-                        "search_flow": "Index → Embed → Search → Filter",
-                        "api_flow": "Auth → Request → Service → Response"
-                    },
-                    "optional_feature_suggestions": {
-                        "recommended": "PySpark for ETL (already done)",
-                        "additional": [
-                            "Alembic migrations for schema versioning",
-                            "JWT authentication upgrade",
-                            "Data lineage tracking",
-                            "Async request-reply pattern"
-                        ]
-                    },
-                    "mermaid_diagrams": {
-                        "bronze_layer": "Data flow from sources to bronze",
-                        "silver_layer": "Transformation and validation flow",
-                        "gold_layer": "Star schema relationships",
-                        "overall_architecture": "Complete system architecture",
-                        "data_lineage": "Track data from source to API"
-                    },
-                    "performance_optimization": {
-                        "etl": "Spark tuning, partition optimization",
-                        "api": "Query optimization, caching",
-                        "search": "Index optimization, result caching"
-                    }
-                },
-                "code_review_checklist": {
-                    "integration": [
-                        "✓ All components work together?",
-                        "✓ Data flows correctly through layers?",
-                        "✓ Error handling across components?",
-                        "✓ Performance acceptable end-to-end?"
-                    ],
-                    "optional_features": [
-                        "✓ At least one implemented?",
-                        "✓ Well integrated with main system?",
-                        "✓ Properly tested?",
-                        "✓ Documented?"
-                    ],
-                    "diagrams": [
-                        "✓ All required diagrams created?",
-                        "✓ Diagrams accurate and current?",
-                        "✓ Properly formatted Mermaid syntax?",
-                        "✓ Included in documentation?"
-                    ],
-                    "final_quality": [
-                        "✓ All tests passing?",
-                        "✓ Documentation complete?",
-                        "✓ Code review checklist complete?",
-                        "✓ Ready for production?"
-                    ]
-                },
-                "commit": {
-                    "message": "feat(integration): complete system integration with optional features and documentation",
-                    "files_affected": "~20 files"
-                }
+                "feature": "#22: Logging with loguru",
+                "reason": "Better debugging and monitoring",
+                "effort": "Low"
+            },
+            {
+                "feature": "#28-29: Unit and integration tests",
+                "reason": "Code quality and reliability",
+                "effort": "Medium"
             }
         ]
     },
-    "mermaid_diagram_templates": {
-        "bronze_layer": "```mermaid\ngraph LR\n    CSV[CSV Files] --> Reader1[PySpark CSV Reader]\n    JSON[JSON Files] --> Reader2[PySpark JSON Reader]\n    PDF[PDF Files] --> Reader3[PDF Extractor + PySpark]\n    Reader1 --> Metadata[Add Metadata]\n    Reader2 --> Metadata\n    Reader3 --> Metadata\n    Metadata --> Bronze[(Bronze Delta Lake)]\n    Bronze --> Partition[Partitioned by Date]\n```",
-        "silver_layer": "```mermaid\ngraph LR\n    Bronze[(Bronze Delta Lake)] --> Read[PySpark Read]\n    Read --> Clean[Data Cleaning]\n    Clean --> Validate[Pydantic Validation]\n    Validate --> Dedupe[Deduplication]\n    Dedupe --> Transform[Business Transformations]\n    Transform --> Silver[(Silver Delta Lake)]\n    Validate -.-> Quarantine[(Quarantine)]\n```",
-        "gold_layer": "```mermaid\ngraph LR\n    Silver[(Silver Delta Lake)] --> DimBuilder[Dimension Builder]\n    DimBuilder --> DimProduct[DimProduct]\n    DimBuilder --> DimCustomer[DimCustomer]\n    DimBuilder --> DimDate[DimDate]\n    DimBuilder --> DimCountry[DimCountry]\n    DimBuilder --> DimInvoice[DimInvoice]\n    Silver --> FactBuilder[Fact Builder]\n    DimProduct --> FactBuilder\n    DimCustomer --> FactBuilder\n    DimDate --> FactBuilder\n    DimCountry --> FactBuilder\n    DimInvoice --> FactBuilder\n    FactBuilder --> FactSale[FactSale]\n    FactSale --> Warehouse[(SQLite/PostgreSQL)]\n```",
-        "overall_architecture": "```mermaid\ngraph TB\n    subgraph Sources\n        CSV[CSV Files]\n        JSON[JSON Files]\n        PDF[PDF Files]\n    end\n    \n    subgraph Data Lake\n        Bronze[(Bronze Layer)]\n        Silver[(Silver Layer)]\n        Gold[(Gold Layer)]\n    end\n    \n    subgraph Data Warehouse\n        SQLite[(SQLite DB)]\n        Star[Star Schema]\n    end\n    \n    subgraph Vector DB\n        Typesense[(Typesense)]\n        Embeddings[Embeddings]\n    end\n    \n    subgraph API Layer\n        FastAPI[FastAPI]\n        Auth[Authentication]\n        Routes[Routes]\n    end\n    \n    Sources --> Bronze\n    Bronze --> Silver\n    Silver --> Gold\n    Gold --> SQLite\n    SQLite --> Star\n    Star --> FastAPI\n    Star --> Embeddings\n    Embeddings --> Typesense\n    Typesense --> FastAPI\n    FastAPI --> Client[Client]\n```"
+    "common_pitfalls_to_avoid": [
+        "❌ Using SQL for ETL transformations instead of DataFrame API",
+        "❌ Mixing Pydantic domain models with SQLModel database models",
+        "❌ Forgetting to implement filter in vector search",
+        "❌ Missing authentication on endpoints",
+        "❌ Not creating all 5 dimension tables",
+        "❌ Using wrong technology for ETL (must be pandas/polars/pyspark)",
+        "❌ Not handling PDF files in ingestion",
+        "❌ Missing batch operations in CRUD",
+        "❌ Forgetting Mermaid diagrams",
+        "❌ Not using type hints everywhere"
+    ],
+    "testing_strategy": {
+        "unit_tests": {
+            "focus_areas": [
+                "Domain model validation",
+                "ETL transformation logic",
+                "Service layer business logic",
+                "Repository CRUD operations"
+            ],
+            "tools": "pytest, pytest-mock",
+            "coverage_target": "80%"
+        },
+        "integration_tests": {
+            "api_tests": [
+                "Authentication flow",
+                "CRUD operations",
+                "Batch operations",
+                "Search with filters"
+            ],
+            "etl_tests": [
+                "Bronze ingestion",
+                "Silver validation",
+                "Gold star schema build"
+            ],
+            "tools": "pytest-asyncio, httpx"
+        }
     },
-    "critical_success_factors": {
-        "mandatory_requirements": [
-            "✓ PySpark for ALL ETL transformations",
-            "✓ SQL ONLY for schema creation",
-            "✓ Pydantic for domain models (separate from DB models)",
-            "✓ SQLModel for database entities",
-            "✓ Star schema with 1+ fact and 5+ dimension tables",
-            "✓ Typesense vector search with filters",
-            "✓ FastAPI with layered architecture",
-            "✓ Basic authentication implemented",
-            "✓ Docker Compose orchestration",
-            "✓ Mermaid diagrams for all layers"
-        ],
-        "quality_indicators": [
-            "Clean separation of concerns",
-            "Comprehensive error handling",
-            "80%+ test coverage",
-            "Performance optimization",
-            "Production-ready code",
-            "Clear documentation",
-            "Scalable architecture",
-            "Supabase migration path"
-        ],
-        "common_pitfalls_to_avoid": [
-            "Using SQL for data transformations instead of PySpark",
-            "Mixing domain models with database models",
-            "Forgetting to implement authentication",
-            "Missing vector search filters",
-            "Incomplete star schema",
-            "Poor error handling in ETL",
-            "Lack of documentation",
-            "Ignoring Supabase compatibility"
-        ]
-    },
-    "final_checklist": {
-        "before_submission": [
-            "✓ All code in public GitHub repository",
-            "✓ README with setup instructions",
-            "✓ All dependencies locked with Poetry",
+    "submission_checklist": {
+        "code_requirements": [
+            "✓ Public GitHub repository",
+            "✓ All code has type hints",
+            "✓ Poetry with locked dependencies",
             "✓ Docker Compose working",
-            "✓ API documentation available",
-            "✓ All tests passing",
-            "✓ Mermaid diagrams included",
-            "✓ At least one optional feature",
-            "✓ Code follows best practices",
-            "✓ Ready for production deployment"
+            "✓ README with setup instructions"
+        ],
+        "technical_requirements": [
+            "✓ ETL using PySpark/Pandas/Polars (NOT SQL)",
+            "✓ Star schema with 1 fact + 5 dimensions",
+            "✓ Pydantic for domain models",
+            "✓ SQLModel for database models",
+            "✓ Domain ≠ Data Access entities"
+        ],
+        "api_requirements": [
+            "✓ FastAPI with 4-layer architecture",
+            "✓ Basic Auth on all endpoints",
+            "✓ CRUD with batch operations",
+            "✓ Vector search with at least 1 filter",
+            "✓ Auto-create schemas on startup"
+        ],
+        "documentation": [
+            "✓ Mermaid diagram for Bronze layer",
+            "✓ Mermaid diagram for Silver layer",
+            "✓ Mermaid diagram for Gold layer",
+            "✓ Mermaid diagram for overall architecture",
+            "✓ OpenAPI documentation available"
+        ],
+        "deployment": [
+            "✓ Docker Compose with all services",
+            "✓ Typesense running in container",
+            "✓ Health checks configured",
+            "✓ Environment variables properly managed"
+        ],
+        "bonus": [
+            "✓ At least 1 optional feature implemented",
+            "✓ Tests with good coverage",
+            "✓ Clean code with linting",
+            "✓ Performance optimizations"
         ]
+    },
+    "evaluation_criteria_alignment": {
+        "database_design": "Star schema properly normalized with appropriate data types and relationships",
+        "best_practices": "Clean architecture, SOLID principles, design patterns, error handling",
+        "complexity": "Number and quality of optional features implemented",
+        "organization": "Working solution delivered on time with clear structure",
+        "innovation": "Creative solutions, performance optimizations, extra features"
     }
 }

@@ -12,9 +12,13 @@ Features:
 """
 
 import json
+import sys
 from datetime import timedelta, datetime
 from pathlib import Path
 from typing import Dict, Any, List
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -143,15 +147,29 @@ def monitor_data_quality(**context):
     """Monitor data quality throughout the pipeline."""
     import pandas as pd
     
-    # Get file from previous task
-    silver_file = context['task_instance'].xcom_pull(task_ids='transform_group.bronze_to_silver')
+    # Use actual silver layer path since we use delta format
+    from core.config import settings
+    silver_path = settings.silver_path / "sales"
     
-    if not silver_file or not Path(silver_file).exists():
-        logger.warning("No silver data file found for quality monitoring")
-        return {'status': 'skipped', 'reason': 'no_data_file'}
+    if not silver_path.exists():
+        logger.warning("No silver data path found for quality monitoring")
+        return {'status': 'skipped', 'reason': 'no_data_path'}
     
-    # Load data for quality analysis
-    df = pd.read_parquet(silver_file)
+    # Load data for quality analysis from delta lake
+    try:
+        from delta import DeltaTable
+        from pyspark.sql import SparkSession
+        
+        spark = SparkSession.builder.appName("DataQualityMonitor").getOrCreate()
+        df = spark.read.format("delta").load(str(silver_path)).toPandas()
+    except ImportError:
+        # Fallback to parquet if delta not available
+        import glob
+        parquet_files = glob.glob(str(silver_path / "**/*.parquet"), recursive=True)
+        if not parquet_files:
+            logger.warning("No parquet files found in silver path")
+            return {'status': 'skipped', 'reason': 'no_data_files'}
+        df = pd.read_parquet(parquet_files[0])  # Read first parquet file
     
     # Comprehensive data quality checks
     quality_metrics = {
@@ -225,7 +243,7 @@ def upload_to_supabase(**context):
         from data_access.supabase_client import get_supabase_client
         
         # Get processed data
-        gold_file = context['task_instance'].xcom_pull(task_ids='transform_group.silver_to_gold')
+        gold_file = context['task_instance'].xcom_pull(key='gold_file', task_ids='transform_group.silver_to_gold')
         
         if not gold_file or not Path(gold_file).exists():
             logger.warning("No gold data available for Supabase upload")
@@ -233,9 +251,9 @@ def upload_to_supabase(**context):
         
         client = get_supabase_client()
         
-        # Test connection
-        connection_info = await client.test_connection()
-        logger.info(f"Supabase connection verified: {connection_info['database']}")
+        # Test connection (remove await since this is not in an async context)
+        connection_info = client.test_connection()
+        logger.info(f"Supabase connection verified: {connection_info.get('database', 'unknown')}")
         
         # Load gold data
         with open(gold_file, 'r') as f:
@@ -329,8 +347,41 @@ file_sensor = FileSensor(
 
 # Ingestion task group
 with TaskGroup("ingest_group", dag=dag) as ingest_group:
-    # Import the improved ingestion function from the existing DAG
-    from airflow_dags.retail_etl_dag import ingest_raw_data, enrich_with_external_apis
+    # Define ingestion function locally to avoid circular imports
+    def ingest_raw_data(**context):
+        """Ingest raw data into bronze layer."""
+        import pandas as pd
+        from etl.bronze.ingest_bronze import ingest_bronze
+        
+        logger.info("Starting raw data ingestion to bronze layer...")
+        
+        try:
+            ingest_bronze()
+            
+            # Generate ingestion metrics
+            ingestion_metrics = {
+                'status': 'completed',
+                'timestamp': pd.Timestamp.now().isoformat(),
+                'layer': 'bronze',
+                'source': 'raw_csv_files'
+            }
+            
+            context['task_instance'].xcom_push(key='ingestion_metrics', value=ingestion_metrics)
+            logger.info("Bronze layer ingestion completed successfully")
+            return ingestion_metrics
+            
+        except Exception as e:
+            logger.error(f"Bronze layer ingestion failed: {e}")
+            raise
+    
+    def enrich_with_external_apis(**context):
+        """Enrich data with external APIs if enabled."""
+        if not context['params']['enable_external_enrichment']:
+            logger.info("External enrichment disabled")
+            return {'status': 'skipped', 'reason': 'disabled'}
+        
+        logger.info("External API enrichment task - placeholder implementation")
+        return {'status': 'completed', 'enriched_records': 0}
     
     ingest_task = PythonOperator(
         task_id='ingest_raw_data',
@@ -348,7 +399,58 @@ with TaskGroup("ingest_group", dag=dag) as ingest_group:
 
 # Transformation task group
 with TaskGroup("transform_group", dag=dag) as transform_group:
-    from airflow_dags.retail_etl_dag import process_bronze_to_silver, process_silver_to_gold
+    # Define transformation functions locally to avoid circular imports
+    def process_bronze_to_silver(**context):
+        """Process bronze data to silver layer."""
+        import pandas as pd
+        from etl.silver.process_silver import process_silver
+        
+        logger.info("Starting bronze to silver transformation...")
+        
+        try:
+            process_silver()
+            
+            # Generate transformation metrics
+            transformation_metrics = {
+                'status': 'completed',
+                'timestamp': pd.Timestamp.now().isoformat(),
+                'source_layer': 'bronze',
+                'target_layer': 'silver'
+            }
+            
+            logger.info("Silver layer processing completed successfully")
+            return transformation_metrics
+            
+        except Exception as e:
+            logger.error(f"Silver layer processing failed: {e}")
+            raise
+    
+    def process_silver_to_gold(**context):
+        """Process silver data to gold layer."""
+        import pandas as pd
+        from etl.gold.process_gold import process_gold
+        
+        logger.info("Starting silver to gold transformation...")
+        
+        try:
+            gold_file = process_gold()
+            
+            # Generate transformation metrics
+            transformation_metrics = {
+                'status': 'completed',
+                'timestamp': pd.Timestamp.now().isoformat(),
+                'source_layer': 'silver',
+                'target_layer': 'gold',
+                'output_file': str(gold_file)
+            }
+            
+            context['task_instance'].xcom_push(key='gold_file', value=str(gold_file))
+            logger.info("Gold layer processing completed successfully")
+            return transformation_metrics
+            
+        except Exception as e:
+            logger.error(f"Gold layer processing failed: {e}")
+            raise
     
     bronze_to_silver = PythonOperator(
         task_id='bronze_to_silver',

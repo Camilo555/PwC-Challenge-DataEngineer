@@ -5,10 +5,12 @@ Supports multiple environments and future Supabase integration.
 
 from enum import Enum
 from functools import lru_cache
+import os
+import secrets
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, computed_field, field_validator, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -124,8 +126,8 @@ class Settings(BaseSettings):
 
     # Typesense Configuration
     typesense_api_key: str = Field(
-        default="xyz123changeme",
-        description="Typesense API key",
+        default="",
+        description="Typesense API key - MUST be set via environment variable",
     )
     typesense_host: str = Field(
         default="localhost",
@@ -164,16 +166,16 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = Field(
-        default="your-secret-key-here-change-in-production",
-        description="Secret key for encryption",
+        default="",
+        description="Secret key for encryption - MUST be set via environment variable",
     )
     basic_auth_username: str = Field(
         default="admin",
         description="Basic auth username",
     )
     basic_auth_password: str = Field(
-        default="changeme123",
-        description="Basic auth password",
+        default="",
+        description="Basic auth password - MUST be set via environment variable",
     )
 
     # Logging
@@ -391,6 +393,38 @@ class Settings(BaseSettings):
         # Postgres
         # Expect database_url like postgresql://user:pass@host:port/db
         return self.database_url.replace("postgresql://", "jdbc:postgresql://")
+    
+    def validate_security_config(self) -> None:
+        """Validate security configuration to prevent production deployment with insecure defaults."""
+        errors = []
+        
+        # Check for production environment with missing secrets
+        if self.environment == Environment.PRODUCTION:
+            if not self.secret_key or self.secret_key == "":
+                errors.append("SECRET_KEY must be set in production environment")
+            
+            if not self.basic_auth_password or self.basic_auth_password == "":
+                errors.append("BASIC_AUTH_PASSWORD must be set in production environment")
+                
+            if not self.typesense_api_key or self.typesense_api_key == "":
+                errors.append("TYPESENSE_API_KEY must be set in production environment")
+            
+            # Check for weak passwords
+            if self.basic_auth_password and len(self.basic_auth_password) < 12:
+                errors.append("BASIC_AUTH_PASSWORD must be at least 12 characters long")
+        
+        # Check for insecure configurations in any environment
+        if self.secret_key and len(self.secret_key) < 32:
+            errors.append("SECRET_KEY must be at least 32 characters long")
+            
+        if errors:
+            error_msg = "Security validation failed:\n" + "\n".join(f"  - {error}" for error in errors)
+            raise ValueError(error_msg)
+    
+    @classmethod
+    def generate_secure_key(cls) -> str:
+        """Generate a secure random key for development/testing."""
+        return secrets.token_urlsafe(32)
 
 
 @lru_cache
@@ -404,3 +438,14 @@ settings = get_settings()
 
 # Validate and create paths on import
 settings.validate_paths()
+
+# Validate security configuration (can be disabled for testing)
+if os.getenv("SKIP_SECURITY_VALIDATION", "false").lower() != "true":
+    try:
+        settings.validate_security_config()
+    except ValueError as e:
+        if settings.environment == Environment.PRODUCTION:
+            raise e
+        else:
+            # Log warning for non-production environments
+            print(f"Warning: {e}")

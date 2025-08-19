@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from de_challenge.etl.silver.clean_silver import _cast_and_clean, _deduplicate
-from de_challenge.etl.utils.spark import get_spark
+from etl.silver.clean_silver import _cast_and_clean, _deduplicate
+from etl.utils.spark import get_spark
 from pyspark.sql import Row
 
 

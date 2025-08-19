@@ -6,8 +6,12 @@ specifically designed for the PwC Data Engineering Challenge Airflow implementat
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, List
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from airflow.models import Variable
 from airflow.hooks.base import BaseHook

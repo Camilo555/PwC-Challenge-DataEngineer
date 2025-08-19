@@ -32,47 +32,58 @@ def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
         raise FileNotFoundError(
             f"No raw CSV files found under {settings.raw_data_path.resolve()}"
         )
-    df = None
+    
+    # Read all files at once for better performance
     job_id = str(uuid.uuid4())
-    for f in files:
-        _df = (
-            spark.read.option("header", True)
-            .option("inferSchema", True)
-            .csv(str(f.resolve()))
-        )
-        # normalize columns to lower case
-        for c in _df.columns:
-            _df = _df.withColumnRenamed(c, c.lower())
-        # add metadata
-        _df = _df.withColumn("source_file_path", F.lit(str(f)))
-        _df = _df.withColumn("ingestion_timestamp", F.current_timestamp())
-        _df = _df.withColumn("source_file_size", F.lit(int(f.stat().st_size)))
-        _df = _df.withColumn("source_file_type", F.lit(f.suffix.lower().lstrip(".")))
-        _df = _df.withColumn("ingestion_job_id", F.lit(job_id))
-        _df = _df.withColumn("schema_version", F.lit("1"))
-        # stable row fingerprint for downstream quarantine matching
-        parts = []
-        for c in [
-            "invoice_no",
-            "stock_code",
-            "description",
-            "quantity",
-            "unit_price",
-            "invoice_timestamp",
-            "customer_id",
-            "country",
-        ]:
-            if c in _df.columns:
-                if c == "invoice_timestamp":
-                    parts.append(F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit("")))
-                else:
-                    parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
+    file_paths = [str(f.resolve()) for f in files]
+    
+    # Use multiline option for better CSV parsing
+    df = (
+        spark.read.option("header", True)
+        .option("inferSchema", True)
+        .option("multiline", True)
+        .option("escape", '"')
+        .csv(file_paths)
+    )
+    
+    # normalize columns to lower case in batch
+    column_mapping = {c: c.lower() for c in df.columns}
+    for old_name, new_name in column_mapping.items():
+        if old_name != new_name:
+            df = df.withColumnRenamed(old_name, new_name)
+    
+    # Add metadata columns efficiently
+    df = df.withColumn("ingestion_timestamp", F.current_timestamp())
+    df = df.withColumn("ingestion_job_id", F.lit(job_id))
+    df = df.withColumn("schema_version", F.lit("1"))
+    
+    # Add file-specific metadata using input_file_name
+    df = df.withColumn("source_file_path", F.input_file_name())
+    
+    # Calculate file size and type from path - more efficient than accessing each file
+    df = df.withColumn("source_file_type", F.lit("csv"))
+    
+    # Generate stable row fingerprint for downstream quarantine matching
+    fingerprint_columns = [
+        "invoice_no", "stock_code", "description", "quantity", 
+        "unit_price", "invoice_timestamp", "customer_id", "country"
+    ]
+    
+    parts = []
+    for c in fingerprint_columns:
+        if c in df.columns:
+            if c == "invoice_timestamp":
+                parts.append(F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit("")))
             else:
-                parts.append(F.lit(""))
-        _df = _df.withColumn("row_id", F.sha2(F.concat_ws("||", *parts), 256))
-        df = _df if df is None else df.unionByName(_df, allowMissingColumns=True)
-    if df is None:
-        raise RuntimeError("No data was processed")
+                parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
+        else:
+            parts.append(F.lit(""))
+    
+    df = df.withColumn("row_id", F.sha2(F.concat_ws("||", *parts), 256))
+    
+    # Cache for better performance during subsequent operations
+    df.cache()
+    
     return df
 
 

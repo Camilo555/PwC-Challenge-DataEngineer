@@ -10,8 +10,6 @@ updates:
     open-pull-requests-limit: 10
     assignees:
       - "Camilo555"
-    reviewers:
-      - "Camilo555"
     commit-message:
       prefix: "deps"
       include: "scope"

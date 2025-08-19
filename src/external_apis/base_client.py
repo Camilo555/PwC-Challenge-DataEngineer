@@ -3,6 +3,7 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any
 
 import aiohttp
@@ -11,6 +12,84 @@ from aiohttp import ClientTimeout
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class CircuitState(Enum):
+    """Circuit breaker states."""
+    CLOSED = "closed"
+    OPEN = "open" 
+    HALF_OPEN = "half_open"
+
+
+class CircuitBreakerError(Exception):
+    """Raised when circuit breaker is open."""
+    pass
+
+
+class CircuitBreaker:
+    """Circuit breaker for external API calls."""
+    
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0,
+        expected_exception: type[Exception] = Exception,
+    ):
+        """Initialize circuit breaker.
+        
+        Args:
+            failure_threshold: Number of failures before opening circuit
+            recovery_timeout: Time to wait before attempting recovery
+            expected_exception: Exception type that triggers circuit breaker
+        """
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.expected_exception = expected_exception
+        
+        self.failure_count = 0
+        self.last_failure_time: float | None = None
+        self.state = CircuitState.CLOSED
+    
+    def _should_attempt_reset(self) -> bool:
+        """Check if circuit should attempt to reset."""
+        return (
+            self.state == CircuitState.OPEN
+            and self.last_failure_time is not None
+            and time.time() - self.last_failure_time >= self.recovery_timeout
+        )
+    
+    def record_success(self) -> None:
+        """Record successful operation."""
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+        logger.debug("Circuit breaker: Success recorded, circuit closed")
+    
+    def record_failure(self) -> None:
+        """Record failed operation."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+            logger.warning(f"Circuit breaker opened after {self.failure_count} failures")
+    
+    async def call(self, func, *args, **kwargs):
+        """Execute function with circuit breaker protection."""
+        if self.state == CircuitState.OPEN:
+            if self._should_attempt_reset():
+                self.state = CircuitState.HALF_OPEN
+                logger.info("Circuit breaker attempting recovery (half-open)")
+            else:
+                raise CircuitBreakerError("Circuit breaker is open")
+        
+        try:
+            result = await func(*args, **kwargs)
+            if self.state == CircuitState.HALF_OPEN:
+                self.record_success()
+            return result
+        except self.expected_exception as e:
+            self.record_failure()
+            raise e
 
 
 class BaseAPIClient(ABC):
@@ -41,6 +120,13 @@ class BaseAPIClient(ABC):
         self.rate_limit_delay = 1.0 / rate_limit_per_second
         self._last_request_time = 0.0
         self._session: aiohttp.ClientSession | None = None
+        
+        # Initialize circuit breaker
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60.0,
+            expected_exception=aiohttp.ClientError
+        )
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -75,7 +161,7 @@ class BaseAPIClient(ABC):
         retry_count: int = 0,
     ) -> dict[str, Any]:
         """
-        Make HTTP request with retry logic.
+        Make HTTP request with circuit breaker and retry logic.
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -89,6 +175,24 @@ class BaseAPIClient(ABC):
 
         Raises:
             aiohttp.ClientError: If request fails after all retries
+            CircuitBreakerError: If circuit breaker is open
+        """
+        # Use circuit breaker to protect the request
+        return await self.circuit_breaker.call(
+            self._make_protected_request,
+            method, endpoint, params, data, retry_count
+        )
+
+    async def _make_protected_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        retry_count: int = 0,
+    ) -> dict[str, Any]:
+        """
+        Protected HTTP request implementation.
         """
         await self._enforce_rate_limit()
 
@@ -114,7 +218,7 @@ class BaseAPIClient(ABC):
                     f"retrying in {wait_time}s: {e}"
                 )
                 await asyncio.sleep(wait_time)
-                return await self._make_request(method, endpoint, params, data, retry_count + 1)
+                return await self._make_protected_request(method, endpoint, params, data, retry_count + 1)
             else:
                 logger.error(f"Request failed after {self.max_retries + 1} attempts: {e}")
                 raise

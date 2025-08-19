@@ -5,8 +5,12 @@ This DAG provides an alternative to Dagster for orchestrating the retail data pi
 It includes file sensors, external API enrichment, and multi-layer data processing.
 """
 
+import sys
 from datetime import timedelta
 from pathlib import Path
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator

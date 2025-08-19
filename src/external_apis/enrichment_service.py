@@ -67,24 +67,36 @@ class DataEnrichmentService:
         # Prepare enrichment tasks
         if include_currency:
             enrichment_tasks.append(
-                self.currency_client.enrich_transaction_with_rates(transaction_data)
+                asyncio.create_task(
+                    self.currency_client.enrich_transaction_with_rates(transaction_data)
+                )
             )
         else:
-            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
+            enrichment_tasks.append(
+                asyncio.create_task(self._return_as_is(transaction_data))
+            )
 
         if include_country:
             enrichment_tasks.append(
-                self.country_client.enrich_transaction_with_country_info(transaction_data)
+                asyncio.create_task(
+                    self.country_client.enrich_transaction_with_country_info(transaction_data)
+                )
             )
         else:
-            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
+            enrichment_tasks.append(
+                asyncio.create_task(self._return_as_is(transaction_data))
+            )
 
         if include_product:
             enrichment_tasks.append(
-                self.product_client.enrich_product_data(transaction_data)
+                asyncio.create_task(
+                    self.product_client.enrich_product_data(transaction_data)
+                )
             )
         else:
-            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
+            enrichment_tasks.append(
+                asyncio.create_task(self._return_as_is(transaction_data))
+            )
 
         try:
             # Run enrichments concurrently

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from de_challenge.data_access.db import create_all, session_scope
-from de_challenge.data_access.models.star_schema import (
+from data_access.db import create_all, session_scope
+from data_access.models.star_schema import (
     DimCountry,
     DimCustomer,
     DimDate,
@@ -11,7 +11,7 @@ from de_challenge.data_access.models.star_schema import (
     DimProduct,
     FactSale,
 )
-from de_challenge.data_access.repositories.sales_repository import SalesRepository
+from data_access.repositories.sales_repository import SalesRepository
 
 
 def seed_minimal():

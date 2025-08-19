@@ -135,27 +135,35 @@ class CurrencyAPIClient(BaseAPIClient):
         Returns:
             Enriched transaction data with exchange rates
         """
-        # Get exchange rates
-        rates = await self.get_exchange_rates(base_currency)
+        try:
+            # Get exchange rates
+            rates = await self.get_exchange_rates(base_currency)
 
-        # Add exchange rate information
-        enriched_data = transaction_data.copy()
-        enriched_data.update({
-            "base_currency": base_currency,
-            "exchange_rates": rates,
-            "enrichment_timestamp": datetime.utcnow().isoformat(),
-        })
+            # Add exchange rate information
+            enriched_data = transaction_data.copy()
+            enriched_data.update({
+                "base_currency": base_currency,
+                "exchange_rates": rates,
+                "enrichment_timestamp": datetime.utcnow().isoformat(),
+            })
 
-        # Calculate amounts in different currencies
-        unit_price = float(transaction_data.get("unit_price", 0))
-        quantity = int(transaction_data.get("quantity", 0))
-        total_amount = unit_price * quantity
-
-        currency_amounts = {}
-        for currency, rate in rates.items():
-            currency_amounts[f"amount_{currency.lower()}"] = round(total_amount * rate, 2)
-            currency_amounts[f"unit_price_{currency.lower()}"] = round(unit_price * rate, 2)
-
-        enriched_data.update(currency_amounts)
-
-        return enriched_data
+            # Calculate amounts in different currencies if unit_price exists
+            if "unit_price" in transaction_data and rates:
+                unit_price = float(transaction_data.get("unit_price", 0))
+                quantity = float(transaction_data.get("quantity", 1))
+                
+                for currency_code, rate in rates.items():
+                    enriched_data[f"unit_price_{currency_code.lower()}"] = round(unit_price * rate, 2)
+                    enriched_data[f"amount_{currency_code.lower()}"] = round(unit_price * quantity * rate, 2)
+            
+            return enriched_data
+            
+        except Exception as e:
+            logger.error(f"Failed to enrich transaction with currency rates: {e}")
+            # Return original data with error flag
+            enriched_data = transaction_data.copy()
+            enriched_data.update({
+                "enrichment_error": f"Currency enrichment failed: {str(e)}",
+                "enrichment_timestamp": datetime.utcnow().isoformat(),
+            })
+            return enriched_data

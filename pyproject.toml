@@ -22,7 +22,7 @@ pyspark = "3.5.3"
 delta-spark = "^3.2.1"
 fastapi = "^0.116.1"
 uvicorn = {extras = ["standard"], version = "^0.35.0"}
-pydantic = "^2.11.7"
+pydantic = "^2.9.0"
 pydantic-settings = "^2.10.1"
 sqlmodel = "^0.0.24"
 sqlalchemy = "^2.0.42"
@@ -45,9 +45,8 @@ npm = "^0.1.1"
 # Orchestration
 dagster = "^1.8.13"
 dagster-webserver = "^1.8.13"
-dagster-pandas = "^0.24.13"
-# Alternative: Apache Airflow
-apache-airflow = {version = "^2.10.4", optional = true}
+# Alternative: Apache Airflow (install separately due to dependency conflicts)
+# apache-airflow = {version = "^2.10.4", optional = true}
 # External APIs
 aiohttp = "^3.10.11"
 

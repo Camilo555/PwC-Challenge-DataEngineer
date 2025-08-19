@@ -6,10 +6,13 @@ This script starts the Dagster web server and daemon for monitoring
 and managing the data pipeline workflows.
 """
 
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.append(str(Path.cwd() / "src"))
 
 from core.config import settings
 from core.logging import get_logger
@@ -58,14 +61,14 @@ def start_dagster_webserver(host="127.0.0.1", port=3000):
             sys.executable, "-m", "dagster", "dev",
             "--host", host,
             "--port", str(port),
-            "--module-name", "de_challenge.orchestration.definitions",
+            "--module-name", "orchestration.definitions",
         ]
         
         logger.info(f"Running command: {' '.join(cmd)}")
         
         process = subprocess.Popen(
             cmd,
-            env={**env, **dict(os.environ) if 'os' in globals() else {}},
+            env={**env, **dict(os.environ)},
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -153,13 +156,13 @@ def main():
     host = "127.0.0.1"
     port = 3000
     
-    print(f"\n🚀 Starting Dagster UI...")
-    print(f"📊 Pipeline: Retail ETL with External API Enrichment")
-    print(f"🌐 URL: http://{host}:{port}")
-    print(f"📁 Raw data directory: {settings.raw_data_path}")
-    print(f"⚡ File sensor: Monitoring for new CSV files")
-    print(f"🔄 To trigger pipeline: Drop a CSV file in {settings.raw_data_path}")
-    print(f"⏹️  To stop: Press Ctrl+C\n")
+    print(f"\n[DAGSTER] Starting Dagster UI...")
+    print(f"[PIPELINE] Retail ETL with External API Enrichment")
+    print(f"[URL] http://{host}:{port}")
+    print(f"[DATA] Raw data directory: {settings.raw_data_path}")
+    print(f"[SENSOR] Monitoring for new CSV files")
+    print(f"[TRIGGER] To trigger pipeline: Drop a CSV file in {settings.raw_data_path}")
+    print(f"[STOP] To stop: Press Ctrl+C\n")
     
     start_dagster_webserver(host, port)
 

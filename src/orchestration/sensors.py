@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 @sensor(
     name="file_drop_sensor",
+    job_name="retail_etl_pipeline",
     description="Triggers pipeline when new files are dropped in the raw data directory",
     default_status=DefaultSensorStatus.RUNNING,
 )
@@ -107,6 +108,7 @@ def file_drop_sensor(context: SensorEvaluationContext) -> SensorResult:
 
 @sensor(
     name="large_file_sensor",
+    job_name="retail_etl_pipeline",
     description="Special handling for large files (>10MB) with batched processing",
     default_status=DefaultSensorStatus.STOPPED,  # Manual activation required
 )
@@ -203,6 +205,7 @@ def large_file_sensor(context: SensorEvaluationContext) -> SensorResult:
 
 @sensor(
     name="error_file_sensor",
+    job_name="retail_etl_pipeline",
     description="Monitors for files that failed processing and need retry",
     default_status=DefaultSensorStatus.STOPPED,
 )

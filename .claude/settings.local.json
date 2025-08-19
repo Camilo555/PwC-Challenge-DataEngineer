@@ -7,7 +7,12 @@
       "Bash(java:*)",
       "Bash(poetry run ruff:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(poetry run python:*)",
+      "Bash(set PYTHONPATH=src)",
+      "Bash(poetry run dagster dev:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)"
     ],
     "defaultMode": "acceptEdits"
   }

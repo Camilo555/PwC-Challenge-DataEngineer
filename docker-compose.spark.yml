@@ -1,0 +1,204 @@
+services:
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      TYPESENSE_HOST: typesense
+    volumes:
+      - ./:/app
+    depends_on:
+      - typesense
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Spark Master
+  spark-master:
+    image: bitnami/spark:3.5.3
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    ports:
+      - "8080:8080"  # Spark Master Web UI
+      - "7077:7077"  # Spark Master port
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+
+  # Spark Worker
+  spark-worker:
+    image: bitnami/spark:3.5.3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+    depends_on:
+      - spark-master
+
+  # Spark-based ETL Services
+  etl-bronze-spark:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "spark-etl"]
+    env_file:
+      - .env
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - PYSPARK_PYTHON=python3
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_bronze_spark.py"]
+    depends_on:
+      - spark-master
+      - spark-worker
+    restart: "no"
+
+  etl-silver-spark:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "spark-etl"]
+    env_file:
+      - .env
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - PYSPARK_PYTHON=python3
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_silver_spark.py"]
+    depends_on:
+      - etl-bronze-spark
+    restart: "no"
+
+  etl-gold-spark:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "spark-etl"]
+    env_file:
+      - .env
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - PYSPARK_PYTHON=python3
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_gold_spark.py"]
+    depends_on:
+      - etl-silver-spark
+    restart: "no"
+
+  etl-all-spark:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "spark-etl"]
+    env_file:
+      - .env
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - PYSPARK_PYTHON=python3
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_etl_spark.py"]
+    depends_on:
+      - spark-master
+      - spark-worker
+    restart: "no"
+
+  # Regular ETL Services (Pandas-based)
+  etl-bronze:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "pandas-etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_bronze_pandas.py"]
+    restart: "no"
+
+  etl-silver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "pandas-etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_silver_pandas.py"]
+    depends_on:
+      - etl-bronze
+    restart: "no"
+
+  etl-gold:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    profiles: ["etl", "pandas-etl"]
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/run_gold.py"]
+    depends_on:
+      - etl-silver
+    restart: "no"
+
+  # Indexer Service
+  indexer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      TYPESENSE_HOST: typesense
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/index_typesense.py"]
+    depends_on:
+      - api
+      - typesense
+    restart: "no"
+
+  # Typesense Vector Database
+  typesense:
+    image: typesense/typesense:0.25.1
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+
+volumes:
+  typesense-data: {}

@@ -1,0 +1,218 @@
+# Multi-stage Production Dockerfile
+# Optimized for size, security, and performance
+
+# Base stage with common dependencies
+FROM python:3.10-slim as base
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_VERSION=1.8.3 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_CACHE_DIR=/tmp/poetry_cache \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VENV_IN_PROJECT=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry==$POETRY_VERSION
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock ./
+
+# Install dependencies (production only)
+RUN poetry install --only=main --no-cache && \
+    rm -rf $POETRY_CACHE_DIR
+
+# Development stage
+FROM base as development
+
+# Install development dependencies
+RUN poetry install --no-cache && \
+    rm -rf $POETRY_CACHE_DIR
+
+# Copy application code
+COPY --chown=appuser:appuser . .
+
+# Switch to non-root user
+USER appuser
+
+# Expose ports
+EXPOSE 8000
+
+# Default command
+CMD ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Spark stage with Java runtime
+FROM base as spark-base
+
+# Install OpenJDK 17 for Spark
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jre-headless \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Java environment
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$SPARK_HOME/bin:$PATH
+
+# Install Spark (optional - for standalone deployments)
+RUN curl -fsSL https://archive.apache.org/dist/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.tgz \
+    | tar -xz -C /opt && \
+    ln -s /opt/spark-3.5.3-bin-hadoop3 /opt/spark && \
+    chown -R appuser:appuser /opt/spark*
+
+# Production API stage
+FROM base as production-api
+
+# Copy application code (excluding unnecessary files)
+COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser data/ /app/data/
+COPY --chown=appuser:appuser *.md /app/
+COPY --chown=appuser:appuser *.yml /app/
+COPY --chown=appuser:appuser *.yaml /app/
+COPY --chown=appuser:appuser .env.example /app/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data/{raw,bronze,silver,gold} /app/tmp && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+
+# Default command
+CMD ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+# Production ETL stage with Spark
+FROM spark-base as production-etl
+
+# Copy application code
+COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser data/ /app/data/
+COPY --chown=appuser:appuser *.yml /app/
+COPY --chown=appuser:appuser *.yaml /app/
+COPY --chown=appuser:appuser .env.example /app/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data/{raw,bronze,silver,gold} /app/spark-warehouse /app/checkpoints && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+
+# Default command (can be overridden)
+CMD ["poetry", "run", "python", "scripts/run_etl_spark.py"]
+
+# Airflow stage
+FROM base as airflow
+
+# Install Airflow dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Airflow
+RUN pip install --no-cache-dir \
+    'apache-airflow[postgres,celery,redis]==2.10.4' \
+    --constraint 'https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.10.txt'
+
+# Copy application code
+COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser .env.example /app/
+
+# Create Airflow directories
+RUN mkdir -p /app/airflow_home /app/logs /app/dags /app/plugins && \
+    chown -R appuser:appuser /app
+
+# Set Airflow environment
+ENV AIRFLOW_HOME=/app/airflow_home
+ENV PYTHONPATH=/app/src
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Default command
+CMD ["airflow", "webserver"]
+
+# Dagster stage
+FROM base as dagster
+
+# Install Dagster dependencies
+RUN pip install --no-cache-dir \
+    dagster \
+    dagster-webserver \
+    dagster-postgres \
+    dagster-docker
+
+# Copy application code
+COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser .env.example /app/
+
+# Create Dagster directories
+RUN mkdir -p /app/dagster_home /app/logs && \
+    chown -R appuser:appuser /app
+
+# Set Dagster environment
+ENV DAGSTER_HOME=/app/dagster_home
+ENV PYTHONPATH=/app/src
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 3000
+
+# Default command
+CMD ["dagster", "dev", "--host", "0.0.0.0", "--port", "3000"]
+
+# Nginx reverse proxy stage
+FROM nginx:alpine as nginx
+
+# Remove default nginx configuration
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy custom nginx configuration
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# Create nginx user
+RUN adduser -D -s /bin/sh nginx || true
+
+# Expose port
+EXPOSE 80 443
+
+# Default command
+CMD ["nginx", "-g", "daemon off;"]

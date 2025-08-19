@@ -35,7 +35,7 @@ npm = "^0.1.1"
 # Orchestration
 dagster = "^1.8.13"
 dagster-webserver = "^1.8.13"
-dagster-pandas = "^0.24.13"
+dagster-pandas = "^0.27.6"
 # External APIs
 aiohttp = "^3.10.11"
 

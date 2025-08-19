@@ -49,6 +49,7 @@ dagster-webserver = "^1.8.13"
 # apache-airflow = {version = "^2.10.4", optional = true}
 # External APIs
 aiohttp = "^3.10.11"
+pyarrow = "^21.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

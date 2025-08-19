@@ -18,7 +18,7 @@ jobs:
       uses: anthropics/claude-code-action@v1
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # Ensure this secret exists in your repository settings under Settings > Secrets and variables > Actions
         # Optional: Specify which files to analyze
         # include-patterns: |
         #   src/**/*.py

@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import List
+
+# Add src to Python path
+sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from core.logging import get_logger
 from core.config import settings

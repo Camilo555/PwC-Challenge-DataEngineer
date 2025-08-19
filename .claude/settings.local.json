@@ -12,7 +12,11 @@
       "Bash(set PYTHONPATH=src)",
       "Bash(poetry run dagster dev:*)",
       "Bash(pip install:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(powershell:*)",
+      "Bash(poetry add:*)",
+      "Bash(poetry run:*)",
+      "Bash(grep:*)"
     ],
     "defaultMode": "acceptEdits"
   }

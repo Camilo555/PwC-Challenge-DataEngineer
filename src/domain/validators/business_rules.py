@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from ...core.constants import (
+from core.constants import (
     CANCELLED_INVOICE_PREFIX,
     MAX_VALID_PRICE,
     MAX_VALID_QUANTITY,
@@ -14,12 +14,12 @@ from ...core.constants import (
     MIN_VALID_QUANTITY,
     STOCK_CODE_PATTERN,
 )
-from ...core.exceptions import ValidationException
-from ...core.logging import get_logger
-from ..entities.customer import Customer, CustomerMetrics
-from ..entities.invoice import Invoice
-from ..entities.product import Product
-from ..entities.transaction import Transaction, TransactionLine
+from core.exceptions import ValidationException
+from core.logging import get_logger
+from domain.entities.customer import Customer, CustomerMetrics
+from domain.entities.invoice import Invoice
+from domain.entities.product import Product
+from domain.entities.transaction import Transaction, TransactionLine
 
 logger = get_logger(__name__)
 

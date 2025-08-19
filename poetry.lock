@@ -6681,4 +6681,4 @@ test = ["zope.security", "zope.testrunner"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.11"
-content-hash = "e745b76921ea09b9379eb98b0128beee2d5ecb5f0e6c5ebad02aaabf05db8f98"
+content-hash = "90d8f8cf20851bd46c7c05c00f360e4d8d3f3a26585bf79ec2c0913695a3c0bb"

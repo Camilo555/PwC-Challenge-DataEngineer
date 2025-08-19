@@ -7,7 +7,7 @@ from enum import Enum
 
 from pydantic import Field, field_validator, model_validator
 
-from ...core.constants import (
+from core.constants import (
     CANCELLED_INVOICE_PREFIX,
     MAX_VALID_PRICE,
     MAX_VALID_QUANTITY,
@@ -15,7 +15,7 @@ from ...core.constants import (
     MIN_VALID_QUANTITY,
     STOCK_CODE_PATTERN,
 )
-from ..base import DomainEntity
+from domain.base import DomainEntity
 
 
 class TransactionStatus(str, Enum):

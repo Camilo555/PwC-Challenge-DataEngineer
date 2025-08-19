@@ -7,8 +7,8 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from ...core.constants import CANCELLED_INVOICE_PREFIX
-from ..base import DomainEntity
+from core.constants import CANCELLED_INVOICE_PREFIX
+from domain.base import DomainEntity
 
 
 class InvoiceStatus(str, Enum):

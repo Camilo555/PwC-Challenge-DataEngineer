@@ -7,8 +7,8 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from ...core.constants import STOCK_CODE_PATTERN
-from ..base import DomainEntity
+from core.constants import STOCK_CODE_PATTERN
+from domain.base import DomainEntity
 
 
 class ProductCategory(str, Enum):

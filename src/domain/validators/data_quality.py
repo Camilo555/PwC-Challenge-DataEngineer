@@ -8,7 +8,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from ...core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import secrets
 from typing import List, Dict, Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 from .base_config import Environment
 
@@ -129,6 +130,7 @@ class SecurityConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     @validator("basic_auth_password")
     def validate_password_strength(cls, v: str) -> str:

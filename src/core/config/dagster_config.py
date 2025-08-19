@@ -7,7 +7,8 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 from .base_config import BaseConfig, Environment
 
@@ -96,6 +97,7 @@ class DagsterConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     @validator("dagster_home", pre=True)
     def set_dagster_home(cls, v: Optional[str]) -> str:

@@ -8,7 +8,8 @@ from datetime import timedelta, datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 from .base_config import BaseConfig, Environment
 
@@ -90,6 +91,7 @@ class AirflowConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     @validator("airflow_home", pre=True)
     def set_airflow_home(cls, v: Optional[str]) -> str:

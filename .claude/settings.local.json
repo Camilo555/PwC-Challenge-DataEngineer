@@ -16,7 +16,9 @@
       "Bash(powershell:*)",
       "Bash(poetry add:*)",
       "Bash(poetry run:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)"
     ],
     "defaultMode": "acceptEdits"
   }

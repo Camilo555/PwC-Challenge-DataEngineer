@@ -9,8 +9,11 @@ from .dagster_config import DagsterConfig
 from .monitoring_config import MonitoringConfig
 from .security_config import SecurityConfig
 
-# Main settings instance - backwards compatibility
-from ..config import settings
+# Create settings instance using unified configuration
+from .unified_config import get_unified_config
+
+# Backwards compatibility - expose the base config as settings
+settings = get_unified_config().base
 
 __all__ = [
     "BaseConfig",

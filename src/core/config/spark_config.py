@@ -9,7 +9,8 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 from .base_config import BaseConfig, Environment
 
@@ -88,6 +89,7 @@ class SparkConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     @validator("checkpoint_dir", "event_log_dir", pre=True)
     def resolve_paths(cls, v: Optional[str]) -> Optional[str]:

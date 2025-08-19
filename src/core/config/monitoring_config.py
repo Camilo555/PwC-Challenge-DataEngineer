@@ -5,7 +5,8 @@ Provides comprehensive monitoring settings for production deployment
 from __future__ import annotations
 
 from typing import Dict, List, Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 from .base_config import Environment
 
@@ -90,6 +91,7 @@ class MonitoringConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     def get_environment_overrides(self, environment: Environment) -> Dict[str, any]:
         """Get environment-specific monitoring overrides."""

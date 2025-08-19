@@ -9,8 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict
 
-from pydantic import BaseSettings, Field, validator
-from pydantic_settings import BaseSettings as PydanticBaseSettings
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 
 class Environment(str, Enum):
@@ -38,7 +38,7 @@ class OrchestrationEngine(str, Enum):
     PREFECT = "prefect"
 
 
-class BaseConfig(PydanticBaseSettings):
+class BaseConfig(BaseSettings):
     """Enhanced base configuration with comprehensive settings."""
     
     # Environment
@@ -75,6 +75,7 @@ class BaseConfig(PydanticBaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
         
     @validator("project_root", "src_path", "data_path", pre=True)
     def resolve_paths(cls, v: Any) -> Path:
@@ -136,3 +137,32 @@ class BaseConfig(PydanticBaseSettings):
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == Environment.DEVELOPMENT
+    
+    @property
+    def spark_config(self) -> dict:
+        """Get Spark configuration for backward compatibility."""
+        return {
+            "spark.app.name": getattr(self, "spark_app_name", "RetailETL"),
+            "spark.master": getattr(self, "spark_master", "local[*]"),
+            "spark.executor.memory": getattr(self, "spark_executor_memory", "2g"),
+            "spark.driver.memory": getattr(self, "spark_driver_memory", "2g"),
+            "spark.sql.shuffle.partitions": str(getattr(self, "spark_sql_shuffle_partitions", 200)),
+            "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+            "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+            "spark.sql.adaptive.enabled": "true",
+            "spark.sql.adaptive.coalescePartitions.enabled": "true",
+            "spark.jars.packages": ",".join([
+                "org.xerial:sqlite-jdbc:3.45.3.0",
+                "org.postgresql:postgresql:42.7.3"
+            ]),
+        }
+    
+    def get_database_url(self, async_mode: bool = False) -> str:
+        """Get database URL for backward compatibility."""
+        database_url = getattr(self, "database_url", "sqlite:///./data/warehouse/retail.db")
+        if async_mode:
+            if database_url.startswith("sqlite://"):
+                return database_url.replace("sqlite://", "sqlite+aiosqlite://")
+            elif database_url.startswith("postgresql://"):
+                return database_url.replace("postgresql://", "postgresql+asyncpg://")
+        return database_url

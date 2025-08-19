@@ -9,7 +9,8 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Type, TypeVar, Union
 
-from pydantic import BaseSettings, validator
+from pydantic import validator
+from pydantic_settings import BaseSettings
 
 from .base_config import BaseConfig, Environment, ProcessingEngine, OrchestrationEngine
 from .spark_config import SparkConfig

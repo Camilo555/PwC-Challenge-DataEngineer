@@ -1,0 +1,156 @@
+name: Docker Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, etl]
+    
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: docker/Dockerfile.${{ matrix.service }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+        
+  docker-test:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name == 'pull_request'
+    
+    services:
+      typesense:
+        image: typesense/typesense:0.25.1
+        env:
+          TYPESENSE_DATA_DIR: /data
+          TYPESENSE_API_KEY: test-key
+        ports:
+          - 8108:8108
+        options: >-
+          --health-cmd "curl -f http://localhost:8108/health"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 3
+          
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build API image for testing
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: docker/Dockerfile.api
+        load: true
+        tags: pwc-retail-api:test
+        cache-from: type=gha
+        
+    - name: Create test environment file
+      run: |
+        cat > .env.test << EOF
+        ENVIRONMENT=test
+        DATABASE_TYPE=sqlite
+        DATABASE_URL=sqlite:///./data/warehouse/test.db
+        API_HOST=0.0.0.0
+        API_PORT=8000
+        TYPESENSE_API_KEY=test-key
+        TYPESENSE_HOST=localhost
+        TYPESENSE_PORT=8108
+        ENABLE_EXTERNAL_ENRICHMENT=false
+        ENABLE_VECTOR_SEARCH=false
+        EOF
+        
+    - name: Test API container
+      run: |
+        docker run --rm -d \
+          --name test-api \
+          --env-file .env.test \
+          --network host \
+          pwc-retail-api:test
+        
+        # Wait for API to start
+        sleep 10
+        
+        # Test health endpoint
+        curl -f http://localhost:8000/api/v1/health || exit 1
+        
+        # Test authenticated endpoint
+        curl -f -u admin:changeme123 http://localhost:8000/api/v1/sales || exit 1
+        
+        # Stop container
+        docker stop test-api
+        
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name != 'pull_request'
+    
+    strategy:
+      matrix:
+        service: [api, etl]
+        
+    steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ github.ref_name }}
+        format: 'sarif'
+        output: 'trivy-results-${{ matrix.service }}.sarif'
+        
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results-${{ matrix.service }}.sarif'

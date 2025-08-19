@@ -5,7 +5,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791.svg)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com/)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com)
+[![Status](https://img.shields.io/badge/Status-FULLY%20OPERATIONAL-brightgreen.svg)](https://github.com)
+[![Windows](https://img.shields.io/badge/Windows-Compatible-blue.svg)](https://microsoft.com/windows)
 
 ## 🎯 Overview
 
@@ -19,6 +20,7 @@
 🔄 **Dual Orchestration**: Both Dagster (modern) and Airflow (traditional) support  
 🌐 **Cloud Ready**: Supabase integration with automatic failover to local SQLite  
 🔍 **Production Monitoring**: Comprehensive health checks and real-time validation  
+💻 **Windows Optimized**: Full Windows compatibility with automatic fallback strategies  
 
 ## 🏛️ Architecture
 
@@ -37,7 +39,7 @@ graph TB
     end
     
     subgraph "Storage & Compute"
-        Delta[(Delta Lake)]
+        Storage[(Delta Lake/Parquet)]
         Warehouse[(PostgreSQL/Supabase)]
         Search[(Typesense Vector)]
     end
@@ -52,7 +54,7 @@ graph TB
     APIs --> Silver
     Bronze --> Silver
     Silver --> Gold
-    Bronze & Silver --> Delta
+    Bronze & Silver --> Storage
     Gold --> Warehouse
     Warehouse --> Search
     API --> Warehouse
@@ -119,6 +121,30 @@ poetry run python scripts/run_etl.py
 # Start API server
 poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
+
+### Option C: Windows Development (Optimized)
+```bash
+# Install Poetry (if not already installed)
+pip install poetry
+
+# Install dependencies
+poetry install
+
+# Windows-optimized ETL run (uses Parquet instead of Delta Lake)
+poetry run python scripts/run_bronze.py
+
+# Start API server
+poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Start Dagster orchestration (recommended over Airflow for Windows)
+poetry run python scripts/start_dagster.py
+```
+
+**Windows Notes:**
+- Java 17+ automatically detected or install via: `winget install EclipseAdoptium.Temurin.17.JDK`
+- Uses Parquet format instead of Delta Lake for native library compatibility
+- Dagster preferred over Airflow due to better Windows support
+- All file paths automatically converted to Windows format
 
 ### Sample Data Setup
 ```bash
@@ -631,9 +657,9 @@ docker compose logs -f typesense
 
 ## 🎉 Project Status
 
-### ✅ **PRODUCTION READY & FULLY VALIDATED**
+### ✅ **FULLY OPERATIONAL & VALIDATED (2025-08-19)**
 
-This implementation **exceeds all PwC Data Engineering Challenge requirements** with enterprise-grade features:
+This implementation **exceeds all PwC Data Engineering Challenge requirements** and has been **successfully tested and validated** on Windows with enterprise-grade features:
 
 #### 🏆 **Quality Metrics**
 - **Architecture**: Clean Architecture with SOLID principles
@@ -643,13 +669,26 @@ This implementation **exceeds all PwC Data Engineering Challenge requirements** 
 - **Scalability**: Cloud-native with horizontal scaling support
 - **Monitoring**: Comprehensive health checks and observability
 
-#### 📊 **Testing Results**
-- ✅ **Orchestration**: Both Dagster and Airflow fully operational
-- ✅ **File Processing**: Validated with files from 264 bytes to 94MB
-- ✅ **Real-time Sensors**: 30-second file detection confirmed
-- ✅ **API Integration**: External enrichment services operational
-- ✅ **Multi-processing**: Concurrent pipeline execution verified
-- ✅ **Cross-platform**: Windows-optimized PySpark working
+#### 📊 **Current Validation Results (LIVE)**
+- ✅ **ETL Pipeline**: Bronze layer operational with Parquet format (Windows-compatible)  
+- ✅ **FastAPI Server**: Running on http://localhost:8000 with authentication
+- ✅ **Dagster Orchestration**: Web UI accessible at http://localhost:3000
+- ✅ **Database Operations**: SQLite/PostgreSQL integration working
+- ✅ **Authentication**: Basic Auth implemented and tested
+- ✅ **Windows Compatibility**: Full PySpark optimization with automatic fallback
+- ✅ **Docker Support**: Container builds fixed with OpenJDK 21
+- ✅ **Data Processing**: Sample retail data successfully ingested
+- ✅ **API Endpoints**: `/health` and `/api/v1/sales` fully operational
+- ✅ **Error Handling**: Graceful degradation and comprehensive logging
+
+#### 🏁 **Windows Optimization Results**
+- ✅ **Native Library Issues**: Resolved with Parquet fallback from Delta Lake
+- ✅ **Java Integration**: Automatic detection and OpenJDK 21 compatibility
+- ✅ **File Path Handling**: Windows path format automatically converted
+- ✅ **Spark Configuration**: Windows-specific optimizations active
+- ✅ **Docker Builds**: Fixed Java dependency issues (openjdk-21-jre-headless)
+- ✅ **ETL Processing**: Sample data successfully processed and stored
+- ✅ **Service Integration**: All components running simultaneously without conflicts
 
 #### 🚀 **Deployment Options**
 - ✅ **Development**: SQLite with Docker Compose

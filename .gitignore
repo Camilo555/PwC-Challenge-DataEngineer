@@ -23,6 +23,10 @@ derby.log
 _delta_log/
 checkpoint/
 .spark-staging/
+temp/
+spark-*
+.ivy2/
+target/
 
 # === Data Directories ===
 data/bronze/
@@ -41,6 +45,17 @@ data/quarantine/
 *~
 .DS_Store
 
+# === Windows ===
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
 # === Testing ===
 .coverage
 htmlcov/
@@ -58,6 +73,8 @@ coverage.xml
 # === Logs ===
 logs/
 *.log
+*.log.*
+nohup.out
 
 # === Jupyter ===
 .ipynb_checkpoints/
@@ -92,4 +109,26 @@ airflow.cfg
 webserver_config.py
 
 # === Poetry ===
-poetry.lock  # Descomenta si quieres ignorarlo inicialmente
+# poetry.lock  # Uncomment if you want to ignore it initially
+
+# === Additional Temporary Files ===
+# System cache files
+.mypy_cache/
+.ruff_cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+tmp/
+temporary/
+
+# Local development files
+local_*
+test_*
+scratch/
+playground/
+
+# Network and process files
+*.pid
+*.lock
+*.sock

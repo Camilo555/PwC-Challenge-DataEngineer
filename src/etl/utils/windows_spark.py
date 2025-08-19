@@ -98,9 +98,18 @@ def setup_windows_environment() -> bool:
         os.environ["PYSPARK_PYTHON"] = python_exe
         os.environ["PYSPARK_DRIVER_PYTHON"] = python_exe
 
-        # Disable Hadoop native libraries warning on Windows
-        os.environ.setdefault("HADOOP_HOME", "")
-        os.environ.setdefault("HADOOP_CONF_DIR", "")
+        # Setup Hadoop for Windows - use local hadoop directory
+        project_root = Path(__file__).parent.parent.parent.parent
+        hadoop_dir = project_root / "hadoop"
+        if hadoop_dir.exists():
+            hadoop_home = str(hadoop_dir.absolute())
+            os.environ["HADOOP_HOME"] = hadoop_home
+            os.environ["HADOOP_CONF_DIR"] = hadoop_home
+            logger.info(f"Using local HADOOP_HOME: {hadoop_home}")
+        else:
+            # Set to empty to avoid Spark trying to find Hadoop
+            os.environ.setdefault("HADOOP_HOME", "")
+            os.environ.setdefault("HADOOP_CONF_DIR", "")
 
         # Set proper temp directory
         temp_dir = Path.cwd() / "temp"
@@ -191,8 +200,8 @@ def create_windows_spark_session(app_name: str = "WindowsRetailETL") -> SparkSes
 
         logger.info("Creating Windows-optimized Spark session...")
 
-        # Get configuration - skip Delta for test sessions
-        skip_delta = app_name.startswith("Test")
+        # Get configuration - skip Delta for all Windows sessions due to native library issues
+        skip_delta = True  # Always skip Delta on Windows
         spark_config = get_windows_spark_config(skip_delta=skip_delta)
         spark_config["spark.app.name"] = app_name
 
@@ -203,17 +212,14 @@ def create_windows_spark_session(app_name: str = "WindowsRetailETL") -> SparkSes
         for key, value in spark_config.items():
             builder = builder.config(key, value)
 
-        # Add JAR packages for Delta Lake, PostgreSQL, SQLite (skip for tests if needed)
-        if not app_name.startswith("Test"):
-            packages = [
-                "io.delta:delta-spark_2.12:3.2.1",
-                "org.postgresql:postgresql:42.7.3",
-                "org.xerial:sqlite-jdbc:3.45.3.0"
-            ]
-            builder = builder.config("spark.jars.packages", ",".join(packages))
-        else:
-            # Minimal configuration for tests
-            logger.info("Skipping JAR packages for test session")
+        # Skip Delta Lake packages on Windows due to native library issues  
+        # Only add PostgreSQL and SQLite for database connectivity
+        packages = [
+            "org.postgresql:postgresql:42.7.3",
+            "org.xerial:sqlite-jdbc:3.45.3.0"
+        ]
+        builder = builder.config("spark.jars.packages", ",".join(packages))
+        logger.info("Skipping Delta Lake packages for Windows compatibility")
 
         # Create session with fallback configuration
         try:

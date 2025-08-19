@@ -6,7 +6,7 @@ ENV POETRY_VERSION=1.8.3 \
 
 # ETL needs Java for PySpark
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl openjdk-17-jre-headless \
+    build-essential curl openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry

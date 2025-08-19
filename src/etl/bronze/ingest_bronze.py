@@ -115,15 +115,26 @@ def ingest_bronze() -> None:
     )
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    (
-        dfw.write.mode("overwrite")
-        .format("delta")
-        .option("mergeSchema", "true")
-        .partitionBy("ingestion_date")
-        .save(str(out_dir))
-    )
-
-    print(f"Bronze ingest complete -> {out_dir} (format=delta)")
+    
+    # Use Parquet for Windows compatibility (Delta has native library issues)
+    import platform
+    if platform.system() == "Windows":
+        (
+            dfw.write.mode("overwrite")
+            .format("parquet")
+            .partitionBy("ingestion_date")
+            .save(str(out_dir))
+        )
+        print(f"Bronze ingest complete -> {out_dir} (format=parquet, Windows mode)")
+    else:
+        (
+            dfw.write.mode("overwrite")
+            .format("delta")
+            .option("mergeSchema", "true")
+            .partitionBy("ingestion_date")
+            .save(str(out_dir))
+        )
+        print(f"Bronze ingest complete -> {out_dir} (format=delta)")
 
 
 def main() -> None:

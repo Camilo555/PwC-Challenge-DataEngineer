@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from de_challenge.vector_search.indexer import index_sales
+from vector_search.indexer import index_sales
 
 
 def main() -> None:

@@ -17,8 +17,8 @@ from sqlmodel import create_engine
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from de_challenge.core.config import settings
-from de_challenge.data_access.supabase_client import get_supabase_client, health_check_supabase
+from core.config import settings
+from data_access.supabase_client import get_supabase_client, health_check_supabase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -167,10 +167,10 @@ class DeploymentVerifier:
         
         try:
             # Test imports
-            from de_challenge.etl.utils.spark import get_spark
-            from de_challenge.etl.bronze.ingest_bronze import main as bronze_main
-            from de_challenge.etl.silver.clean_silver import main as silver_main
-            from de_challenge.etl.gold.build_gold import main as gold_main
+            from etl.utils.spark import get_spark
+            from etl.bronze.ingest_bronze import main as bronze_main
+            from etl.silver.clean_silver import main as silver_main
+            from etl.gold.build_gold import main as gold_main
             
             # Test Spark configuration (don't actually create session to avoid Java issues)
             spark_config = settings.spark_config

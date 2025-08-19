@@ -6,7 +6,8 @@
       "Bash(poetry install:*)",
       "Bash(java:*)",
       "Bash(poetry run ruff:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "defaultMode": "acceptEdits"
   }

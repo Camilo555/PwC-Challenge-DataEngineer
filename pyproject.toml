@@ -1,10 +1,20 @@
 [tool.poetry]
-name = "de-challenge-retail-etl"
+name = "retail-etl-pipeline"
 version = "0.1.0"
-description = "Data Engineering Challenge - Retail ETL Pipeline with Vector Search"
+description = "Production-Ready Retail ETL Pipeline with Medallion Architecture"
 authors = ["camilo Bautista <camilobautista00@gmail.com>"]
 readme = "README.md"
-packages = [{include = "de_challenge", from = "src"}]
+packages = [
+    {include = "api", from = "src"},
+    {include = "core", from = "src"},
+    {include = "data_access", from = "src"},
+    {include = "domain", from = "src"},
+    {include = "etl", from = "src"},
+    {include = "external_apis", from = "src"},
+    {include = "orchestration", from = "src"},
+    {include = "vector_search", from = "src"},
+    {include = "airflow_dags", from = "src"}
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
@@ -36,6 +46,8 @@ npm = "^0.1.1"
 dagster = "^1.8.13"
 dagster-webserver = "^1.8.13"
 dagster-pandas = "^0.24.13"
+# Alternative: Apache Airflow
+apache-airflow = {version = "^2.10.4", optional = true}
 # External APIs
 aiohttp = "^3.10.11"
 
@@ -99,14 +111,14 @@ strict_equality = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers --strict-config --cov=src/de_challenge"
+addopts = "-ra -q --strict-markers --strict-config --cov=src"
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 
 [tool.coverage.run]
-source = ["src/de_challenge"]
+source = ["src"]
 omit = ["*/tests/*", "*/test_*.py"]
 
 [tool.coverage.report]

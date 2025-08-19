@@ -12,13 +12,13 @@ import argparse
 import sys
 from typing import List
 
-from de_challenge.core.logging import get_logger
-from de_challenge.core.config import settings
+from core.logging import get_logger
+from core.config import settings
 
 # Stage entrypoints
-from de_challenge.etl.bronze.ingest_bronze import main as run_bronze
-from de_challenge.etl.silver.clean_silver import main as run_silver
-from de_challenge.etl.gold.build_gold import main as run_gold
+from etl.bronze.ingest_bronze import main as run_bronze
+from etl.silver.clean_silver import main as run_silver
+from etl.gold.build_gold import main as run_gold
 
 
 logger = get_logger(__name__)

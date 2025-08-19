@@ -11,8 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-from de_challenge.core.config import settings
-from de_challenge.core.logging import get_logger
+from core.config import settings
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

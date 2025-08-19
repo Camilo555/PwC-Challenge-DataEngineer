@@ -1,4 +1,4 @@
-# Retail ETL Pipeline (PwC Data Engineering Challenge)
+# 🚀 Production-Ready Retail ETL Pipeline
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![PySpark](https://img.shields.io/badge/PySpark-3.5+-orange.svg)](https://spark.apache.org/)
@@ -8,16 +8,27 @@
 
 ## Overview
 
-**Production-ready** end-to-end data platform implementing the Medallion (Bronze/Silver/Gold) architecture with PySpark ETL, star schema warehouse, and FastAPI microservices. Features **comprehensive Supabase integration**, vector search with mandatory filters, and enterprise-grade monitoring.
+**Enterprise-grade** end-to-end data platform with **clean, modular architecture** implementing the Medallion (Bronze/Silver/Gold) pattern. Features PySpark ETL, star schema warehouse, FastAPI microservices, **external API enrichment**, **dual orchestration options** (Dagster + Airflow), and comprehensive Supabase integration.
 
 ### ✨ **Key Features**
-- 🏗️ **Medallion Architecture**: Bronze/Silver/Gold layers with Delta Lake
+
+#### **🏗️ Architecture & Design**
+- 🎯 **Clean Architecture**: Modular design with clear separation of concerns
+- 📦 **Domain-Driven Design**: Rich domain models with business validation
+- 🔄 **Medallion Pattern**: Bronze/Silver/Gold layers with Delta Lake
 - 🌟 **Star Schema**: 1 fact table + 5 dimension tables with referential integrity
+
+#### **🚀 Production Features**
 - 🔄 **Multi-Database**: SQLite (dev) → PostgreSQL/Supabase (prod) seamless migration
-- 🔍 **Vector Search**: Typesense with mandatory filters (country, price range)
 - 🛡️ **Enterprise Security**: SSL/TLS, Row Level Security, Basic Auth on all endpoints
 - 📊 **Health Monitoring**: Comprehensive data integrity checks and performance metrics
 - 🖥️ **Cross-Platform**: Windows-optimized PySpark with auto Java detection
+
+#### **⚡ Advanced Capabilities**
+- 🔍 **Vector Search**: Typesense with mandatory filters (country, price range)
+- 🌐 **External API Enrichment**: Currency rates, country data, product categorization
+- 🔄 **Dual Orchestration**: Dagster (modern) + Airflow (traditional) options
+- 📁 **File-Triggered Automation**: Drop files → Auto-processing within 30 seconds
 
 ## Architecture
 
@@ -117,6 +128,90 @@ flowchart TB
     FS --> Load[JDBC Load]
     Load --> DB[(SQLite/PostgreSQL)]
 ```
+
+## 📁 **Project Structure**
+
+The project follows a **clean, modular architecture** with clear separation of concerns:
+
+```
+retail-etl-pipeline/
+├── 📁 src/                          # Source code (production-ready modules)
+│   ├── 📁 api/                      # FastAPI REST API layer
+│   │   ├── main.py                  # FastAPI application & routing
+│   │   └── v1/                      # API v1 (versioned endpoints)
+│   │       ├── routes/              # Route handlers (controllers)
+│   │       ├── schemas/             # Pydantic response models
+│   │       └── services/            # Business logic services
+│   ├── 📁 core/                     # Core infrastructure & configuration
+│   │   ├── config.py                # Settings & environment management
+│   │   ├── logging.py               # Centralized logging configuration
+│   │   ├── constants.py             # Application constants
+│   │   └── exceptions.py            # Custom exception classes
+│   ├── 📁 data_access/              # Data access layer (Repository pattern)
+│   │   ├── db.py                    # Database connection & session management
+│   │   ├── models/                  # SQLModel star schema definitions
+│   │   ├── repositories/            # Data access repositories
+│   │   └── supabase_client.py       # Supabase integration client
+│   ├── 📁 domain/                   # Domain layer (business logic)
+│   │   ├── entities/                # Domain entities & aggregates
+│   │   ├── interfaces/              # Abstract interfaces & contracts
+│   │   └── validators/              # Business rules & data quality
+│   ├── 📁 etl/                      # ETL pipeline (Medallion architecture)
+│   │   ├── bronze/                  # Raw data ingestion & enrichment
+│   │   ├── silver/                  # Data cleaning & standardization
+│   │   ├── gold/                    # Star schema & analytics-ready data
+│   │   └── utils/                   # ETL utilities & Spark configuration
+│   ├── 📁 external_apis/            # External API integrations
+│   │   ├── base_client.py           # Base HTTP client with retry logic
+│   │   ├── currency_client.py       # Currency exchange rate API
+│   │   ├── country_client.py        # Geographic data API
+│   │   ├── product_client.py        # Product categorization API
+│   │   └── enrichment_service.py    # Orchestrated enrichment service
+│   ├── 📁 orchestration/            # Dagster orchestration assets
+│   │   ├── assets.py                # Dagster data assets
+│   │   ├── sensors.py               # File & error sensors
+│   │   ├── jobs.py                  # Orchestration jobs
+│   │   └── resources.py             # Shared resources
+│   ├── 📁 vector_search/            # Vector search & embeddings
+│   │   ├── indexer.py               # Typesense indexing logic
+│   │   └── typesense_client.py      # Vector search client
+│   └── 📁 airflow_dags/             # Apache Airflow DAGs (alternative)
+│       └── retail_etl_dag.py        # Complete ETL workflow DAG
+├── 📁 scripts/                      # Automation & management scripts
+│   ├── run_etl.py                   # ETL pipeline runner
+│   ├── start_dagster.py             # Dagster orchestration starter
+│   ├── start_airflow.py             # Airflow orchestration starter
+│   ├── verify_deployment.py         # Health check & validation
+│   └── seed_data.py                 # Sample data generator
+├── 📁 data/                         # Data storage (Medallion layers)
+│   ├── raw/                         # Bronze: Raw CSV/JSON files
+│   ├── bronze/                      # Bronze: Validated Parquet
+│   ├── silver/                      # Silver: Cleaned & standardized
+│   ├── gold/                        # Gold: Star schema aggregations
+│   └── warehouse/                   # SQLite/PostgreSQL warehouse
+├── 📁 tests/                        # Test suite
+│   ├── unit/                        # Unit tests
+│   ├── integration/                 # Integration tests
+│   └── fixtures/                    # Test fixtures & sample data
+├── 📁 docs/                         # Documentation
+│   ├── ORCHESTRATION.md             # Orchestration setup guide
+│   └── api/                         # API documentation
+├── 📁 docker/                       # Container definitions
+│   ├── Dockerfile.api               # FastAPI container
+│   └── Dockerfile.etl               # ETL processing container
+└── 📁 config/                       # Configuration files
+    ├── logging.yaml                 # Logging configuration
+    └── spark-defaults.conf          # Spark configuration
+```
+
+### 🏗️ **Architecture Highlights**
+
+- **🎯 Clean Architecture**: Clear separation between API, Domain, Data Access, and ETL layers
+- **📦 Modular Design**: Each component is independently testable and maintainable  
+- **🔄 Medallion Pattern**: Bronze → Silver → Gold data progression
+- **⚡ Production-Ready**: Comprehensive configuration, logging, and error handling
+- **🚀 Scalable**: Horizontal scaling with Spark, vertical scaling with Supabase
+- **🔍 Observable**: Health checks, metrics, and structured logging throughout
 
 ## Tech Stack
 
@@ -232,7 +327,7 @@ Tips:
 ```bash
 poetry install
 poetry run python scripts/run_etl.py   # Bronze -> Silver -> Gold
-poetry run uvicorn de_challenge.api.main:app --host 0.0.0.0 --port 8000
+poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 Local ETL requires Java 17. Install Temurin JDK 17 and set JAVA_HOME in PowerShell for the session:
 ```powershell
@@ -383,6 +478,194 @@ Example verification output:
 
 🚀 Your deployment is ready for production!
 ```
+
+## 🎯 **Orchestration & Automation**
+
+This project provides **two enterprise-grade orchestration options** for automated data pipeline management with file-triggered processing and external API enrichment.
+
+### 🔄 **Option 1: Dagster (Recommended)**
+
+**Modern, asset-based orchestration** with real-time monitoring and intelligent file sensors.
+
+#### **Key Features:**
+- 📁 **File Drop Sensor**: Auto-triggers pipeline within 30 seconds of new CSV files
+- 🌐 **External API Enrichment**: Currency rates, country data, product categorization
+- 📊 **Asset Lineage**: Visual dependency tracking and metadata management
+- 🔄 **Bronze → Silver → Gold**: Complete multi-layer data processing
+- 📈 **Data Quality Monitoring**: Automated quality assessment with 85%+ score targeting
+- ⚡ **Real-time UI**: Modern web interface for pipeline monitoring
+
+#### **Quick Start with Dagster:**
+```bash
+# Install Dagster dependencies
+poetry install
+
+# Configure external APIs (optional)
+echo "CURRENCY_API_KEY=your_key_here" >> .env
+echo "ENABLE_EXTERNAL_ENRICHMENT=true" >> .env
+
+# Start Dagster web server
+python scripts/start_dagster.py
+
+# Access Dagster UI
+# http://localhost:3000
+
+# Drop files for automatic processing
+cp your_data.csv data/raw/
+# → File detected within 30 seconds
+# → Full pipeline triggered automatically
+# → External APIs enrich data
+# → Bronze/Silver/Gold layers created
+# → Quality metrics generated
+```
+
+#### **File Sensors:**
+- **File Drop Sensor**: Monitors `data/raw/*.csv` for new files
+- **Large File Sensor**: Special handling for files >10MB with optimized batch processing
+- **Error Retry Sensor**: Automatic retry of failed files with conservative settings
+
+#### **External API Enrichment:**
+- **Currency Rates**: exchangerate-api.com (1,500 free requests/month)
+- **Country Data**: restcountries.com (completely free)
+- **Product Categories**: Local ML + DataMuse API (free)
+
+### 🔄 **Option 2: Apache Airflow (Traditional)**
+
+**Industry-standard workflow orchestration** with robust scheduling and monitoring.
+
+#### **Key Features:**
+- 📁 **File Sensor**: Monitors directory for new CSV files
+- 🌐 **External API Integration**: Same enrichment services as Dagster
+- 📊 **DAG Management**: Traditional workflow definition and monitoring
+- 🔄 **Task Dependencies**: Clear task relationships and retry logic
+- 📈 **Web UI**: Classic Airflow interface for workflow management
+
+#### **Quick Start with Airflow:**
+```bash
+# Install Airflow (optional dependency)
+poetry add apache-airflow
+
+# Start Airflow
+python scripts/start_airflow.py
+
+# Access Airflow UI
+# http://localhost:8080
+# Login: admin / admin123
+
+# Enable the retail_etl_pipeline DAG
+# Drop files to trigger processing
+cp your_data.csv data/raw/
+```
+
+#### **DAG Structure:**
+```
+File Sensor → Ingest Raw → External API Enrichment
+                ↓
+         Bronze to Silver → Silver to Gold
+                ↓                ↓
+         Data Quality ←──────────────┘
+```
+
+### 📊 **Comparison: Dagster vs Airflow**
+
+| Feature | Dagster | Airflow |
+|---------|---------|----------|
+| **UI/UX** | Modern, asset-focused | Traditional, task-focused |
+| **Learning Curve** | Medium (newer concepts) | Steep (complex setup) |
+| **File Monitoring** | Real-time (30s detection) | Configurable polling |
+| **Asset Management** | Built-in lineage & metadata | Manual tracking |
+| **Setup Complexity** | Simple (one script) | Complex (DB init, users) |
+| **Resource Usage** | Lightweight | Heavier (scheduler + webserver) |
+| **Best For** | Modern data teams | Traditional workflows |
+
+### 🌐 **External API Data Enrichment**
+
+Both orchestration options support comprehensive data enrichment using external APIs:
+
+#### **Currency Exchange Rates**
+- **Service**: exchangerate-api.com
+- **Free Tier**: 1,500 requests/month
+- **Data Added**: GBP → USD, EUR, CAD, AUD, JPY conversion rates
+- **Fields**: `amount_usd`, `amount_eur`, `unit_price_usd`, etc.
+
+#### **Country Information**
+- **Service**: restcountries.com (completely free)
+- **Data Added**: Region, continent, population, coordinates
+- **Fields**: `country_official_name`, `country_region`, `country_population`, etc.
+
+#### **Product Categorization**
+- **Service**: Local ML + DataMuse API (free)
+- **Data Added**: Category, subcategory, brand detection, seasonal flags
+- **Fields**: `product_category`, `product_subcategory`, `brand_detected`, etc.
+
+#### **Configuration:**
+```bash
+# .env file
+CURRENCY_API_KEY=your_exchangerate_api_key
+ENABLE_EXTERNAL_ENRICHMENT=true
+ENRICHMENT_BATCH_SIZE=10
+```
+
+### 🚀 **Pipeline Automation Features**
+
+#### **Intelligent File Processing:**
+- **Auto-Detection**: New files trigger processing within 30 seconds
+- **Batch Optimization**: Dynamic batch sizes based on file size
+- **Error Recovery**: Failed files automatically retried with conservative settings
+- **Large File Handling**: Special processing for files >10MB
+
+#### **Data Quality Monitoring:**
+- **Real-time Assessment**: Quality scores calculated for every run
+- **Threshold Alerts**: Notifications when quality drops below 85%
+- **Completeness Tracking**: Missing value analysis
+- **Validation Reporting**: Business rule compliance
+
+#### **Scheduling Options:**
+- **File-Triggered**: Immediate processing on file drop
+- **Daily Incremental**: 2 AM daily processing (manual activation)
+- **Weekly Reprocessing**: Sunday 3 AM full reprocessing
+- **Quality Checks**: Every 6 hours automated assessment
+
+### 📈 **Monitoring & Observability**
+
+#### **Dagster UI Features:**
+- Asset materialization tracking
+- Run history and logs
+- Asset lineage visualization
+- Sensor status monitoring
+- Performance metrics
+
+#### **Airflow UI Features:**
+- DAG dependency graphs
+- Task execution logs
+- Run history and statistics
+- Worker performance
+- Connection monitoring
+
+### 🔧 **Getting Started (Choose Your Path)**
+
+#### **For Modern Teams (Recommended):**
+```bash
+python scripts/start_dagster.py
+# → Modern asset-based orchestration
+# → Real-time file monitoring
+# → Intuitive web interface
+```
+
+#### **For Traditional Workflows:**
+```bash
+python scripts/start_airflow.py
+# → Industry-standard orchestration
+# → Traditional DAG management
+# → Enterprise-proven workflows
+```
+
+#### **Documentation:**
+- 📖 **Dagster Guide**: [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)
+- 📖 **API Setup**: External API configuration and usage
+- 🔍 **Troubleshooting**: Common issues and solutions
+
+---
 
 ## Troubleshooting
 

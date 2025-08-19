@@ -4,7 +4,7 @@ Run:
   poetry run python scripts/init_db.py
 """
 
-from de_challenge.data_access.db import create_all
+from data_access.db import create_all
 
 
 def main() -> None:

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, date
 
-from de_challenge.data_access.db import create_all, session_scope
+from data_access.db import create_all, session_scope
 from sqlmodel import select
 from sqlalchemy import func
-from de_challenge.data_access.models.star_schema import (
+from data_access.models.star_schema import (
     DimDate,
     DimProduct,
     DimCustomer,

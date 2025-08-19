@@ -11,24 +11,22 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List
 
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from core.logging import get_logger
 from core.config import settings
+from core.logging import get_logger
 
 # Stage entrypoints
 from etl.bronze.ingest_bronze import main as run_bronze
-from etl.silver.clean_silver import main as run_silver
 from etl.gold.build_gold import main as run_gold
-
+from etl.silver.clean_silver import main as run_silver
 
 logger = get_logger(__name__)
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run ETL pipeline stages")
     p.add_argument("--bronze", action="store_true", help="Run Bronze stage only")
     p.add_argument("--silver", action="store_true", help="Run Silver stage only")
@@ -36,7 +34,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     argv = argv if argv is not None else sys.argv[1:]
     args = parse_args(argv)
 

@@ -6,17 +6,18 @@ Usage (from repo root):
 """
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import date, datetime
+
+from sqlalchemy import func
+from sqlmodel import select
 
 from data_access.db import create_all, session_scope
-from sqlmodel import select
-from sqlalchemy import func
 from data_access.models.star_schema import (
-    DimDate,
-    DimProduct,
-    DimCustomer,
     DimCountry,
+    DimCustomer,
+    DimDate,
     DimInvoice,
+    DimProduct,
     FactSale,
 )
 

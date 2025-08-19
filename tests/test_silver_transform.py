@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-
-from pyspark.sql import Row
-
-from de_challenge.etl.utils.spark import get_spark
 from de_challenge.etl.silver.clean_silver import _cast_and_clean, _deduplicate
+from de_challenge.etl.utils.spark import get_spark
+from pyspark.sql import Row
 
 
 def test_cast_and_clean_and_dedup():
@@ -38,7 +35,7 @@ def test_cast_and_clean_and_dedup():
     df = spark.createDataFrame(rows)
 
     cleaned = _cast_and_clean(df)
-    assert set([c.lower() for c in cleaned.columns]) >= {
+    assert {c.lower() for c in cleaned.columns} >= {
         "invoice_no",
         "stock_code",
         "description",

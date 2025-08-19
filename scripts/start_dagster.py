@@ -9,7 +9,6 @@ and managing the data pipeline workflows.
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 sys.path.append(str(Path.cwd() / "src"))
@@ -39,7 +38,7 @@ def create_dagster_directories():
         Path("dagster_home/logs"),
         Path("data/raw/errors"),  # For error file sensor
     ]
-    
+
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created directory: {directory}")
@@ -48,13 +47,13 @@ def create_dagster_directories():
 def start_dagster_webserver(host="127.0.0.1", port=3000):
     """Start the Dagster web server."""
     logger.info(f"Starting Dagster web server on {host}:{port}")
-    
+
     # Set environment variables
     env = {
         "DAGSTER_HOME": str(Path.cwd() / "dagster_home"),
         "PYTHONPATH": str(Path.cwd() / "src"),
     }
-    
+
     try:
         # Start the web server
         cmd = [
@@ -63,9 +62,9 @@ def start_dagster_webserver(host="127.0.0.1", port=3000):
             "--port", str(port),
             "--module-name", "orchestration.definitions",
         ]
-        
+
         logger.info(f"Running command: {' '.join(cmd)}")
-        
+
         process = subprocess.Popen(
             cmd,
             env={**env, **dict(os.environ)},
@@ -75,15 +74,15 @@ def start_dagster_webserver(host="127.0.0.1", port=3000):
             bufsize=1,
             universal_newlines=True
         )
-        
+
         logger.info("Dagster web server started successfully!")
         logger.info(f"Access the Dagster UI at: http://{host}:{port}")
         logger.info("Press Ctrl+C to stop the server")
-        
+
         # Stream output
         for line in process.stdout:
             print(line.strip())
-            
+
     except KeyboardInterrupt:
         logger.info("Shutting down Dagster web server...")
         process.terminate()
@@ -97,13 +96,13 @@ def start_dagster_webserver(host="127.0.0.1", port=3000):
 def setup_sample_data():
     """Set up sample data for testing the file sensor."""
     import pandas as pd
-    
+
     raw_data_path = Path(settings.raw_data_path)
     raw_data_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Create a small sample dataset if it doesn't exist
     sample_file = raw_data_path / "sample_retail_data.csv"
-    
+
     if not sample_file.exists():
         # Create sample retail data
         sample_data = {
@@ -116,30 +115,29 @@ def setup_sample_data():
             'CustomerID': ['CUST001', 'CUST002', 'CUST001', 'CUST003', 'CUST002'],
             'Country': ['United Kingdom', 'France', 'Germany', 'Spain', 'Italy']
         }
-        
+
         df = pd.DataFrame(sample_data)
         df.to_csv(sample_file, index=False)
-        
+
         logger.info(f"Created sample data file: {sample_file}")
         logger.info("This file will trigger the file sensor when Dagster starts monitoring")
 
 
 def main():
     """Main entry point for starting Dagster."""
-    import os
-    
+
     logger.info("Starting Dagster orchestration system...")
-    
+
     # Check prerequisites
     if not check_dagster_installed():
         sys.exit(1)
-    
+
     # Create necessary directories
     create_dagster_directories()
-    
+
     # Set up sample data for testing
     setup_sample_data()
-    
+
     # Print information about the pipeline
     logger.info("=" * 60)
     logger.info("Retail ETL Pipeline with Dagster Orchestration")
@@ -151,19 +149,19 @@ def main():
     logger.info("- Data quality monitoring")
     logger.info("- Scheduled processing")
     logger.info("=" * 60)
-    
+
     # Start the web server
     host = "127.0.0.1"
     port = 3000
-    
-    print(f"\n[DAGSTER] Starting Dagster UI...")
-    print(f"[PIPELINE] Retail ETL with External API Enrichment")
+
+    print("\n[DAGSTER] Starting Dagster UI...")
+    print("[PIPELINE] Retail ETL with External API Enrichment")
     print(f"[URL] http://{host}:{port}")
     print(f"[DATA] Raw data directory: {settings.raw_data_path}")
-    print(f"[SENSOR] Monitoring for new CSV files")
+    print("[SENSOR] Monitoring for new CSV files")
     print(f"[TRIGGER] To trigger pipeline: Drop a CSV file in {settings.raw_data_path}")
-    print(f"[STOP] To stop: Press Ctrl+C\n")
-    
+    print("[STOP] To stop: Press Ctrl+C\n")
+
     start_dagster_webserver(host, port)
 
 

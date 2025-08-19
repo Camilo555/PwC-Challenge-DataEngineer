@@ -107,6 +107,8 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
 strict_equality = true
+mypy_path = "src"
+namespace_packages = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"

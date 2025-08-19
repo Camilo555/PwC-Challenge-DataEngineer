@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import date
 
 from de_challenge.data_access.db import create_all, session_scope
 from de_challenge.data_access.models.star_schema import (
-    DimDate, DimProduct, DimCustomer, DimCountry, DimInvoice, FactSale
+    DimCountry,
+    DimCustomer,
+    DimDate,
+    DimInvoice,
+    DimProduct,
+    FactSale,
 )
 from de_challenge.data_access.repositories.sales_repository import SalesRepository
 
@@ -16,11 +21,11 @@ def seed_minimal():
         dk = d.year * 10000 + d.month * 100 + d.day
         if not s.get(DimDate, dk):
             s.add(DimDate(
-                date_key=dk, 
-                date=d, 
-                year=2024, 
-                quarter=1, 
-                month=1, 
+                date_key=dk,
+                date=d,
+                year=2024,
+                quarter=1,
+                month=1,
                 week=1,
                 day_name="Tuesday",
                 is_weekend=False,

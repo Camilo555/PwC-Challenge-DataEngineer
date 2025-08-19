@@ -78,5 +78,18 @@ docker/volumes/
 # === Typesense ===
 typesense-data/
 
+# === Orchestration ===
+# Dagster temporary directories
+.tmp_dagster_home*/
+dagster_home/
+.dagster/
+dagster.yaml
+
+# Airflow temporary directories
+airflow_home/
+airflow.db
+airflow.cfg
+webserver_config.py
+
 # === Poetry ===
 poetry.lock  # Descomenta si quieres ignorarlo inicialmente

@@ -18,7 +18,8 @@
       "Bash(poetry run:*)",
       "Bash(grep:*)",
       "Bash(touch:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(poetry --version)"
     ],
     "defaultMode": "acceptEdits"
   }

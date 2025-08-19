@@ -4,9 +4,12 @@ Provides secure connection management, schema operations, and data integrity che
 """
 
 import logging
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
+
+import pandas as pd
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -69,34 +72,45 @@ class SupabaseClient:
             self._session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
         return self._session_factory
 
-    async def test_connection(self) -> dict[str, Any]:
+    async def test_connection(self, max_retries: int = 3) -> dict[str, Any]:
         """
-        Test Supabase connection and return database information.
+        Test Supabase connection with retry logic.
+
+        Args:
+            max_retries: Maximum number of retry attempts
 
         Returns:
             Dict containing connection status and database info
         """
-        try:
-            with self.engine.connect() as conn:
-                # Test basic connectivity
-                result = conn.execute(text("SELECT version(), current_database(), current_user"))
-                row = result.fetchone()
+        for attempt in range(max_retries + 1):
+            try:
+                with self.engine.connect() as conn:
+                    # Test basic connectivity
+                    result = conn.execute(text("SELECT version(), current_database(), current_user"))
+                    row = result.fetchone()
 
-                if row:
-                    version, database, user = row
-                    logger.info(f"Connected to Supabase database '{database}' as user '{user}'")
+                    if row:
+                        version, database, user = row
+                        logger.info(f"Connected to Supabase database '{database}' as user '{user}' (attempt {attempt + 1})")
 
-                    return {
-                        "status": "connected",
-                        "database": database,
-                        "user": user,
-                        "version": version,
-                        "ssl_enabled": "supabase.co" in settings.database_url
-                    }
+                        return {
+                            "status": "connected",
+                            "database": database,
+                            "user": user,
+                            "version": version,
+                            "ssl_enabled": "supabase.co" in settings.database_url,
+                            "connection_attempt": attempt + 1,
+                            "retry_count": attempt
+                        }
 
-        except Exception as e:
-            logger.error(f"Supabase connection test failed: {e}")
-            raise DatabaseConnectionError(f"Failed to connect to Supabase: {e}") from e
+            except Exception as e:
+                if attempt < max_retries:
+                    retry_delay = 2 ** attempt  # Exponential backoff
+                    logger.warning(f"Connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"All connection attempts failed. Last error: {e}")
+                    raise DatabaseConnectionError(f"Failed to connect to Supabase after {max_retries + 1} attempts: {e}") from e
 
         raise DatabaseConnectionError("Unknown connection error")
 
@@ -371,6 +385,132 @@ class SupabaseClient:
         finally:
             session.close()
 
+    async def backup_table_data(self, table_name: str, backup_path: Path) -> dict[str, Any]:
+        """
+        Create a backup of table data to local storage.
+        
+        Args:
+            table_name: Name of the table to backup
+            backup_path: Path to store backup files
+            
+        Returns:
+            Backup metadata and statistics
+        """
+        try:
+            backup_path.mkdir(parents=True, exist_ok=True)
+            
+            with self.engine.connect() as conn:
+                # Export table data to CSV
+                result = conn.execute(text(f"SELECT * FROM {table_name}"))
+                df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                
+                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                backup_file = backup_path / f"{table_name}_backup_{timestamp}.csv"
+                
+                df.to_csv(backup_file, index=False)
+                
+                backup_metadata = {
+                    'table_name': table_name,
+                    'backup_file': str(backup_file),
+                    'record_count': len(df),
+                    'file_size': backup_file.stat().st_size,
+                    'backup_timestamp': pd.Timestamp.now().isoformat(),
+                    'status': 'completed'
+                }
+                
+                logger.info(f"Table backup completed: {backup_metadata}")
+                return backup_metadata
+                
+        except Exception as e:
+            logger.error(f"Backup failed for table {table_name}: {e}")
+            return {
+                'table_name': table_name,
+                'status': 'failed',
+                'error': str(e),
+                'backup_timestamp': pd.Timestamp.now().isoformat()
+            }
+
+    async def restore_table_data(self, backup_file: Path, table_name: str) -> dict[str, Any]:
+        """
+        Restore table data from backup file.
+        
+        Args:
+            backup_file: Path to backup CSV file
+            table_name: Name of target table
+            
+        Returns:
+            Restore operation metadata
+        """
+        try:
+            if not backup_file.exists():
+                raise FileNotFoundError(f"Backup file not found: {backup_file}")
+            
+            df = pd.read_csv(backup_file)
+            
+            with self.engine.connect() as conn:
+                # Clear existing data (optional - could be parameterized)
+                conn.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
+                
+                # Insert backup data
+                df.to_sql(table_name, conn, if_exists='append', index=False)
+                conn.commit()
+                
+                restore_metadata = {
+                    'table_name': table_name,
+                    'backup_file': str(backup_file),
+                    'records_restored': len(df),
+                    'restore_timestamp': pd.Timestamp.now().isoformat(),
+                    'status': 'completed'
+                }
+                
+                logger.info(f"Table restore completed: {restore_metadata}")
+                return restore_metadata
+                
+        except Exception as e:
+            logger.error(f"Restore failed for table {table_name}: {e}")
+            return {
+                'table_name': table_name,
+                'status': 'failed',
+                'error': str(e),
+                'restore_timestamp': pd.Timestamp.now().isoformat()
+            }
+
+    async def create_full_backup(self, backup_dir: str = "backups/supabase") -> dict[str, Any]:
+        """Create full backup of all star schema tables."""
+        backup_path = Path(backup_dir)
+        backup_summary = {
+            'backup_timestamp': pd.Timestamp.now().isoformat(),
+            'backup_directory': str(backup_path),
+            'tables_backed_up': [],
+            'total_records': 0,
+            'total_size': 0,
+            'status': 'completed',
+            'errors': []
+        }
+        
+        tables = ["fact_sale", "dim_product", "dim_customer", "dim_country", "dim_invoice", "dim_date"]
+        
+        for table in tables:
+            try:
+                result = await self.backup_table_data(table, backup_path)
+                if result['status'] == 'completed':
+                    backup_summary['tables_backed_up'].append(result)
+                    backup_summary['total_records'] += result['record_count']
+                    backup_summary['total_size'] += result['file_size']
+                else:
+                    backup_summary['errors'].append(result)
+            except Exception as e:
+                backup_summary['errors'].append({
+                    'table_name': table,
+                    'error': str(e)
+                })
+        
+        if backup_summary['errors']:
+            backup_summary['status'] = 'partial'
+            
+        logger.info(f"Full backup completed: {len(backup_summary['tables_backed_up'])} tables, {backup_summary['total_records']} records")
+        return backup_summary
+
     async def cleanup_old_connections(self) -> None:
         """Clean up old database connections."""
         try:
@@ -422,7 +562,7 @@ async def health_check_supabase() -> dict[str, Any]:
             "connection": connection_info,
             "tables": statistics,
             "integrity": integrity_report,
-            "timestamp": "2024-01-01T00:00:00Z"  # TODO: Add actual timestamp
+            "timestamp": pd.Timestamp.now().isoformat()
         }
 
     except Exception as e:
@@ -430,5 +570,5 @@ async def health_check_supabase() -> dict[str, Any]:
         return {
             "status": "unhealthy",
             "error": str(e),
-            "timestamp": "2024-01-01T00:00:00Z"  # TODO: Add actual timestamp
+            "timestamp": pd.Timestamp.now().isoformat()
         }

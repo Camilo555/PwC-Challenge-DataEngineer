@@ -5,6 +5,7 @@ Provides comprehensive database monitoring and integrity validation.
 
 from typing import Any
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, status
 
 from core.config import settings
@@ -222,3 +223,104 @@ async def get_config() -> dict[str, Any]:
         config["reason"] = "Missing required configuration (url, key, or not using postgresql)"
 
     return config
+
+
+@router.post("/backup/create", summary="Create Full Database Backup")
+async def create_backup(backup_dir: str = "backups/supabase") -> dict[str, Any]:
+    """Create comprehensive backup of all star schema tables."""
+    if not settings.is_supabase_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase integration is not enabled"
+        )
+
+    try:
+        client = get_supabase_client()
+        backup_summary = await client.create_full_backup(backup_dir)
+        
+        logger.info(f"Database backup completed: {backup_summary['status']}")
+        
+        return {
+            "message": "Database backup completed",
+            "backup_summary": backup_summary,
+            "backup_directory": backup_dir
+        }
+
+    except Exception as e:
+        logger.error(f"Database backup failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Backup operation failed: {e}"
+        ) from e
+
+
+@router.post("/backup/table/{table_name}", summary="Backup Single Table")
+async def backup_table(table_name: str, backup_dir: str = "backups/supabase") -> dict[str, Any]:
+    """Create backup of a specific table."""
+    if not settings.is_supabase_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase integration is not enabled"
+        )
+
+    try:
+        from pathlib import Path
+        client = get_supabase_client()
+        backup_path = Path(backup_dir)
+        
+        backup_result = await client.backup_table_data(table_name, backup_path)
+        
+        if backup_result['status'] == 'failed':
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=backup_result['error']
+            )
+        
+        logger.info(f"Table backup completed: {table_name}")
+        return backup_result
+
+    except Exception as e:
+        logger.error(f"Table backup failed for {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Table backup failed: {e}"
+        ) from e
+
+
+@router.get("/monitoring/connection", summary="Advanced Connection Monitoring")
+async def monitor_connection() -> dict[str, Any]:
+    """Perform advanced connection monitoring with retry testing."""
+    if not settings.is_supabase_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase integration is not enabled"
+        )
+
+    try:
+        client = get_supabase_client()
+        
+        # Test with different retry scenarios
+        connection_tests = {
+            'basic_connection': await client.test_connection(max_retries=1),
+            'resilience_test': await client.test_connection(max_retries=3)
+        }
+        
+        # Get table statistics for monitoring
+        table_stats = await client.get_table_statistics()
+        
+        monitoring_report = {
+            'connection_tests': connection_tests,
+            'table_statistics': table_stats,
+            'monitoring_timestamp': pd.Timestamp.now().isoformat(),
+            'connection_health': 'excellent' if connection_tests['basic_connection']['retry_count'] == 0 else 'good'
+        }
+        
+        logger.info("Advanced connection monitoring completed")
+        return monitoring_report
+
+    except Exception as e:
+        logger.error(f"Connection monitoring failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Connection monitoring failed: {e}"
+        ) from e

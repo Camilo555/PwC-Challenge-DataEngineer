@@ -62,7 +62,7 @@ jobs:
           --junitxml=test-results-unit.xml
 
     - name: Upload unit test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: unit-test-results-${{ matrix.python-version }}
@@ -140,7 +140,7 @@ jobs:
           -x
 
     - name: Upload integration test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: integration-test-results
@@ -249,7 +249,7 @@ jobs:
           -x
 
     - name: Upload Spark test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: spark-test-results
@@ -406,7 +406,7 @@ jobs:
           --junitxml=test-results-performance.xml
 
     - name: Upload performance test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: performance-test-results
@@ -479,7 +479,7 @@ jobs:
         "
 
     - name: Upload data quality results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: data-quality-results
@@ -528,7 +528,7 @@ jobs:
         generateSarif: "1"
 
     - name: Upload security scan results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-scan-results
@@ -593,7 +593,7 @@ jobs:
           --html load-test-report.html
 
     - name: Upload load test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: load-test-results
@@ -640,7 +640,7 @@ jobs:
         echo "- ✅ Security Tests: ${{ needs.security-tests.result }}" >> test-summary.md
 
     - name: Upload test summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-summary
         path: test-summary.md

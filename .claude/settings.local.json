@@ -19,7 +19,15 @@
       "Bash(grep:*)",
       "Bash(touch:*)",
       "Bash(chmod:*)",
-      "Bash(poetry --version)"
+      "Bash(poetry --version)",
+      "Bash(set DATABASE_URL=sqlite:///./data/warehouse/retail.db)",
+      "Bash(export:*)",
+      "Bash(export PYTHONPATH=src)",
+      "Bash(export PROCESSING_ENGINE=spark)",
+      "Bash(curl:*)",
+      "Bash(set PROCESSING_ENGINE=pandas)",
+      "Bash(set AIRFLOW_HOME=./airflow_home)",
+      "Bash(cat:*)"
     ],
     "defaultMode": "acceptEdits"
   }

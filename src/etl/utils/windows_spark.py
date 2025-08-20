@@ -101,15 +101,50 @@ def setup_windows_environment() -> bool:
         # Setup Hadoop for Windows - use local hadoop directory
         project_root = Path(__file__).parent.parent.parent.parent
         hadoop_dir = project_root / "hadoop"
+        
         if hadoop_dir.exists():
             hadoop_home = str(hadoop_dir.absolute())
             os.environ["HADOOP_HOME"] = hadoop_home
             os.environ["HADOOP_CONF_DIR"] = hadoop_home
+            
+            # Ensure winutils.exe exists
+            winutils_path = hadoop_dir / "bin" / "winutils.exe"
+            if not winutils_path.exists():
+                logger.warning(f"winutils.exe not found at {winutils_path}")
+                logger.info("Downloading winutils.exe for Windows compatibility...")
+                try:
+                    import urllib.request
+                    winutils_url = "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.0/bin/winutils.exe"
+                    hadoop_dir.mkdir(parents=True, exist_ok=True)
+                    (hadoop_dir / "bin").mkdir(parents=True, exist_ok=True)
+                    urllib.request.urlretrieve(winutils_url, winutils_path)
+                    logger.info(f"Downloaded winutils.exe to {winutils_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to download winutils.exe: {e}")
+            
             logger.info(f"Using local HADOOP_HOME: {hadoop_home}")
         else:
-            # Set to empty to avoid Spark trying to find Hadoop
-            os.environ.setdefault("HADOOP_HOME", "")
-            os.environ.setdefault("HADOOP_CONF_DIR", "")
+            # Create minimal hadoop structure
+            hadoop_dir.mkdir(parents=True, exist_ok=True)
+            (hadoop_dir / "bin").mkdir(parents=True, exist_ok=True)
+            
+            # Try to download winutils.exe
+            try:
+                import urllib.request
+                winutils_url = "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.0/bin/winutils.exe"
+                winutils_path = hadoop_dir / "bin" / "winutils.exe"
+                urllib.request.urlretrieve(winutils_url, winutils_path)
+                logger.info(f"Downloaded winutils.exe to {winutils_path}")
+                
+                hadoop_home = str(hadoop_dir.absolute())
+                os.environ["HADOOP_HOME"] = hadoop_home
+                os.environ["HADOOP_CONF_DIR"] = hadoop_home
+                logger.info(f"Created and configured HADOOP_HOME: {hadoop_home}")
+            except Exception as e:
+                logger.warning(f"Failed to setup Hadoop directory: {e}")
+                # Set minimal environment to avoid errors
+                os.environ.setdefault("HADOOP_HOME", "")
+                os.environ.setdefault("HADOOP_CONF_DIR", "")
 
         # Set proper temp directory
         temp_dir = Path.cwd() / "temp"
@@ -124,57 +159,79 @@ def setup_windows_environment() -> bool:
         return True  # Continue anyway for testing
 
 
-def get_windows_spark_config(skip_delta: bool = False) -> dict[str, str]:
+def get_windows_spark_config(skip_delta: bool = True) -> dict[str, str]:
     """
     Get Windows-specific Spark configuration.
 
     Args:
-        skip_delta: Skip Delta Lake configuration for tests
+        skip_delta: Skip Delta Lake configuration for Windows compatibility
 
     Returns:
         Dictionary of Spark configuration properties
     """
+    # Create safe temporary directories
+    temp_dir = Path.cwd() / "temp"
+    temp_dir.mkdir(exist_ok=True)
+    
     config = {
         # Basic configuration
         "spark.app.name": settings.spark_app_name,
-        "spark.master": "local[*]",
-        "spark.driver.memory": "4g",
-        "spark.executor.memory": "4g",
+        "spark.master": "local[2]",  # Use only 2 cores to reduce resource pressure
+        "spark.driver.memory": "2g",  # Reduced memory for Windows compatibility
+        "spark.executor.memory": "2g",
 
         # Windows-specific optimizations
-        "spark.sql.shuffle.partitions": "4",  # Reduced for local mode
+        "spark.sql.shuffle.partitions": "2",  # Minimal partitions for Windows
         "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
         "spark.sql.adaptive.enabled": "true",
         "spark.sql.adaptive.coalescePartitions.enabled": "true",
         "spark.sql.adaptive.localShuffleReader.enabled": "true",
 
-        # Disable UI for headless environments
+        # Disable problematic features on Windows
         "spark.ui.enabled": "false",
         "spark.ui.showConsoleProgress": "false",
+        "spark.sql.execution.arrow.pyspark.enabled": "false",
+        
+        # Hadoop configuration for Windows
+        "spark.hadoop.fs.file.impl": "org.apache.hadoop.fs.LocalFileSystem",
+        "spark.hadoop.fs.file.impl.disable.cache": "false",
+        
+        # Native library workarounds
+        "spark.hadoop.io.nativeio.NativeIO$Windows.enabled": "false",
+        "spark.sql.catalogImplementation": "in-memory",
+        
+        # File handling optimizations
+        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
+        "spark.hadoop.parquet.enable.summary-metadata": "false",
+        "spark.sql.parquet.mergeSchema": "false",
+        "spark.sql.parquet.filterPushdown": "true",
+        
+        # Temporary directory configuration
+        "spark.local.dir": str(temp_dir),
+        "spark.sql.warehouse.dir": str(temp_dir / "spark-warehouse"),
+        "spark.hadoop.hadoop.tmp.dir": str(temp_dir / "hadoop-tmp"),
+        
+        # Memory and GC tuning for Windows
+        "spark.driver.maxResultSize": "1g",
+        "spark.sql.adaptive.skewJoin.enabled": "false",  # Disable to reduce complexity
+        "spark.sql.adaptive.localShuffleReader.enabled": "false",
+        
+        # Reduce logging noise
+        "spark.sql.adaptive.logLevel": "ERROR",
+        "spark.sql.execution.arrow.maxRecordsPerBatch": "1000",
+        
+        # Checkpoint and recovery
+        "spark.sql.recovery.checkpointInterval": "20",
+        "spark.cleaner.referenceTracking.cleanCheckpoints": "true",
     }
 
-    # Add Delta Lake configuration only if not skipped
+    # Only add Delta Lake if explicitly requested (not recommended on Windows)
     if not skip_delta:
+        logger.warning("Adding Delta Lake configuration - may cause native library issues on Windows")
         config.update({
-            # Delta Lake configuration
             "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
             "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         })
-
-    config.update({
-
-        # Memory and performance tuning for Windows
-        "spark.sql.execution.arrow.pyspark.enabled": "false",  # Can cause issues on Windows
-        "spark.driver.maxResultSize": "2g",
-        "spark.sql.adaptive.skewJoin.enabled": "true",
-
-        # Logging configuration
-        "spark.sql.adaptive.logLevel": "WARN",
-
-        # Windows file system handling
-        "spark.hadoop.fs.defaultFS": "file:///",
-        "spark.sql.warehouse.dir": str(Path.cwd() / "spark-warehouse"),
-    })
 
     return config
 

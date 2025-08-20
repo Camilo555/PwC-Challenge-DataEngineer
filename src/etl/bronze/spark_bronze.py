@@ -32,9 +32,22 @@ SALES_SCHEMA = StructType([
 
 def _create_spark_session() -> SparkSession:
     """Create Spark session for Bronze layer processing."""
+    import platform
+    
+    # Use Windows-optimized configuration if on Windows
+    if platform.system() == "Windows":
+        try:
+            from etl.utils.windows_spark import create_windows_spark_session
+            logger.info("Using Windows-optimized Spark session for Bronze layer")
+            return create_windows_spark_session("RetailETL-BronzeLayer")
+        except Exception as e:
+            logger.warning(f"Windows Spark session failed, falling back to standard: {e}")
+    
+    # Standard configuration for non-Windows systems
     return (
         SparkSession.builder
         .appName("RetailETL-BronzeLayer")
+        .master("local[*]")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config("spark.sql.warehouse.dir", str(settings.bronze_path))
@@ -106,27 +119,32 @@ def _normalize_column_names(df: DataFrame) -> DataFrame:
     """Normalize column names to standard format."""
     logger.info("Normalizing column names...")
     
-    # Column name mapping
+    # Column name mapping - avoid conflicts with existing columns
     column_mapping = {
         "InvoiceNo": "invoice_no",
-        "invoiceno": "invoice_no",
+        "invoiceno": "invoice_no", 
         "StockCode": "stock_code",
         "stockcode": "stock_code",
         "Description": "description",
         "Quantity": "quantity",
-        "InvoiceDate": "invoice_timestamp",
-        "invoicedate": "invoice_timestamp",
-        "UnitPrice": "unit_price",
+        "UnitPrice": "unit_price", 
         "unitprice": "unit_price",
         "CustomerID": "customer_id",
-        "customerid": "customer_id",
+        "customerid": "customer_id", 
         "Country": "country"
     }
     
-    # Apply column renaming
+    # Handle InvoiceDate -> invoice_timestamp mapping carefully
+    if "InvoiceDate" in df.columns and "invoice_timestamp" not in df.columns:
+        column_mapping["InvoiceDate"] = "invoice_timestamp"
+    elif "invoicedate" in df.columns and "invoice_timestamp" not in df.columns:
+        column_mapping["invoicedate"] = "invoice_timestamp"
+    
+    # Apply column renaming only for columns that exist and won't cause conflicts
     for old_name, new_name in column_mapping.items():
-        if old_name in df.columns:
+        if old_name in df.columns and new_name not in df.columns:
             df = df.withColumnRenamed(old_name, new_name)
+            logger.info(f"Renamed column: {old_name} -> {new_name}")
     
     return df
 
@@ -135,15 +153,20 @@ def _add_metadata_and_partitioning(df: DataFrame) -> DataFrame:
     """Add metadata and partitioning columns."""
     logger.info("Adding metadata and partitioning columns...")
     
-    # Add ingestion metadata
-    df = df.withColumn("ingestion_timestamp", F.current_timestamp())
-    df = df.withColumn("schema_version", F.lit("1.0"))
-    df = df.withColumn("row_id", F.monotonically_increasing_id())
+    # Add ingestion metadata (only if not already present)
+    if "ingestion_timestamp" not in df.columns:
+        df = df.withColumn("ingestion_timestamp", F.current_timestamp())
+    if "schema_version" not in df.columns:
+        df = df.withColumn("schema_version", F.lit("1.0"))
+    if "row_id" not in df.columns:
+        df = df.withColumn("row_id", F.monotonically_increasing_id())
     
     # Parse invoice timestamp and add partitioning columns
     if "invoice_timestamp" in df.columns:
-        df = df.withColumn("invoice_timestamp", 
+        # Ensure proper timestamp format
+        df = df.withColumn("invoice_timestamp_parsed", 
                           F.to_timestamp(F.col("invoice_timestamp"), "M/d/yyyy H:mm"))
+        df = df.drop("invoice_timestamp").withColumnRenamed("invoice_timestamp_parsed", "invoice_timestamp")
         df = df.withColumn("invoice_date", F.to_date(F.col("invoice_timestamp")))
     
     # Add ingestion date for partitioning
@@ -218,12 +241,26 @@ def ingest_bronze_spark() -> bool:
         # Create output directory
         out_dir.mkdir(parents=True, exist_ok=True)
         
-        # Write as partitioned Parquet files
+        # Write data with Windows compatibility
         logger.info(f"Writing {df.count()} records to Bronze layer...")
         
-        df.write.mode("overwrite").partitionBy("ingestion_date").parquet(str(out_dir))
+        import platform
+        if platform.system() == "Windows":
+            # Use Windows-compatible writing approach
+            try:
+                # Try to write as single file to avoid partitioning issues on Windows
+                df.coalesce(1).write.mode("overwrite").parquet(str(out_dir / "bronze_data.parquet"))
+                logger.info(f"Bronze ingest complete -> {out_dir}/bronze_data.parquet (Windows-compatible mode)")
+            except Exception as e:
+                logger.warning(f"Parquet writing failed on Windows, trying CSV: {e}")
+                # Fallback to CSV if Parquet fails
+                df.coalesce(1).write.mode("overwrite").option("header", "true").csv(str(out_dir / "bronze_data.csv"))
+                logger.info(f"Bronze ingest complete -> {out_dir}/bronze_data.csv (CSV fallback mode)")
+        else:
+            # Standard partitioned approach for Linux/Unix
+            df.write.mode("overwrite").partitionBy("ingestion_date").parquet(str(out_dir))
+            logger.info(f"Bronze ingest complete -> {out_dir} (partitioned parquet mode)")
         
-        logger.info(f"Bronze ingest complete -> {out_dir} (format=parquet, Spark mode)")
         return True
         
     except Exception as e:

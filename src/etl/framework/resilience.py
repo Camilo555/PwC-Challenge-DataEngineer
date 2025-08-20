@@ -165,7 +165,6 @@ class ErrorClassifier:
         }
         
         self.severity_rules: Dict[ErrorCategory, ErrorSeverity] = {
-            ErrorCategory.CRITICAL: ErrorSeverity.CRITICAL,
             ErrorCategory.RESOURCE: ErrorSeverity.HIGH,
             ErrorCategory.INFRASTRUCTURE: ErrorSeverity.HIGH,
             ErrorCategory.CONFIGURATION: ErrorSeverity.MEDIUM,

@@ -4,10 +4,9 @@ Provides foundational configuration management
 """
 from __future__ import annotations
 
-import os
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,44 +39,45 @@ class OrchestrationEngine(str, Enum):
 
 class BaseConfig(BaseSettings):
     """Enhanced base configuration with comprehensive settings."""
-    
+
     # Environment
     environment: Environment = Field(default=Environment.DEVELOPMENT)
     debug: bool = Field(default=False)
-    
+
     # Project paths
     project_root: Path = Field(default_factory=lambda: Path.cwd())
     src_path: Path = Field(default_factory=lambda: Path.cwd() / "src")
-    
+
     # Data paths (medallion architecture)
     data_path: Path = Field(default_factory=lambda: Path.cwd() / "data")
     raw_data_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "raw")
     bronze_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "bronze")
     silver_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "silver")
     gold_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "gold")
-    
+
     # Processing configuration
     processing_engine: ProcessingEngine = Field(default=ProcessingEngine.PANDAS)
     orchestration_engine: OrchestrationEngine = Field(default=OrchestrationEngine.DAGSTER)
-    
+
     # Performance settings
     max_workers: int = Field(default=4)
     batch_size: int = Field(default=1000)
     memory_limit_gb: float = Field(default=4.0)
-    
+
     # Feature flags
     enable_external_apis: bool = Field(default=True)
     enable_data_quality_checks: bool = Field(default=True)
     enable_monitoring: bool = Field(default=True)
     enable_caching: bool = Field(default=True)
-    
+    _enable_vector_search: bool = Field(default=True, alias="enable_vector_search")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="allow"
     )
-        
+
     @field_validator("project_root", "src_path", "data_path", mode="before")
     @classmethod
     def resolve_paths(cls, v: Any) -> Path:
@@ -88,9 +88,9 @@ class BaseConfig(BaseSettings):
             path = v
         else:
             return Path(str(v))
-            
+
         return path.resolve()
-    
+
     def validate_paths(self) -> None:
         """Validate that required paths exist and are accessible."""
         paths_to_check = [
@@ -100,11 +100,11 @@ class BaseConfig(BaseSettings):
             self.silver_path,
             self.gold_path
         ]
-        
+
         for path in paths_to_check:
             path.mkdir(parents=True, exist_ok=True)
-    
-    def get_environment_config(self) -> Dict[str, Any]:
+
+    def get_environment_config(self) -> dict[str, Any]:
         """Get environment-specific configuration overrides."""
         config_overrides = {
             Environment.DEVELOPMENT: {
@@ -129,17 +129,17 @@ class BaseConfig(BaseSettings):
                 "enable_caching": True,
             }
         }
-        
+
         return config_overrides.get(self.environment, {})
-    
+
     def is_production(self) -> bool:
         """Check if running in production environment."""
         return self.environment == Environment.PRODUCTION
-        
+
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == Environment.DEVELOPMENT
-    
+
     @property
     def spark_config(self) -> dict:
         """Get Spark configuration for backward compatibility."""
@@ -158,7 +158,7 @@ class BaseConfig(BaseSettings):
                 "org.postgresql:postgresql:42.7.3"
             ]),
         }
-    
+
     def get_database_url(self, async_mode: bool = False) -> str:
         """Get database URL for backward compatibility."""
         database_url = getattr(self, "database_url", "sqlite:///./data/warehouse/retail.db")
@@ -168,13 +168,13 @@ class BaseConfig(BaseSettings):
             elif database_url.startswith("postgresql://"):
                 return database_url.replace("postgresql://", "postgresql+asyncpg://")
         return database_url
-    
+
     def get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
         from datetime import datetime
         return datetime.utcnow().isoformat()
-    
+
     @property
     def enable_vector_search(self) -> bool:
         """Enable vector search functionality."""
-        return self.environment != Environment.TESTING
+        return self._enable_vector_search and self.environment != Environment.TESTING

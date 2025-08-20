@@ -132,3 +132,27 @@ playground/
 *.pid
 *.lock
 *.sock
+
+# === Claude Code ===
+# Local Claude Code settings
+.claude/settings.local.json
+
+# === API & Security ===
+# OAuth tokens and API keys
+*.token
+*.key
+secrets/
+.secrets/
+
+# === Background Processing ===
+# Celery/RQ
+celerybeat-schedule
+celerybeat.pid
+
+# Redis dumps
+dump.rdb
+
+# === GraphQL ===
+# GraphQL generated files
+graphql_schema.json
+schema.graphql

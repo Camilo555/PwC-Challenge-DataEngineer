@@ -9,13 +9,22 @@ on:
 jobs:
   claude-code:
     runs-on: ubuntu-latest
-    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Check Claude Code Token
+      id: check-token
+      run: |
+        if [ -n "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
+          echo "token-available=true" >> $GITHUB_OUTPUT
+        else
+          echo "token-available=false" >> $GITHUB_OUTPUT
+        fi
+      
     - name: Claude Code Action
+      if: steps.check-token.outputs.token-available == 'true'
       uses: anthropics/claude-code-action@v1
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -32,12 +41,8 @@ jobs:
           **/logs/**
           **/data/**
         
-  claude-code-fallback:
-    runs-on: ubuntu-latest
-    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' }}
-    
-    steps:
     - name: Claude Code Setup Notice
+      if: steps.check-token.outputs.token-available == 'false'
       run: |
         echo "## Claude Code Setup Required" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY

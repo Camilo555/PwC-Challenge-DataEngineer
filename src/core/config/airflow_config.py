@@ -8,8 +8,8 @@ from datetime import timedelta, datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .base_config import BaseConfig, Environment
 
@@ -18,82 +18,82 @@ class AirflowConfig(BaseSettings):
     """Enhanced Airflow configuration with production-ready settings."""
     
     # Core Airflow settings
-    airflow_home: Optional[str] = Field(default=None, env="AIRFLOW_HOME")
-    dags_folder: str = Field(default="src/airflow_dags", env="AIRFLOW__CORE__DAGS_FOLDER")
-    base_log_folder: str = Field(default="logs", env="AIRFLOW__LOGGING__BASE_LOG_FOLDER")
+    airflow_home: Optional[str] = Field(default=None)
+    dags_folder: str = Field(default="src/airflow_dags")
+    base_log_folder: str = Field(default="logs")
     
     # Database configuration
     sql_alchemy_conn: str = Field(
-        default="sqlite:///airflow.db",
-        env="AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"
+        default="sqlite:///airflow.db"
     )
     
     # Executor configuration
-    executor: str = Field(default="LocalExecutor", env="AIRFLOW__CORE__EXECUTOR")
-    max_active_runs_per_dag: int = Field(default=3, env="AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG")
-    max_active_tasks_per_dag: int = Field(default=16, env="AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG")
-    parallelism: int = Field(default=32, env="AIRFLOW__CORE__PARALLELISM")
+    executor: str = Field(default="LocalExecutor")
+    max_active_runs_per_dag: int = Field(default=3)
+    max_active_tasks_per_dag: int = Field(default=16)
+    parallelism: int = Field(default=32)
     
     # Security settings
-    authenticate: bool = Field(default=True, env="AIRFLOW__WEBSERVER__AUTHENTICATE")
+    authenticate: bool = Field(default=True)
     auth_backend: str = Field(
-        default="airflow.contrib.auth.backends.password_auth",
-        env="AIRFLOW__WEBSERVER__AUTH_BACKEND"
+        default="airflow.contrib.auth.backends.password_auth"
     )
-    secret_key: str = Field(default="", env="AIRFLOW__WEBSERVER__SECRET_KEY")
+    secret_key: str = Field(default="")
     
     # Web server configuration
-    web_server_host: str = Field(default="0.0.0.0", env="AIRFLOW__WEBSERVER__WEB_SERVER_HOST")
-    web_server_port: int = Field(default=8080, env="AIRFLOW__WEBSERVER__WEB_SERVER_PORT")
-    workers: int = Field(default=4, env="AIRFLOW__WEBSERVER__WORKERS")
+    web_server_host: str = Field(default="0.0.0.0")
+    web_server_port: int = Field(default=8080)
+    workers: int = Field(default=4)
     
     # Scheduler configuration
-    scheduler_heartbeat_sec: int = Field(default=5, env="AIRFLOW__SCHEDULER__SCHEDULER_HEARTBEAT_SEC")
-    min_file_process_interval: int = Field(default=30, env="AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL")
-    dag_dir_list_interval: int = Field(default=300, env="AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL")
-    max_threads: int = Field(default=2, env="AIRFLOW__SCHEDULER__MAX_THREADS")
+    scheduler_heartbeat_sec: int = Field(default=5)
+    min_file_process_interval: int = Field(default=30)
+    dag_dir_list_interval: int = Field(default=300)
+    max_threads: int = Field(default=2)
     
     # Email configuration
-    smtp_host: Optional[str] = Field(default=None, env="AIRFLOW__SMTP__SMTP_HOST")
-    smtp_port: int = Field(default=587, env="AIRFLOW__SMTP__SMTP_PORT")
-    smtp_user: Optional[str] = Field(default=None, env="AIRFLOW__SMTP__SMTP_USER")
-    smtp_password: Optional[str] = Field(default=None, env="AIRFLOW__SMTP__SMTP_PASSWORD")
-    smtp_mail_from: str = Field(default="airflow@example.com", env="AIRFLOW__SMTP__SMTP_MAIL_FROM")
+    smtp_host: Optional[str] = Field(default=None)
+    smtp_port: int = Field(default=587)
+    smtp_user: Optional[str] = Field(default=None)
+    smtp_password: Optional[str] = Field(default=None)
+    smtp_mail_from: str = Field(default="airflow@example.com")
     
     # Slack configuration
-    slack_webhook_url: Optional[str] = Field(default=None, env="SLACK_WEBHOOK_URL")
-    slack_channel: str = Field(default="#data-alerts", env="SLACK_CHANNEL")
-    slack_username: str = Field(default="Airflow", env="SLACK_USERNAME")
+    slack_webhook_url: Optional[str] = Field(default=None)
+    slack_channel: str = Field(default="#data-alerts")
+    slack_username: str = Field(default="Airflow")
     
     # Monitoring and logging
-    enable_metrics: bool = Field(default=True, env="AIRFLOW__METRICS__STATSD_ON")
-    statsd_host: str = Field(default="localhost", env="AIRFLOW__METRICS__STATSD_HOST")
-    statsd_port: int = Field(default=8125, env="AIRFLOW__METRICS__STATSD_PORT")
+    enable_metrics: bool = Field(default=True)
+    statsd_host: str = Field(default="localhost")
+    statsd_port: int = Field(default=8125)
     
     # Retry configuration
-    default_retries: int = Field(default=3, env="AIRFLOW_DEFAULT_RETRIES")
-    default_retry_delay_minutes: int = Field(default=5, env="AIRFLOW_DEFAULT_RETRY_DELAY_MINUTES")
-    max_retry_delay_minutes: int = Field(default=60, env="AIRFLOW_MAX_RETRY_DELAY_MINUTES")
+    default_retries: int = Field(default=3)
+    default_retry_delay_minutes: int = Field(default=5)
+    max_retry_delay_minutes: int = Field(default=60)
     
     # Task timeout configuration
-    default_task_timeout_hours: int = Field(default=2, env="AIRFLOW_DEFAULT_TASK_TIMEOUT_HOURS")
-    etl_task_timeout_hours: int = Field(default=4, env="AIRFLOW_ETL_TASK_TIMEOUT_HOURS")
+    default_task_timeout_hours: int = Field(default=2)
+    etl_task_timeout_hours: int = Field(default=4)
     
     # External services
-    enable_external_apis: bool = Field(default=True, env="AIRFLOW_ENABLE_EXTERNAL_APIS")
-    api_timeout_seconds: int = Field(default=30, env="AIRFLOW_API_TIMEOUT_SECONDS")
+    enable_external_apis: bool = Field(default=True)
+    api_timeout_seconds: int = Field(default=30)
     
     # Data quality thresholds
-    min_quality_score: float = Field(default=0.8, env="AIRFLOW_MIN_QUALITY_SCORE")
-    max_null_percentage: float = Field(default=0.1, env="AIRFLOW_MAX_NULL_PERCENTAGE")
+    min_quality_score: float = Field(default=0.8)
+    max_null_percentage: float = Field(default=0.1)
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="allow"
+    )
     
-    @validator("airflow_home", pre=True)
+    @field_validator("airflow_home", mode="before")
+    @classmethod
     def set_airflow_home(cls, v: Optional[str]) -> str:
         """Set AIRFLOW_HOME if not provided."""
         if v is None:

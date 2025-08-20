@@ -32,7 +32,11 @@ typesense = "^1.1.1"
 python-multipart = "^0.0.20"
 pypdf2 = "^3.0.1"
 pandas = "^2.2.3"
+polars = "^1.18.0"
 numpy = "^1.26.4"
+# Security dependencies
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 sentence-transformers = "^3.3.1"
 python-dotenv = "^1.1.1"
 httpx = "^0.28.1"
@@ -50,6 +54,11 @@ dagster-webserver = "^1.8.13"
 # External APIs
 aiohttp = "^3.10.11"
 pyarrow = "^21.0.0"
+# GraphQL
+strawberry-graphql = {extras = ["fastapi"], version = "^0.254.1"}
+# Async processing
+celery = {extras = ["redis"], version = "^5.4.0"}
+redis = "^5.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
@@ -120,6 +129,11 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+markers = [
+    "performance: marks tests as performance benchmarks (slow tests)",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
 
 [tool.coverage.run]
 source = ["src"]

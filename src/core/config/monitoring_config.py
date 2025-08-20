@@ -4,9 +4,9 @@ Provides comprehensive monitoring settings for production deployment
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .base_config import Environment
 
@@ -15,85 +15,86 @@ class MonitoringConfig(BaseSettings):
     """Configuration for monitoring and observability."""
     
     # Logging configuration
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    log_format: str = Field(default="json", env="LOG_FORMAT")  # json, text
-    log_file_enabled: bool = Field(default=True, env="LOG_FILE_ENABLED")
-    log_file_path: str = Field(default="logs/application.log", env="LOG_FILE_PATH")
-    log_rotation_size: str = Field(default="100MB", env="LOG_ROTATION_SIZE")
-    log_retention_days: int = Field(default=30, env="LOG_RETENTION_DAYS")
+    log_level: str = Field(default="INFO")
+    log_format: str = Field(default="json")  # json, text
+    log_file_enabled: bool = Field(default=True)
+    log_file_path: str = Field(default="logs/application.log")
+    log_rotation_size: str = Field(default="100MB")
+    log_retention_days: int = Field(default=30)
     
     # Metrics configuration
-    prometheus_enabled: bool = Field(default=False, env="PROMETHEUS_ENABLED")
-    prometheus_host: str = Field(default="localhost", env="PROMETHEUS_HOST")
-    prometheus_port: int = Field(default=9090, env="PROMETHEUS_PORT")
-    prometheus_metrics_path: str = Field(default="/metrics", env="PROMETHEUS_METRICS_PATH")
+    prometheus_enabled: bool = Field(default=False)
+    prometheus_host: str = Field(default="localhost")
+    prometheus_port: int = Field(default=9090)
+    prometheus_metrics_path: str = Field(default="/metrics")
     
     # Grafana configuration
-    grafana_enabled: bool = Field(default=False, env="GRAFANA_ENABLED")
-    grafana_host: str = Field(default="localhost", env="GRAFANA_HOST")
-    grafana_port: int = Field(default=3001, env="GRAFANA_PORT")
-    grafana_admin_password: str = Field(default="admin", env="GRAFANA_ADMIN_PASSWORD")
+    grafana_enabled: bool = Field(default=False)
+    grafana_host: str = Field(default="localhost")
+    grafana_port: int = Field(default=3001)
+    grafana_admin_password: str = Field(default="admin")
     
     # Elasticsearch/ELK configuration
-    elasticsearch_enabled: bool = Field(default=False, env="ELASTICSEARCH_ENABLED")
-    elasticsearch_host: str = Field(default="localhost", env="ELASTICSEARCH_HOST")
-    elasticsearch_port: int = Field(default=9200, env="ELASTICSEARCH_PORT")
+    elasticsearch_enabled: bool = Field(default=False)
+    elasticsearch_host: str = Field(default="localhost")
+    elasticsearch_port: int = Field(default=9200)
     
-    kibana_enabled: bool = Field(default=False, env="KIBANA_ENABLED")
-    kibana_host: str = Field(default="localhost", env="KIBANA_HOST")
-    kibana_port: int = Field(default=5601, env="KIBANA_PORT")
+    kibana_enabled: bool = Field(default=False)
+    kibana_host: str = Field(default="localhost")
+    kibana_port: int = Field(default=5601)
     
-    logstash_enabled: bool = Field(default=False, env="LOGSTASH_ENABLED")
-    logstash_host: str = Field(default="localhost", env="LOGSTASH_HOST")
-    logstash_port: int = Field(default=5044, env="LOGSTASH_PORT")
+    logstash_enabled: bool = Field(default=False)
+    logstash_host: str = Field(default="localhost")
+    logstash_port: int = Field(default=5044)
     
     # Health check configuration
-    health_check_enabled: bool = Field(default=True, env="HEALTH_CHECK_ENABLED")
-    health_check_interval_seconds: int = Field(default=30, env="HEALTH_CHECK_INTERVAL_SECONDS")
-    health_check_timeout_seconds: int = Field(default=10, env="HEALTH_CHECK_TIMEOUT_SECONDS")
+    health_check_enabled: bool = Field(default=True)
+    health_check_interval_seconds: int = Field(default=30)
+    health_check_timeout_seconds: int = Field(default=10)
     
     # Performance monitoring
-    performance_monitoring_enabled: bool = Field(default=True, env="PERFORMANCE_MONITORING_ENABLED")
-    slow_query_threshold_seconds: float = Field(default=5.0, env="SLOW_QUERY_THRESHOLD_SECONDS")
-    memory_usage_alert_threshold: float = Field(default=0.85, env="MEMORY_USAGE_ALERT_THRESHOLD")
-    cpu_usage_alert_threshold: float = Field(default=0.80, env="CPU_USAGE_ALERT_THRESHOLD")
+    performance_monitoring_enabled: bool = Field(default=True)
+    slow_query_threshold_seconds: float = Field(default=5.0)
+    memory_usage_alert_threshold: float = Field(default=0.85)
+    cpu_usage_alert_threshold: float = Field(default=0.80)
     
     # Alerting configuration
-    alerting_enabled: bool = Field(default=False, env="ALERTING_ENABLED")
-    alert_channels: List[str] = Field(default_factory=lambda: ["email"], env="ALERT_CHANNELS")
+    alerting_enabled: bool = Field(default=False)
+    alert_channels: List[str] = Field(default_factory=lambda: ["email"])
     
     # Email alerts
-    smtp_host: Optional[str] = Field(default=None, env="SMTP_HOST")
-    smtp_port: int = Field(default=587, env="SMTP_PORT")
-    smtp_user: Optional[str] = Field(default=None, env="SMTP_USER")
-    smtp_password: Optional[str] = Field(default=None, env="SMTP_PASSWORD")
-    alert_email_from: str = Field(default="alerts@example.com", env="ALERT_EMAIL_FROM")
-    alert_email_to: List[str] = Field(default_factory=list, env="ALERT_EMAIL_TO")
+    smtp_host: Optional[str] = Field(default=None)
+    smtp_port: int = Field(default=587)
+    smtp_user: Optional[str] = Field(default=None)
+    smtp_password: Optional[str] = Field(default=None)
+    alert_email_from: str = Field(default="alerts@example.com")
+    alert_email_to: List[str] = Field(default_factory=list)
     
     # Slack alerts
-    slack_webhook_url: Optional[str] = Field(default=None, env="SLACK_WEBHOOK_URL")
-    slack_channel: str = Field(default="#alerts", env="SLACK_CHANNEL")
+    slack_webhook_url: Optional[str] = Field(default=None)
+    slack_channel: str = Field(default="#alerts")
     
     # PagerDuty alerts
-    pagerduty_service_key: Optional[str] = Field(default=None, env="PAGERDUTY_SERVICE_KEY")
+    pagerduty_service_key: Optional[str] = Field(default=None)
     
     # Tracing configuration
-    tracing_enabled: bool = Field(default=False, env="TRACING_ENABLED")
-    jaeger_enabled: bool = Field(default=False, env="JAEGER_ENABLED")
-    jaeger_host: str = Field(default="localhost", env="JAEGER_HOST")
-    jaeger_port: int = Field(default=14268, env="JAEGER_PORT")
+    tracing_enabled: bool = Field(default=False)
+    jaeger_enabled: bool = Field(default=False)
+    jaeger_host: str = Field(default="localhost")
+    jaeger_port: int = Field(default=14268)
     
     # Custom metrics
-    custom_metrics_enabled: bool = Field(default=True, env="CUSTOM_METRICS_ENABLED")
-    business_metrics_enabled: bool = Field(default=True, env="BUSINESS_METRICS_ENABLED")
+    custom_metrics_enabled: bool = Field(default=True)
+    business_metrics_enabled: bool = Field(default=True)
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="allow"
+    )
     
-    def get_environment_overrides(self, environment: Environment) -> Dict[str, any]:
+    def get_environment_overrides(self, environment: Environment) -> Dict[str, Any]:
         """Get environment-specific monitoring overrides."""
         overrides = {
             Environment.DEVELOPMENT: {

@@ -9,8 +9,8 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .base_config import BaseConfig, Environment
 
@@ -19,57 +19,57 @@ class SparkConfig(BaseSettings):
     """Enhanced Spark configuration with production-ready settings."""
     
     # Spark application settings
-    app_name: str = Field(default="RetailETL-Pipeline", env="SPARK_APP_NAME")
-    master: str = Field(default="local[*]", env="SPARK_MASTER_URL")
-    deploy_mode: str = Field(default="client", env="SPARK_DEPLOY_MODE")
+    app_name: str = Field(default="RetailETL-Pipeline")
+    master: str = Field(default="local[*]")
+    deploy_mode: str = Field(default="client")
     
     # Driver settings
-    driver_memory: str = Field(default="2g", env="SPARK_DRIVER_MEMORY") 
-    driver_cores: int = Field(default=2, env="SPARK_DRIVER_CORES")
-    driver_max_result_size: str = Field(default="1g", env="SPARK_DRIVER_MAX_RESULT_SIZE")
+    driver_memory: str = Field(default="2g") 
+    driver_cores: int = Field(default=2)
+    driver_max_result_size: str = Field(default="1g")
     
     # Executor settings
-    executor_memory: str = Field(default="2g", env="SPARK_EXECUTOR_MEMORY")
-    executor_cores: int = Field(default=2, env="SPARK_EXECUTOR_CORES")
-    executor_instances: int = Field(default=2, env="SPARK_EXECUTOR_INSTANCES")
+    executor_memory: str = Field(default="2g")
+    executor_cores: int = Field(default=2)
+    executor_instances: int = Field(default=2)
     
     # Dynamic allocation
-    dynamic_allocation_enabled: bool = Field(default=True, env="SPARK_DYNAMIC_ALLOCATION_ENABLED")
-    dynamic_allocation_min_executors: int = Field(default=1, env="SPARK_DYNAMIC_ALLOCATION_MIN_EXECUTORS")
-    dynamic_allocation_max_executors: int = Field(default=10, env="SPARK_DYNAMIC_ALLOCATION_MAX_EXECUTORS")
-    dynamic_allocation_initial_executors: int = Field(default=2, env="SPARK_DYNAMIC_ALLOCATION_INITIAL_EXECUTORS")
+    dynamic_allocation_enabled: bool = Field(default=True)
+    dynamic_allocation_min_executors: int = Field(default=1)
+    dynamic_allocation_max_executors: int = Field(default=10)
+    dynamic_allocation_initial_executors: int = Field(default=2)
     
     # SQL and adaptive query execution
-    adaptive_enabled: bool = Field(default=True, env="SPARK_ADAPTIVE_ENABLED")
-    adaptive_coalesce_partitions_enabled: bool = Field(default=True, env="SPARK_ADAPTIVE_COALESCE_PARTITIONS_ENABLED")
-    adaptive_skewed_join_enabled: bool = Field(default=True, env="SPARK_ADAPTIVE_SKEWED_JOIN_ENABLED")
+    adaptive_enabled: bool = Field(default=True)
+    adaptive_coalesce_partitions_enabled: bool = Field(default=True)
+    adaptive_skewed_join_enabled: bool = Field(default=True)
     
     # Serialization and compression
-    serializer: str = Field(default="org.apache.spark.serializer.KryoSerializer", env="SPARK_SERIALIZER")
-    compression_codec: str = Field(default="zstd", env="SPARK_COMPRESSION_CODEC")
+    serializer: str = Field(default="org.apache.spark.serializer.KryoSerializer")
+    compression_codec: str = Field(default="zstd")
     
     # Delta Lake settings
-    enable_delta: bool = Field(default=True, env="SPARK_ENABLE_DELTA")
-    delta_catalog_enabled: bool = Field(default=True, env="SPARK_DELTA_CATALOG_ENABLED")
+    enable_delta: bool = Field(default=True)
+    delta_catalog_enabled: bool = Field(default=True)
     
     # Checkpointing and recovery
-    checkpoint_dir: Optional[str] = Field(default=None, env="SPARK_CHECKPOINT_DIR")
-    recovery_mode: str = Field(default="FILESYSTEM", env="SPARK_RECOVERY_MODE")
+    checkpoint_dir: Optional[str] = Field(default=None)
+    recovery_mode: str = Field(default="FILESYSTEM")
     
     # Monitoring and metrics
-    metrics_enabled: bool = Field(default=True, env="SPARK_METRICS_ENABLED")
-    event_log_enabled: bool = Field(default=True, env="SPARK_EVENT_LOG_ENABLED")
-    event_log_dir: Optional[str] = Field(default=None, env="SPARK_EVENT_LOG_DIR")
+    metrics_enabled: bool = Field(default=True)
+    event_log_enabled: bool = Field(default=True)
+    event_log_dir: Optional[str] = Field(default=None)
     
     # UI and history server
-    ui_enabled: bool = Field(default=True, env="SPARK_UI_ENABLED")
-    ui_port: int = Field(default=4040, env="SPARK_UI_PORT")
-    history_server_enabled: bool = Field(default=False, env="SPARK_HISTORY_SERVER_ENABLED")
+    ui_enabled: bool = Field(default=True)
+    ui_port: int = Field(default=4040)
+    history_server_enabled: bool = Field(default=False)
     
     # Security settings
-    authenticate: bool = Field(default=False, env="SPARK_AUTHENTICATE")
-    encrypt_enabled: bool = Field(default=False, env="SPARK_ENCRYPT_ENABLED")
-    ssl_enabled: bool = Field(default=False, env="SPARK_SSL_ENABLED")
+    authenticate: bool = Field(default=False)
+    encrypt_enabled: bool = Field(default=False)
+    ssl_enabled: bool = Field(default=False)
     
     # Custom JARs and packages
     jars_packages: List[str] = Field(
@@ -77,21 +77,22 @@ class SparkConfig(BaseSettings):
             "io.delta:delta-core_2.12:2.4.0",
             "org.apache.hadoop:hadoop-aws:3.3.4",
             "com.amazonaws:aws-java-sdk-bundle:1.12.262"
-        ],
-        env="SPARK_JARS_PACKAGES"
+        ]
     )
     
     # Environment-specific overrides
-    java_home: Optional[str] = Field(default=None, env="JAVA_HOME")
-    hadoop_home: Optional[str] = Field(default=None, env="HADOOP_HOME")
+    java_home: Optional[str] = Field(default=None)
+    hadoop_home: Optional[str] = Field(default=None)
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="allow"
+    )
     
-    @validator("checkpoint_dir", "event_log_dir", pre=True)
+    @field_validator("checkpoint_dir", "event_log_dir", mode="before")
+    @classmethod
     def resolve_paths(cls, v: Optional[str]) -> Optional[str]:
         """Resolve checkpoint and log directories."""
         if v is None:

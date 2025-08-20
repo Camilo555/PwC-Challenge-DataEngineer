@@ -27,7 +27,10 @@
       "Bash(curl:*)",
       "Bash(set PROCESSING_ENGINE=pandas)",
       "Bash(set AIRFLOW_HOME=./airflow_home)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(poetry lock:*)",
+      "Bash(mkdir:*)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -9,8 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict
 
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(str, Enum):
@@ -42,8 +42,8 @@ class BaseConfig(BaseSettings):
     """Enhanced base configuration with comprehensive settings."""
     
     # Environment
-    environment: Environment = Field(default=Environment.DEVELOPMENT, env="ENVIRONMENT")
-    debug: bool = Field(default=False, env="DEBUG")
+    environment: Environment = Field(default=Environment.DEVELOPMENT)
+    debug: bool = Field(default=False)
     
     # Project paths
     project_root: Path = Field(default_factory=lambda: Path.cwd())
@@ -57,27 +57,29 @@ class BaseConfig(BaseSettings):
     gold_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "gold")
     
     # Processing configuration
-    processing_engine: ProcessingEngine = Field(default=ProcessingEngine.PANDAS, env="PROCESSING_ENGINE")
-    orchestration_engine: OrchestrationEngine = Field(default=OrchestrationEngine.DAGSTER, env="ORCHESTRATION_ENGINE")
+    processing_engine: ProcessingEngine = Field(default=ProcessingEngine.PANDAS)
+    orchestration_engine: OrchestrationEngine = Field(default=OrchestrationEngine.DAGSTER)
     
     # Performance settings
-    max_workers: int = Field(default=4, env="MAX_WORKERS")
-    batch_size: int = Field(default=1000, env="BATCH_SIZE")
-    memory_limit_gb: float = Field(default=4.0, env="MEMORY_LIMIT_GB")
+    max_workers: int = Field(default=4)
+    batch_size: int = Field(default=1000)
+    memory_limit_gb: float = Field(default=4.0)
     
     # Feature flags
-    enable_external_apis: bool = Field(default=True, env="ENABLE_EXTERNAL_APIS")
-    enable_data_quality_checks: bool = Field(default=True, env="ENABLE_DATA_QUALITY_CHECKS")
-    enable_monitoring: bool = Field(default=True, env="ENABLE_MONITORING")
-    enable_caching: bool = Field(default=True, env="ENABLE_CACHING")
+    enable_external_apis: bool = Field(default=True)
+    enable_data_quality_checks: bool = Field(default=True)
+    enable_monitoring: bool = Field(default=True)
+    enable_caching: bool = Field(default=True)
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="allow"
+    )
         
-    @validator("project_root", "src_path", "data_path", pre=True)
+    @field_validator("project_root", "src_path", "data_path", mode="before")
+    @classmethod
     def resolve_paths(cls, v: Any) -> Path:
         """Resolve paths to absolute paths."""
         if isinstance(v, str):
@@ -85,7 +87,7 @@ class BaseConfig(BaseSettings):
         elif isinstance(v, Path):
             path = v
         else:
-            return v
+            return Path(str(v))
             
         return path.resolve()
     
@@ -166,3 +168,13 @@ class BaseConfig(BaseSettings):
             elif database_url.startswith("postgresql://"):
                 return database_url.replace("postgresql://", "postgresql+asyncpg://")
         return database_url
+    
+    def get_current_timestamp(self) -> str:
+        """Get current timestamp in ISO format."""
+        from datetime import datetime
+        return datetime.utcnow().isoformat()
+    
+    @property
+    def enable_vector_search(self) -> bool:
+        """Enable vector search functionality."""
+        return self.environment != Environment.TESTING

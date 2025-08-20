@@ -7,8 +7,8 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .base_config import BaseConfig, Environment
 
@@ -17,89 +17,90 @@ class DagsterConfig(BaseSettings):
     """Enhanced Dagster configuration with production-ready settings."""
     
     # Core Dagster settings
-    dagster_home: Optional[str] = Field(default=None, env="DAGSTER_HOME")
-    dagster_host: str = Field(default="127.0.0.1", env="DAGSTER_HOST")
-    dagster_port: int = Field(default=3000, env="DAGSTER_PORT")
+    dagster_home: Optional[str] = Field(default=None)
+    dagster_host: str = Field(default="127.0.0.1")
+    dagster_port: int = Field(default=3000)
     
     # Database configuration
-    dagster_postgres_db: Optional[str] = Field(default=None, env="DAGSTER_POSTGRES_DB")
-    dagster_postgres_user: Optional[str] = Field(default=None, env="DAGSTER_POSTGRES_USER")
-    dagster_postgres_password: Optional[str] = Field(default=None, env="DAGSTER_POSTGRES_PASSWORD")
-    dagster_postgres_host: str = Field(default="localhost", env="DAGSTER_POSTGRES_HOST")
-    dagster_postgres_port: int = Field(default=5432, env="DAGSTER_POSTGRES_PORT")
+    dagster_postgres_db: Optional[str] = Field(default=None)
+    dagster_postgres_user: Optional[str] = Field(default=None)
+    dagster_postgres_password: Optional[str] = Field(default=None)
+    dagster_postgres_host: str = Field(default="localhost")
+    dagster_postgres_port: int = Field(default=5432)
     
     # Run launcher configuration
-    run_launcher: str = Field(default="DefaultRunLauncher", env="DAGSTER_RUN_LAUNCHER")
-    max_concurrent_runs: int = Field(default=10, env="DAGSTER_MAX_CONCURRENT_RUNS")
+    run_launcher: str = Field(default="DefaultRunLauncher")
+    max_concurrent_runs: int = Field(default=10)
     
     # Compute log manager
-    compute_logs_directory: str = Field(default="logs/compute", env="DAGSTER_COMPUTE_LOGS_DIRECTORY")
+    compute_logs_directory: str = Field(default="logs/compute")
     
     # Event log storage
-    event_log_storage: str = Field(default="sqlite", env="DAGSTER_EVENT_LOG_STORAGE")
+    event_log_storage: str = Field(default="sqlite")
     
     # Run storage
-    run_storage: str = Field(default="sqlite", env="DAGSTER_RUN_STORAGE")
+    run_storage: str = Field(default="sqlite")
     
     # Schedule storage
-    schedule_storage: str = Field(default="sqlite", env="DAGSTER_SCHEDULE_STORAGE")
+    schedule_storage: str = Field(default="sqlite")
     
     # Sensor settings
-    sensor_evaluation_interval_seconds: int = Field(default=30, env="DAGSTER_SENSOR_EVALUATION_INTERVAL")
-    sensor_minimum_interval_seconds: int = Field(default=30, env="DAGSTER_SENSOR_MINIMUM_INTERVAL")
+    sensor_evaluation_interval_seconds: int = Field(default=30)
+    sensor_minimum_interval_seconds: int = Field(default=30)
     
     # Auto-materialize settings
-    enable_auto_materialize: bool = Field(default=True, env="DAGSTER_ENABLE_AUTO_MATERIALIZE")
-    auto_materialize_evaluation_interval_seconds: int = Field(default=60, env="DAGSTER_AUTO_MATERIALIZE_INTERVAL")
+    enable_auto_materialize: bool = Field(default=True)
+    auto_materialize_evaluation_interval_seconds: int = Field(default=60)
     
     # Resource limits
-    op_concurrency_limit: Optional[int] = Field(default=None, env="DAGSTER_OP_CONCURRENCY_LIMIT")
-    asset_concurrency_limit: Optional[int] = Field(default=None, env="DAGSTER_ASSET_CONCURRENCY_LIMIT")
+    op_concurrency_limit: Optional[int] = Field(default=None)
+    asset_concurrency_limit: Optional[int] = Field(default=None)
     
     # Monitoring and observability
-    enable_asset_monitoring: bool = Field(default=True, env="DAGSTER_ENABLE_ASSET_MONITORING")
-    enable_op_monitoring: bool = Field(default=True, env="DAGSTER_ENABLE_OP_MONITORING")
+    enable_asset_monitoring: bool = Field(default=True)
+    enable_op_monitoring: bool = Field(default=True)
     
     # External service integrations
-    slack_webhook_url: Optional[str] = Field(default=None, env="DAGSTER_SLACK_WEBHOOK_URL")
-    datadog_api_key: Optional[str] = Field(default=None, env="DAGSTER_DATADOG_API_KEY")
+    slack_webhook_url: Optional[str] = Field(default=None)
+    datadog_api_key: Optional[str] = Field(default=None)
     
     # Data quality thresholds
-    min_data_quality_score: float = Field(default=0.8, env="DAGSTER_MIN_DATA_QUALITY_SCORE")
-    max_null_percentage: float = Field(default=0.1, env="DAGSTER_MAX_NULL_PERCENTAGE")
-    max_duplicate_percentage: float = Field(default=0.05, env="DAGSTER_MAX_DUPLICATE_PERCENTAGE")
+    min_data_quality_score: float = Field(default=0.8)
+    max_null_percentage: float = Field(default=0.1)
+    max_duplicate_percentage: float = Field(default=0.05)
     
     # External API settings
-    enable_external_api_enrichment: bool = Field(default=True, env="DAGSTER_ENABLE_EXTERNAL_API_ENRICHMENT")
-    api_request_timeout_seconds: int = Field(default=30, env="DAGSTER_API_REQUEST_TIMEOUT")
-    api_retry_attempts: int = Field(default=3, env="DAGSTER_API_RETRY_ATTEMPTS")
+    enable_external_api_enrichment: bool = Field(default=True)
+    api_request_timeout_seconds: int = Field(default=30)
+    api_retry_attempts: int = Field(default=3)
     
     # Spark integration
-    spark_config_path: Optional[str] = Field(default=None, env="DAGSTER_SPARK_CONFIG_PATH")
+    spark_config_path: Optional[str] = Field(default=None)
     default_spark_conf: Dict[str, str] = Field(
         default_factory=lambda: {
             "spark.sql.adaptive.enabled": "true",
             "spark.sql.adaptive.coalescePartitions.enabled": "true",
-        },
-        env="DAGSTER_DEFAULT_SPARK_CONF"
+        }
     )
     
     # I/O managers
-    default_io_manager: str = Field(default="fs_io_manager", env="DAGSTER_DEFAULT_IO_MANAGER")
-    enable_s3_io_manager: bool = Field(default=False, env="DAGSTER_ENABLE_S3_IO_MANAGER")
-    s3_bucket: Optional[str] = Field(default=None, env="DAGSTER_S3_BUCKET")
+    default_io_manager: str = Field(default="fs_io_manager")
+    enable_s3_io_manager: bool = Field(default=False)
+    s3_bucket: Optional[str] = Field(default=None)
     
     # Partition settings
-    enable_date_partitioning: bool = Field(default=True, env="DAGSTER_ENABLE_DATE_PARTITIONING")
-    partition_start_date: str = Field(default="2024-01-01", env="DAGSTER_PARTITION_START_DATE")
+    enable_date_partitioning: bool = Field(default=True)
+    partition_start_date: str = Field(default="2024-01-01")
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="allow"
+    )
     
-    @validator("dagster_home", pre=True)
+    @field_validator("dagster_home", mode="before")
+    @classmethod
     def set_dagster_home(cls, v: Optional[str]) -> str:
         """Set DAGSTER_HOME if not provided."""
         if v is None:

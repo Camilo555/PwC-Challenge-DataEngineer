@@ -25,7 +25,7 @@ uvicorn = {extras = ["standard"], version = "^0.35.0"}
 pydantic = "^2.9.0"
 pydantic-settings = "^2.10.1"
 sqlmodel = "^0.0.24"
-sqlalchemy = "^2.0.42"
+sqlalchemy = "^2.0.43"
 alembic = "^1.16.4"
 psycopg2-binary = "^2.9.10"
 typesense = "^1.1.1"

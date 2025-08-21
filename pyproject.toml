@@ -37,7 +37,7 @@ numpy = "^2.2.6"
 # Security dependencies
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
-sentence-transformers = "^3.3.1"
+sentence-transformers = "^5.1.0"
 python-dotenv = "^1.1.1"
 httpx = "^0.28.1"
 aiofiles = "^24.1.0"

@@ -82,8 +82,9 @@ class EnrichedBronzeProcessor:
 
     def _apply_bronze_transformations(self, df: DataFrame) -> DataFrame:
         """Apply basic bronze layer transformations."""
-        # Add ingestion metadata
-        transformed_df = df.withColumn("ingestion_timestamp", lit(self.spark.sql("SELECT current_timestamp()").collect()[0][0]))
+        # Add ingestion metadata using DataFrame API
+        from pyspark.sql.functions import current_timestamp
+        transformed_df = df.withColumn("ingestion_timestamp", current_timestamp())
 
         # Add source information
         transformed_df = transformed_df.withColumn("data_source", lit("online_retail"))

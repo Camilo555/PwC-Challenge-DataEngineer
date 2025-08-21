@@ -25,6 +25,15 @@ def create_all() -> None:
     SQLModel.metadata.create_all(_engine)
 
 
+def get_session() -> Iterator[Session]:
+    """Get a database session for dependency injection."""
+    with Session(_engine) as session:
+        try:
+            yield session
+        finally:
+            session.close()
+
+
 @contextmanager
 def session_scope() -> Iterator[Session]:
     """Provide a transactional scope around a series of operations."""

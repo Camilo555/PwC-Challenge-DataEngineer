@@ -6,7 +6,7 @@ import asyncio
 import time
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple, Any
+from typing import List, Optional, Tuple, Any
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, select, func, and_, or_, desc, asc
@@ -122,14 +122,14 @@ class EnhancedSalesService:
             results = await asyncio.gather(*tasks)
             
             analytics = EnhancedSalesAnalytics(
-                summary=results[0],
-                time_series=results[1],
-                top_products=results[2],
-                top_customers=results[3],
-                geographic_breakdown=results[4],
-                category_performance=results[5],
-                seasonal_insights=results[6],
-                forecasting=results[7] if include_forecasting else None
+                summary=results[0],  # dict[str, Any]
+                time_series=results[1],  # list[TimeSeriesPoint]
+                top_products=results[2],  # list[dict[str, Any]]
+                top_customers=results[3],  # list[dict[str, Any]]
+                geographic_breakdown=results[4],  # list[SalesAggregation]
+                category_performance=results[5],  # list[SalesAggregation]
+                seasonal_insights=results[6],  # dict[str, Any]
+                forecasting=results[7] if include_forecasting else None  # dict[str, Any] | None
             )
             
             return analytics
@@ -216,9 +216,9 @@ class EnhancedSalesService:
          .join(DimInvoice, FactSale.invoice_key == DimInvoice.invoice_key)\
          .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
     
-    def _apply_enhanced_filters(self, query, filters: Optional[SalesFiltersV2]):
+    def _apply_enhanced_filters(self, query, filters: Optional[SalesFiltersV2]) -> tuple[Any, dict[str, Any]]:
         """Apply enhanced filters to the query."""
-        applied_filters = {}
+        applied_filters: dict[str, Any] = {}
         filter_conditions = []
         
         if not filters:
@@ -235,85 +235,85 @@ class EnhancedSalesService:
         
         if filters.fiscal_year:
             filter_conditions.append(DimDate.fiscal_year == filters.fiscal_year)
-            applied_filters['fiscal_year'] = filters.fiscal_year
+            applied_filters['fiscal_year'] = str(filters.fiscal_year)
         
         if filters.fiscal_quarter:
             filter_conditions.append(DimDate.fiscal_quarter == filters.fiscal_quarter)
-            applied_filters['fiscal_quarter'] = filters.fiscal_quarter
+            applied_filters['fiscal_quarter'] = str(filters.fiscal_quarter)
         
         # Geographic filters
         if filters.countries:
             filter_conditions.append(DimCountry.country_name.in_(filters.countries))
-            applied_filters['countries'] = filters.countries
+            applied_filters['countries'] = list(filters.countries)
         
         if filters.regions:
             filter_conditions.append(DimCountry.region.in_(filters.regions))
-            applied_filters['regions'] = filters.regions
+            applied_filters['regions'] = list(filters.regions)
         
         if filters.continents:
             filter_conditions.append(DimCountry.continent.in_(filters.continents))
-            applied_filters['continents'] = filters.continents
+            applied_filters['continents'] = list(filters.continents)
         
         # Product filters
         if filters.categories:
             filter_conditions.append(DimProduct.category.in_(filters.categories))
-            applied_filters['categories'] = filters.categories
+            applied_filters['categories'] = list(filters.categories)
         
         if filters.brands:
             filter_conditions.append(DimProduct.brand.in_(filters.brands))
-            applied_filters['brands'] = filters.brands
+            applied_filters['brands'] = list(filters.brands)
         
         if filters.stock_codes:
             filter_conditions.append(DimProduct.stock_code.in_(filters.stock_codes))
-            applied_filters['stock_codes'] = filters.stock_codes
+            applied_filters['stock_codes'] = list(filters.stock_codes)
         
         # Customer filters
         if filters.customer_segments:
             filter_conditions.append(DimCustomer.customer_segment.in_(filters.customer_segments))
-            applied_filters['customer_segments'] = filters.customer_segments
+            applied_filters['customer_segments'] = list(filters.customer_segments)
         
-        if filters.min_customer_ltv:
+        if filters.min_customer_ltv is not None:
             filter_conditions.append(DimCustomer.lifetime_value >= filters.min_customer_ltv)
-            applied_filters['min_customer_ltv'] = float(filters.min_customer_ltv)
+            applied_filters['min_customer_ltv'] = str(float(filters.min_customer_ltv))
         
         # Financial filters
-        if filters.min_amount:
+        if filters.min_amount is not None:
             filter_conditions.append(FactSale.total_amount >= filters.min_amount)
-            applied_filters['min_amount'] = float(filters.min_amount)
+            applied_filters['min_amount'] = str(float(filters.min_amount))
         
-        if filters.max_amount:
+        if filters.max_amount is not None:
             filter_conditions.append(FactSale.total_amount <= filters.max_amount)
-            applied_filters['max_amount'] = float(filters.max_amount)
+            applied_filters['max_amount'] = str(float(filters.max_amount))
         
-        if filters.min_margin:
+        if filters.min_margin is not None:
             filter_conditions.append(FactSale.margin_percentage >= filters.min_margin)
-            applied_filters['min_margin'] = float(filters.min_margin)
+            applied_filters['min_margin'] = str(float(filters.min_margin))
         
         if filters.has_profit_data is not None:
             if filters.has_profit_data:
                 filter_conditions.append(FactSale.profit_amount.is_not(None))
             else:
                 filter_conditions.append(FactSale.profit_amount.is_(None))
-            applied_filters['has_profit_data'] = filters.has_profit_data
+            applied_filters['has_profit_data'] = str(filters.has_profit_data)
         
         # Business context filters
         if filters.exclude_cancelled:
             filter_conditions.append(DimInvoice.is_cancelled == False)
-            applied_filters['exclude_cancelled'] = True
+            applied_filters['exclude_cancelled'] = str(True)
         
         if filters.exclude_refunds:
             filter_conditions.append(FactSale.quantity > 0)
-            applied_filters['exclude_refunds'] = True
+            applied_filters['exclude_refunds'] = str(True)
         
         if filters.include_weekends is not None:
             if not filters.include_weekends:
                 filter_conditions.append(DimDate.is_weekend == False)
-            applied_filters['include_weekends'] = filters.include_weekends
+            applied_filters['include_weekends'] = str(filters.include_weekends)
         
         if filters.include_holidays is not None:
             if not filters.include_holidays:
                 filter_conditions.append(DimDate.is_holiday == False)
-            applied_filters['include_holidays'] = filters.include_holidays
+            applied_filters['include_holidays'] = str(filters.include_holidays)
         
         # Apply all conditions
         if filter_conditions:
@@ -373,7 +373,7 @@ class EnhancedSalesService:
             customer_value_tier=customer_value_tier
         )
     
-    async def _calculate_aggregations(self, filters: Optional[SalesFiltersV2]) -> Dict[str, Any]:
+    async def _calculate_aggregations(self, filters: Optional[SalesFiltersV2]) -> dict[str, Any]:
         """Calculate aggregations for the current dataset."""
         # This would contain aggregation calculations
         return {
@@ -408,35 +408,35 @@ class EnhancedSalesService:
     
     # Async analytics methods (simplified implementations)
     
-    async def _get_summary_metrics(self, filters) -> Dict[str, Any]:
+    async def _get_summary_metrics(self, filters) -> dict[str, Any]:
         """Get summary metrics."""
         return {"total_revenue": 1000000, "total_transactions": 50000}
     
-    async def _get_time_series_data(self, filters) -> List[TimeSeriesPoint]:
+    async def _get_time_series_data(self, filters) -> list[TimeSeriesPoint]:
         """Get time series data."""
         return []
     
-    async def _get_top_products(self, filters) -> List[dict]:
+    async def _get_top_products(self, filters) -> list[dict[str, Any]]:
         """Get top products."""
         return []
     
-    async def _get_top_customers(self, filters) -> List[dict]:
+    async def _get_top_customers(self, filters) -> list[dict[str, Any]]:
         """Get top customers."""
         return []
     
-    async def _get_geographic_breakdown(self, filters) -> List[SalesAggregation]:
+    async def _get_geographic_breakdown(self, filters) -> list[SalesAggregation]:
         """Get geographic breakdown."""
         return []
     
-    async def _get_category_performance(self, filters) -> List[SalesAggregation]:
+    async def _get_category_performance(self, filters) -> list[SalesAggregation]:
         """Get category performance."""
         return []
     
-    async def _get_seasonal_insights(self, filters) -> Dict[str, Any]:
+    async def _get_seasonal_insights(self, filters) -> dict[str, Any]:
         """Get seasonal insights."""
         return {}
     
-    async def _get_forecasting_data(self, filters) -> Dict[str, Any]:
+    async def _get_forecasting_data(self, filters) -> dict[str, Any]:
         """Get forecasting data."""
         return {"method": "linear_regression", "accuracy": 0.85}
     

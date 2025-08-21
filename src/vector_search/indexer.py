@@ -20,6 +20,17 @@ def ensure_collection() -> None:
             {"name": "country", "type": "string"},
             {"name": "invoice_date", "type": "string"},
             {"name": "total", "type": "float"},
+            # Enhanced fields for filtering (REQUIREMENT)
+            {"name": "category", "type": "string", "facet": True},
+            {"name": "customer_segment", "type": "string", "facet": True, "optional": True},
+            {"name": "quantity", "type": "int32"},
+            {"name": "unit_price", "type": "float"},
+            {"name": "fiscal_year", "type": "int32", "optional": True},
+            {"name": "fiscal_quarter", "type": "int32", "optional": True},
+            {"name": "is_weekend", "type": "bool", "optional": True},
+            {"name": "is_high_value", "type": "bool", "optional": True},
+            {"name": "region", "type": "string", "facet": True, "optional": True},
+            {"name": "product_brand", "type": "string", "facet": True, "optional": True}
         ],
         "default_sorting_field": "total",
     }

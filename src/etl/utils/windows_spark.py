@@ -324,11 +324,11 @@ def test_spark_functionality(spark: SparkSession) -> bool:
             logger.error(f"Expected 2 rows, got {row_count}")
             return False
 
-        # Test 2: SQL operations
-        df.createOrReplaceTempView("test_table")
-        result = spark.sql("SELECT COUNT(*) as count FROM test_table").collect()
+        # Test 2: DataFrame operations (using DataFrame API instead of SQL)
+        from pyspark.sql.functions import count, lit
+        result = df.agg(count(lit(1)).alias("count")).collect()
         if result[0]["count"] != 2:
-            logger.error("SQL query failed")
+            logger.error("DataFrame aggregation failed")
             return False
 
         # Test 3: File I/O (if possible)

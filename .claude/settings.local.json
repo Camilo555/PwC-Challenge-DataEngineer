@@ -31,7 +31,8 @@
       "Bash(find:*)",
       "Bash(poetry lock:*)",
       "Bash(mkdir:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ],
     "defaultMode": "acceptEdits"
   }

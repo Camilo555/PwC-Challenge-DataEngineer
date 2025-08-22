@@ -25,6 +25,8 @@
 🔍 **Comprehensive Monitoring**: System/ETL/Business metrics with intelligent alerting  
 ⚡ **Batch Operations**: High-performance bulk CRUD operations with error handling and metrics  
 🔍 **Vector Search**: Advanced Typesense integration with multiple filter types and faceted search  
+📊 **Distributed Tracing**: OpenTelemetry integration with correlation IDs and cross-service tracing  
+💾 **Enterprise Backup & DR**: Comprehensive backup/disaster recovery with automated scheduling, multi-tier storage, and SLA compliance  
 💻 **Platform Agnostic**: Full Windows/Linux/macOS compatibility with container optimization  
 🚀 **Production Ready**: Load balancing, auto-scaling, disaster recovery, and rollback capabilities
 
@@ -86,6 +88,7 @@ graph TB
     subgraph "Monitoring & Observability"
         Prometheus[📊 Prometheus<br/>Metrics Collection]
         Grafana[📈 Grafana<br/>Dashboards & Alerts]
+        Tracing[🔍 Distributed Tracing<br/>OpenTelemetry + Correlation]
         Logging[📝 Structured Logging<br/>Request Tracing]
         Health[❤️ Health Checks<br/>9+ Comprehensive]
     end
@@ -946,6 +949,210 @@ OAUTH2_TOKEN_URL=https://your-sso.com/oauth/token
 curl -H "X-API-Key: your-api-key" \
      "http://localhost:8000/api/v1/sales"
 ```
+
+## 💾 Enterprise Backup & Disaster Recovery
+
+### 🛡️ **Production-Grade Data Protection**
+
+Our platform includes a comprehensive enterprise backup and disaster recovery system, providing automated data protection, point-in-time recovery, and business continuity capabilities.
+
+#### **🎯 Core Backup Features**
+- **Automated Scheduling**: Cron-based scheduling with retention policies
+- **Multi-Component Backup**: Database, Data Lake, and Configuration backups
+- **Multiple Backup Types**: Full, incremental, differential, and snapshot backups
+- **Integrity Validation**: Multi-level validation with corruption detection
+- **Point-in-Time Recovery**: Precise restoration to any backup timestamp
+- **Disaster Recovery Plans**: Automated DR plan execution with RTO/RPO compliance
+
+#### **🔧 Quick Backup Operations**
+
+```bash
+# Test system initialization
+python -m src.core.backup.simple_cli test
+
+# Full system backup
+python -m src.core.backup.simple_cli backup-full
+
+# Component-specific backups
+python -m src.core.backup.simple_cli backup database
+python -m src.core.backup.simple_cli backup data_lake
+python -m src.core.backup.simple_cli backup configuration
+
+# System status and monitoring
+python -m src.core.backup.simple_cli status
+python -m src.core.backup.simple_cli list-backups
+```
+
+#### **📊 Disaster Recovery Capabilities**
+- **RTO Targets**: Database (1h), Configuration (30m), Data Lake (2h)
+- **RPO Targets**: Database (15m), Configuration (1h), Data Lake (4h)
+- **Automated DR Testing**: Monthly simulations and quarterly full tests
+- **SLA Compliance**: Real-time monitoring and alerting
+- **Multi-Storage Support**: Local, cloud, and S3-compatible storage
+
+#### **🎮 Advanced Features**
+- **Multi-Level Validation**: Basic, Standard, Thorough, and Forensic integrity checks
+- **Storage Tiers**: Hot, Warm, Cold, and Archive storage with lifecycle management
+- **Comprehensive Monitoring**: Real-time metrics, alerting, and SLA compliance tracking
+- **Enterprise Integration**: OpenTelemetry tracing and structured logging
+
+> 📖 **Complete Documentation**: See [BACKUP_DISASTER_RECOVERY.md](./BACKUP_DISASTER_RECOVERY.md) for comprehensive backup system documentation.
+
+## 🔍 Distributed Tracing with OpenTelemetry
+
+### 📊 **Enterprise-Grade Observability**
+
+Our platform includes a comprehensive distributed tracing system built on OpenTelemetry, providing end-to-end observability across all components of the retail analytics pipeline.
+
+#### **🎯 Core Tracing Features**
+- **OpenTelemetry Integration**: Full OTEL compatibility with industry standards
+- **Correlation ID Propagation**: Automatic correlation across service boundaries  
+- **Multi-Backend Support**: Jaeger, OTLP, Zipkin, Console, and more
+- **Automatic Instrumentation**: Zero-code instrumentation for popular libraries
+- **Performance Monitoring**: Request latency, throughput, and error tracking
+
+#### **🔧 Quick Setup**
+
+```bash
+# Enable distributed tracing
+export OTEL_ENABLED=true
+export OTEL_SERVICE_NAME=retail-etl-pipeline
+export OTEL_SERVICE_VERSION=1.0.0
+export ENVIRONMENT=production
+
+# Backend configuration  
+export OTEL_BACKEND=jaeger
+export OTEL_EXPORTER_ENDPOINT=http://localhost:14268/api/traces
+
+# Sampling (1.0 = 100%, 0.1 = 10%)
+export OTEL_SAMPLING_RATE=1.0
+
+# Auto-instrumentation
+export OTEL_AUTO_INSTRUMENT=true
+```
+
+#### **🚀 Automatic Application Integration**
+
+```python
+from core.startup import startup_application
+
+# Tracing initializes automatically during startup
+await startup_application()
+```
+
+#### **📊 Manual Tracing**
+
+```python
+from core.tracing import trace_function, trace_async_function, create_span
+
+# Synchronous function tracing
+@trace_function(name="process_data", kind="internal")
+def process_data(data):
+    return transform(data)
+
+# Asynchronous function tracing  
+@trace_async_function(name="fetch_data", kind="client")
+async def fetch_data(url):
+    return await http_client.get(url)
+
+# Manual span creation
+with create_span("custom_operation", attributes={"type": "etl"}) as span:
+    result = do_work()
+    span.set_attribute("result.count", len(result))
+```
+
+#### **🌐 FastAPI Integration**
+
+```python
+from fastapi import FastAPI
+from core.tracing.fastapi_integration import setup_tracing_middleware
+
+app = FastAPI()
+
+# Automatic HTTP request tracing
+setup_tracing_middleware(
+    app,
+    service_name="retail-etl-api",
+    include_request_body=True,
+    exclude_paths=["/health", "/metrics"]
+)
+```
+
+#### **📈 Production Deployment Examples**
+
+**Development (Console Output)**:
+```bash
+export OTEL_ENABLED=true
+export OTEL_BACKEND=console
+export OTEL_SAMPLING_RATE=1.0
+python -m api.main
+```
+
+**Production (Jaeger)**:
+```bash
+export OTEL_ENABLED=true
+export OTEL_BACKEND=jaeger
+export OTEL_EXPORTER_ENDPOINT=http://jaeger:14268/api/traces
+export OTEL_SAMPLING_RATE=0.1
+python -m api.main
+```
+
+**Kubernetes Deployment**:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retail-etl-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        image: retail-etl:latest
+        env:
+        - name: OTEL_ENABLED
+          value: "true"
+        - name: OTEL_SERVICE_NAME
+          value: "retail-etl-api"
+        - name: OTEL_BACKEND
+          value: "otlp"
+        - name: OTEL_EXPORTER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: OTEL_SAMPLING_RATE
+          value: "0.1"
+```
+
+#### **🔍 Supported Components**
+- **FastAPI Applications**: Automatic request/response tracing
+- **Database Operations**: SQLAlchemy, PostgreSQL, SQLite instrumentation
+- **HTTP Clients**: Requests, HTTPX, urllib instrumentation  
+- **Cache Operations**: Redis instrumentation
+- **ETL Pipelines**: Custom tracing for data processing workflows
+- **Background Tasks**: Async task and job tracing
+
+#### **📊 Observability Features**
+- **Distributed Traces**: End-to-end request flow visualization
+- **Span Attributes**: Rich metadata and context information
+- **Error Tracking**: Exception capture and error rate monitoring
+- **Performance Metrics**: Latency percentiles and SLA monitoring
+- **Service Maps**: Automatic service dependency discovery
+
+#### **✅ Production Ready**
+The distributed tracing system is fully operational and tested:
+
+```bash
+# Test the tracing system
+poetry run python scripts/test_tracing.py
+
+# Output: ✅ ALL TESTS PASSED - Distributed tracing system is working!
+# - OpenTelemetry configuration: ✅
+# - Span creation and correlation: ✅  
+# - Function decorators: ✅
+# - FastAPI integration: ✅
+# - Multi-backend support: ✅
+```
+
+For complete documentation, see [DISTRIBUTED_TRACING.md](docs/DISTRIBUTED_TRACING.md).
 
 ## 📊 Production Monitoring & Observability
 

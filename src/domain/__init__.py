@@ -1,9 +1,10 @@
 """Domain layer containing business entities and validation logic."""
 
 from .entities.customer import (
-    Customer,
-    CustomerMetrics,
+    CustomerEntity as Customer,
     CustomerSegment,
+    CustomerValueTier,
+    CustomerStatus,
 )
 from .entities.invoice import (
     Invoice,
@@ -46,7 +47,8 @@ __all__ = [
     # Customer entities
     "Customer",
     "CustomerSegment",
-    "CustomerMetrics",
+    "CustomerValueTier",
+    "CustomerStatus",
     # Invoice entities
     "Invoice",
     "InvoiceStatus",

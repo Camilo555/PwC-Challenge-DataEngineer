@@ -156,3 +156,22 @@ dump.rdb
 # GraphQL generated files
 graphql_schema.json
 schema.graphql
+
+# === Backup & Disaster Recovery ===
+# Backup files and directories
+backups/
+*.backup
+*.bak
+recovery/
+backup_storage/
+*.tar.gz.backup
+*.db.backup
+
+# Recovery temporary files  
+recovery_temp/
+restore_temp/
+.recovery_*
+
+# Backup metadata (keep structure but not actual backups)
+!backups/.gitkeep
+!recovery/.gitkeep

@@ -546,3 +546,7 @@ class SalesAggregate:
             'currency': total_revenue.currency,
             'payment_methods': self.payment_method_distribution()
         }
+
+
+# Alias for backward compatibility
+Sale = Invoice

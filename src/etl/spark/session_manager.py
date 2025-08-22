@@ -344,3 +344,13 @@ def create_optimized_session(
         app_name=app_name,
         config_overrides=config_overrides
     )
+
+
+# Add alias method for backward compatibility
+def get_or_create_session(app_name: str, **kwargs) -> SparkSession:
+    """Alias for get_session for backward compatibility."""
+    return spark_manager.get_session(app_name=app_name, **kwargs)
+
+
+# Add the method to the class as well
+SparkSessionManager.get_or_create_session = lambda self, app_name: self.get_session(app_name=app_name)

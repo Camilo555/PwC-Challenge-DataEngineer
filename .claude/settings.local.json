@@ -32,7 +32,8 @@
       "Bash(poetry lock:*)",
       "Bash(mkdir:*)",
       "Bash(git push:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(set ENVIRONMENT=testing)"
     ],
     "defaultMode": "acceptEdits"
   }

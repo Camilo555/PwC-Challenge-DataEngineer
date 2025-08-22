@@ -224,7 +224,7 @@ class SparkConfig(BaseSettings):
         # Windows-specific optimizations
         if platform.system() == "Windows":
             config.update({
-                "spark.sql.warehouse.dir": str(Path.cwd() / "spark-warehouse").as_posix(),
+                "spark.sql.warehouse.dir": (Path.cwd() / "spark-warehouse").as_posix(),
                 "spark.hadoop.fs.defaultFS": "file:///",
                 "spark.sql.execution.arrow.pyspark.enabled": "true",
             })

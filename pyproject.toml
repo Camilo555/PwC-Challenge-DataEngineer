@@ -59,6 +59,19 @@ strawberry-graphql = {extras = ["fastapi"], version = "^0.254.1"}
 # Async processing
 celery = {extras = ["redis"], version = "^5.4.0"}
 redis = "^5.2.1"
+# OpenTelemetry/Distributed Tracing
+opentelemetry-api = "^1.27.0"
+opentelemetry-sdk = "^1.27.0"
+opentelemetry-exporter-jaeger-thrift = "^1.27.0"
+opentelemetry-exporter-otlp = "^1.27.0"
+opentelemetry-instrumentation-fastapi = "^0.48b0"
+opentelemetry-instrumentation-sqlalchemy = "^0.48b0"
+opentelemetry-instrumentation-requests = "^0.48b0"
+opentelemetry-instrumentation-httpx = "^0.48b0"
+opentelemetry-instrumentation-redis = "^0.48b0"
+opentelemetry-instrumentation-psycopg2 = "^0.48b0"
+opentelemetry-instrumentation = "^0.48b0"
+psutil = "^6.1.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

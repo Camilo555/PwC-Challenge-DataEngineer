@@ -88,10 +88,15 @@ services:
     image: bitnami/spark:3.5.3
     environment:
       - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_RPC_AUTHENTICATION_ENABLED=yes
+      - SPARK_RPC_ENCRYPTION_ENABLED=yes
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=yes
+      - SPARK_SSL_ENABLED=yes
+      - SPARK_AUTH_SECRET=${SPARK_AUTH_SECRET}
+      - SPARK_SSL_KEYSTORE=${SPARK_SSL_KEYSTORE}
+      - SPARK_SSL_KEYSTORE_PASSWORD=${SPARK_SSL_KEYSTORE_PASSWORD}
+      - SPARK_SSL_TRUSTSTORE=${SPARK_SSL_TRUSTSTORE}
+      - SPARK_SSL_TRUSTSTORE_PASSWORD=${SPARK_SSL_TRUSTSTORE_PASSWORD}
       - SPARK_USER=spark
       - SPARK_MASTER_OPTS=-Dspark.deploy.recoveryMode=FILESYSTEM -Dspark.deploy.recoveryDirectory=/spark-recovery
     ports:
@@ -117,10 +122,15 @@ services:
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=4G
       - SPARK_WORKER_CORES=2
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_RPC_AUTHENTICATION_ENABLED=yes
+      - SPARK_RPC_ENCRYPTION_ENABLED=yes
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=yes
+      - SPARK_SSL_ENABLED=yes
+      - SPARK_AUTH_SECRET=${SPARK_AUTH_SECRET}
+      - SPARK_SSL_KEYSTORE=${SPARK_SSL_KEYSTORE}
+      - SPARK_SSL_KEYSTORE_PASSWORD=${SPARK_SSL_KEYSTORE_PASSWORD}
+      - SPARK_SSL_TRUSTSTORE=${SPARK_SSL_TRUSTSTORE}
+      - SPARK_SSL_TRUSTSTORE_PASSWORD=${SPARK_SSL_TRUSTSTORE_PASSWORD}
       - SPARK_USER=spark
     volumes:
       - ./data:/app/data
@@ -145,10 +155,15 @@ services:
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=4G
       - SPARK_WORKER_CORES=2
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_RPC_AUTHENTICATION_ENABLED=yes
+      - SPARK_RPC_ENCRYPTION_ENABLED=yes
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=yes
+      - SPARK_SSL_ENABLED=yes
+      - SPARK_AUTH_SECRET=${SPARK_AUTH_SECRET}
+      - SPARK_SSL_KEYSTORE=${SPARK_SSL_KEYSTORE}
+      - SPARK_SSL_KEYSTORE_PASSWORD=${SPARK_SSL_KEYSTORE_PASSWORD}
+      - SPARK_SSL_TRUSTSTORE=${SPARK_SSL_TRUSTSTORE}
+      - SPARK_SSL_TRUSTSTORE_PASSWORD=${SPARK_SSL_TRUSTSTORE_PASSWORD}
       - SPARK_USER=spark
     volumes:
       - ./data:/app/data
@@ -466,8 +481,29 @@ volumes:
     driver: local
 
 networks:
-  retail-network:
+  # Network segmentation for security
+  frontend-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  backend-network:
+    driver: bridge
+    internal: true  # No external access
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+  database-network:
+    driver: bridge
+    internal: true  # No external access
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+  monitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.23.0.0/24
     ipam:
       config:
         - subnet: 172.20.0.0/16

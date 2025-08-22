@@ -2,7 +2,6 @@
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from api.v1.schemas.sales import SaleItem
 from data_access.db import session_scope
 from data_access.models.star_schema import (
     DimCountry,
@@ -11,6 +10,7 @@ from data_access.models.star_schema import (
     DimProduct,
     FactSale,
 )
+from domain.entities.sale import Sale
 
 
 class SalesRepository:
@@ -24,7 +24,7 @@ class SalesRepository:
         page: int = 1,
         size: int = 20,
         sort: str = "invoice_date:desc",
-    ) -> tuple[list[SaleItem], int]:
+    ) -> tuple[list[Sale], int]:
         offset = (page - 1) * size
 
         # Base select with joins over dims needed for the API response

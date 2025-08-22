@@ -1,6 +1,6 @@
 """Domain entities module."""
 
-from .customer import Customer, CustomerMetrics, CustomerSegment
+from .customer import CustomerEntity as Customer, CustomerSegment, CustomerValueTier, CustomerStatus
 from .invoice import Invoice, InvoiceStatus, InvoiceType
 from .product import Product, ProductCategory, StockItem
 from .transaction import CancelledTransaction, Transaction, TransactionLine, TransactionStatus
@@ -15,7 +15,8 @@ __all__ = [
     "StockItem",
     "Customer",
     "CustomerSegment",
-    "CustomerMetrics",
+    "CustomerValueTier",
+    "CustomerStatus",
     "Invoice",
     "InvoiceStatus",
     "InvoiceType",

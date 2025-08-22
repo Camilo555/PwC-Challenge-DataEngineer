@@ -69,7 +69,7 @@ class BaseConfig(BaseSettings):
     enable_data_quality_checks: bool = Field(default=True)
     enable_monitoring: bool = Field(default=True)
     enable_caching: bool = Field(default=True)
-    _enable_vector_search: bool = Field(default=True, alias="enable_vector_search")
+    enable_vector_search: bool = Field(default=True)
 
     model_config = SettingsConfigDict(
         env_file=".env",

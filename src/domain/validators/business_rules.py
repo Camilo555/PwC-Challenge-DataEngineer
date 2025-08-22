@@ -70,3 +70,60 @@ class BusinessRuleValidator:
             raise ValueError(f"{context}: date range cannot exceed 730 days for performance reasons")
         
         return start_date, end_date
+
+
+# Individual validation functions
+def validate_transaction(transaction: Any) -> bool:
+    """Validate a transaction entity."""
+    try:
+        if hasattr(transaction, 'total_amount'):
+            BusinessRuleValidator.validate_transaction_amount(transaction.total_amount)
+        return True
+    except ValueError:
+        return False
+
+
+def validate_customer(customer: Any) -> bool:
+    """Validate a customer entity."""
+    try:
+        if hasattr(customer, 'lifetime_value') and hasattr(customer, 'order_count'):
+            BusinessRuleValidator.validate_customer_segment(
+                customer.lifetime_value, customer.order_count
+            )
+        return True
+    except ValueError:
+        return False
+
+
+def validate_product(product: Any) -> bool:
+    """Validate a product entity."""
+    try:
+        if hasattr(product, 'unit_price') and product.unit_price is not None:
+            BusinessRuleValidator.validate_transaction_amount(product.unit_price, "product price")
+        return True
+    except ValueError:
+        return False
+
+
+def validate_invoice(invoice: Any) -> bool:
+    """Validate an invoice entity."""
+    try:
+        if hasattr(invoice, 'total_amount'):
+            BusinessRuleValidator.validate_transaction_amount(invoice.total_amount, "invoice")
+        return True
+    except ValueError:
+        return False
+
+
+def bulk_validate(entities: List[Any], validator_func: callable) -> List[bool]:
+    """
+    Bulk validate a list of entities using the specified validator function.
+    
+    Args:
+        entities: List of entities to validate
+        validator_func: Function to use for validation
+        
+    Returns:
+        List of boolean results indicating validation success for each entity
+    """
+    return [validator_func(entity) for entity in entities]

@@ -178,5 +178,44 @@ def main() -> None:
         exit(1)
 
 
+class PandasBronzeProcessor:
+    """
+    Class-based Bronze processor for compatibility with the enhanced factory.
+    Wraps the functional bronze processing logic.
+    """
+    
+    def __init__(self, config=None):
+        self.config = config
+        self.logger = get_logger(__name__)
+    
+    def process(self, input_path=None, output_path=None):
+        """Process bronze data using the functional approach."""
+        if input_path:
+            # Override default paths if provided
+            original_raw = settings.raw_data_path
+            original_bronze = settings.bronze_path
+            
+            try:
+                settings.raw_data_path = Path(input_path)
+                if output_path:
+                    settings.bronze_path = Path(output_path)
+                
+                return ingest_bronze()
+            finally:
+                # Restore original paths
+                settings.raw_data_path = original_raw
+                settings.bronze_path = original_bronze
+        else:
+            return ingest_bronze()
+    
+    def validate_config(self):
+        """Validate processor configuration."""
+        return True  # Basic validation
+    
+    def get_metrics(self):
+        """Get processing metrics."""
+        return {}
+
+
 if __name__ == "__main__":
     main()

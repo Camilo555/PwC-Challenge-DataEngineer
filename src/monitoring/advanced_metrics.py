@@ -335,7 +335,7 @@ class MetricCollector:
         
         self.increment_counter("etl_records_processed", records_processed, labels)
         self.increment_counter("etl_records_failed", records_failed, labels)
-        self.record_timer("etl_processing_time", processing_time, labels)
+        self.record_histogram("etl_processing_time", processing_time, labels)
         self.set_gauge("etl_data_quality_score", data_quality_score * 100, labels)
         
         if records_processed > 0:

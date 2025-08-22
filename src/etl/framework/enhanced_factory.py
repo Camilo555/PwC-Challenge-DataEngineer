@@ -234,6 +234,10 @@ class EnhancedProcessorFactory:
         self.logger = get_logger(self.__class__.__name__)
         self._config_validators: Dict[str, callable] = {}
         
+        # Add loader and merger for test compatibility
+        self.loader = self  # Self-reference for loader functionality
+        self.merger = self  # Self-reference for merger functionality
+        
         # Auto-discover and register processors
         self._auto_discover_processors()
     

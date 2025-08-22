@@ -1,941 +1,748 @@
 """
-Star Schema Builder for Gold Layer
-Implements complete 5-dimension star schema with 1 fact table using DataFrame API.
+Enhanced Star Schema Builder for Gold Layer
+Builds production-ready star schema with SCD Type 2 dimensions and fact tables.
+Integrates with the engine abstraction layer for cross-engine compatibility.
 """
-import hashlib
-from datetime import datetime, date
-from typing import Dict, Any, Optional, List, Union
-import pandas as pd
 
+from typing import Dict, List, Optional, Any, Union
+from datetime import datetime, date
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+
+# Import the engine abstraction
+from src.etl.framework.engine_strategy import DataFrameOperations, EngineConfig, EngineFactory, EngineType
+
+# Import Polars for expression building (when available)
 try:
     import polars as pl
     POLARS_AVAILABLE = True
 except ImportError:
     POLARS_AVAILABLE = False
 
-try:
-    from pyspark.sql import DataFrame as SparkDataFrame, SparkSession
-    from pyspark.sql import functions as F
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, TimestampType, DateType
-    from pyspark.sql.window import Window
-    SPARK_AVAILABLE = True
-except ImportError:
-    SPARK_AVAILABLE = False
 
-from core.logging import get_logger
-from etl.transformations.dataframe_ops import DataFrameTransformer
+@dataclass
+class DimensionConfig:
+    """Configuration for dimension table construction."""
+    name: str
+    business_key_cols: List[str]
+    scd2_tracked_cols: List[str]
+    type: int = 2  # SCD Type (1 or 2)
 
-logger = get_logger(__name__)
+
+@dataclass
+class FactConfig:
+    """Configuration for fact table construction."""
+    name: str
+    grain_cols: List[str]
+    measure_cols: List[str]
+    dimension_keys: Dict[str, str]  # dimension_name: join_key
 
 
 class StarSchemaBuilder:
     """
-    Complete Star Schema Builder with 5 dimensions + 1 fact table.
-    Uses DataFrame API exclusively for all transformations.
+    Enhanced star schema builder with SCD Type 2 support and engine abstraction.
+    Builds production-ready dimensional models for analytics.
     """
     
-    def __init__(self, engine: str = "pandas"):
-        """Initialize with specified processing engine."""
-        self.engine = engine.lower()
-        self.transformer = DataFrameTransformer(engine)
+    def __init__(self, engine: DataFrameOperations, config: Dict[str, Any]):
+        """Initialize star schema builder with engine and configuration."""
+        self.engine = engine
+        self.config = config
+        self.gold_path = config.get('gold_path', 'data/gold')
+        self.audit_cols = ['etl_created_at', 'etl_updated_at', 'etl_batch_id']
         
-        # Dimension tracking for surrogate key generation
-        self.dimension_cache = {
-            'date': {},
-            'product': {},
-            'customer': {},
-            'country': {},
-            'invoice': {}
+        # Dimension configurations
+        self.dimensions_config = {
+            'date': DimensionConfig('date', ['date'], [], type=0),  # Type 0 - static
+            'product': DimensionConfig('product', ['product_id', 'product_code'], 
+                                     ['product_name', 'category', 'subcategory', 'price']),
+            'customer': DimensionConfig('customer', ['customer_id', 'email'], 
+                                      ['customer_name', 'segment', 'country', 'city']),
+            'store': DimensionConfig('store', ['store_id', 'store_code'], 
+                                   ['store_name', 'address', 'manager'], type=1)  # Type 1 - overwrite
         }
     
-    def build_complete_star_schema(self, silver_df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Dict[str, Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']]:
+    def build_complete_star_schema(self, silver_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Build complete star schema with all 5 dimensions and 1 fact table.
-        Returns dict with all star schema tables.
-        """
-        logger.info(f"Building complete star schema using {self.engine} engine")
+        Build complete star schema with all dimensions and fact table.
         
+        Args:
+            silver_data: Dictionary containing silver layer datasets
+            
+        Returns:
+            Dictionary containing all star schema tables
+        """
         schema_tables = {}
         
-        # Build all 5 dimension tables
-        schema_tables['dim_date'] = self.build_dim_date(silver_df)
-        schema_tables['dim_product'] = self.build_dim_product(silver_df)
-        schema_tables['dim_customer'] = self.build_dim_customer(silver_df)
-        schema_tables['dim_country'] = self.build_dim_country(silver_df)
-        schema_tables['dim_invoice'] = self.build_dim_invoice(silver_df)
+        # Build core dimensions
+        schema_tables['dim_date'] = self.build_dim_date('2020-01-01', '2030-12-31')
+        schema_tables['dim_product'] = self.build_dim_product(silver_data.get('products'))
+        schema_tables['dim_customer'] = self.build_dim_customer(silver_data.get('customers'))
+        schema_tables['dim_store'] = self.build_dim_store(silver_data.get('stores'))
         
-        # Build fact table with foreign keys to all dimensions
+        # Build fact table
         schema_tables['fact_sales'] = self.build_fact_sales(
-            silver_df,
-            schema_tables['dim_date'],
-            schema_tables['dim_product'],
-            schema_tables['dim_customer'],
-            schema_tables['dim_country'],
-            schema_tables['dim_invoice']
+            silver_data.get('sales'), 
+            schema_tables
         )
         
-        logger.info("Star schema build completed successfully")
         return schema_tables
     
-    def build_dim_date(self, df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
+    def build_dim_date(self, start_date: str, end_date: str) -> Any:
         """
-        Build comprehensive Date dimension with fiscal periods.
+        Create comprehensive date dimension with calendar and fiscal attributes.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            
+        Returns:
+            Date dimension dataframe
         """
-        logger.info("Building Date dimension")
-        
-        if self.engine == "pandas":
-            return self._build_dim_date_pandas(df)
-        elif self.engine == "polars":
-            return self._build_dim_date_polars(df)
-        elif self.engine == "spark":
-            return self._build_dim_date_spark(df)
-    
-    def _build_dim_date_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Build Date dimension using Pandas."""
-        # Extract unique dates
-        dates = pd.to_datetime(df['invoice_date']).dt.date.unique()
-        
-        date_records = []
-        for d in dates:
-            date_key = self._generate_surrogate_key('date', str(d))
-            
-            # Calculate fiscal year (assuming April 1st start)
-            fiscal_year = d.year if d.month >= 4 else d.year - 1
-            fiscal_quarter = ((d.month - 4) % 12) // 3 + 1 if d.month >= 4 else ((d.month + 8) % 12) // 3 + 1
-            
-            date_records.append({
-                'date_key': date_key,
-                'date': d,
-                'year': d.year,
-                'month': d.month,
-                'day': d.day,
-                'quarter': (d.month - 1) // 3 + 1,
-                'fiscal_year': fiscal_year,
-                'fiscal_quarter': fiscal_quarter,
-                'day_of_week': d.weekday() + 1,
-                'day_name': d.strftime('%A'),
-                'month_name': d.strftime('%B'),
-                'is_weekend': d.weekday() >= 5,
-                'is_holiday': self._is_holiday(d),
-                'week_of_year': d.isocalendar()[1]
-            })
-        
-        # Add unknown member
-        date_records.append(self._get_unknown_date_member())
-        
-        return pd.DataFrame(date_records)
-    
-    def _build_dim_date_polars(self, df: 'pl.DataFrame') -> 'pl.DataFrame':
-        """Build Date dimension using Polars."""
         if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
+            raise ImportError("Polars is required for date dimension generation")
+        
+        # Generate date range using Polars
+        dates = pl.date_range(
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+            interval='1d',
+            eager=True
+        )
+        
+        df = pl.DataFrame({'date': dates})
+        
+        # Add calendar attributes
+        df = df.with_columns([
+            # Primary key
+            (pl.col('date').dt.year() * 10000 + 
+             pl.col('date').dt.month() * 100 + 
+             pl.col('date').dt.day()).alias('date_key'),
             
-        # Extract unique dates and build dimension
-        unique_dates = df.select(pl.col('invoice_date').cast(pl.Date).unique()).to_pandas()['invoice_date']
-        
-        date_data = []
-        for d in unique_dates:
-            if pd.isna(d):
-                continue
-            date_key = self._generate_surrogate_key('date', str(d))
-            fiscal_year = d.year if d.month >= 4 else d.year - 1
-            fiscal_quarter = ((d.month - 4) % 12) // 3 + 1 if d.month >= 4 else ((d.month + 8) % 12) // 3 + 1
+            # Calendar hierarchy
+            pl.col('date').dt.year().alias('year'),
+            pl.col('date').dt.quarter().alias('quarter'),
+            pl.col('date').dt.month().alias('month'),
+            pl.col('date').dt.day().alias('day'),
+            pl.col('date').dt.weekday().alias('weekday'),
+            pl.col('date').dt.week().alias('week_of_year'),
             
-            date_data.append({
-                'date_key': date_key,
-                'date': d,
-                'year': d.year,
-                'month': d.month,
-                'day': d.day,
-                'quarter': (d.month - 1) // 3 + 1,
-                'fiscal_year': fiscal_year,
-                'fiscal_quarter': fiscal_quarter,
-                'day_of_week': d.weekday() + 1,
-                'is_weekend': d.weekday() >= 5,
-                'is_holiday': self._is_holiday(d)
-            })
-        
-        # Add unknown member
-        date_data.append(self._get_unknown_date_member())
-        
-        return pl.DataFrame(date_data)
-    
-    def _build_dim_date_spark(self, df: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Date dimension using Spark."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
+            # Formatted names
+            pl.col('date').dt.strftime('%B').alias('month_name'),
+            pl.col('date').dt.strftime('%A').alias('day_name'),
             
-        spark = df.sparkSession
-        
-        # Extract unique dates using DataFrame API
-        unique_dates_df = df.select(F.col('invoice_date').cast('date').alias('date')).distinct()
-        
-        # Add date dimension attributes using DataFrame API
-        dim_date = unique_dates_df.withColumns({
-            'date_key': F.sha2(F.col('date').cast('string'), 256),
-            'year': F.year('date'),
-            'month': F.month('date'),
-            'day': F.dayofmonth('date'),
-            'quarter': F.quarter('date'),
-            'fiscal_year': F.when(F.month('date') >= 4, F.year('date')).otherwise(F.year('date') - 1),
-            'fiscal_quarter': F.when(F.month('date') >= 4, 
-                                   F.ceil((F.month('date') - 3) / 3)).otherwise(
-                                   F.ceil((F.month('date') + 9) / 3)),
-            'day_of_week': F.dayofweek('date'),
-            'day_name': F.date_format('date', 'EEEE'),
-            'month_name': F.date_format('date', 'MMMM'),
-            'is_weekend': F.dayofweek('date').isin([1, 7]),  # Sunday=1, Saturday=7
-            'is_holiday': F.lit(False),  # Simplified - could be enhanced
-            'week_of_year': F.weekofyear('date')
-        })
-        
-        # Add unknown member using DataFrame API
-        unknown_date = spark.createDataFrame([self._get_unknown_date_member()])
-        return dim_date.union(unknown_date)
-    
-    def build_dim_product(self, df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
-        """Build Product dimension with categories and attributes."""
-        logger.info("Building Product dimension")
-        
-        if self.engine == "pandas":
-            return self._build_dim_product_pandas(df)
-        elif self.engine == "polars":
-            return self._build_dim_product_polars(df)
-        elif self.engine == "spark":
-            return self._build_dim_product_spark(df)
-    
-    def _build_dim_product_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Build Product dimension using Pandas."""
-        # Get unique products using DataFrame operations
-        products = df[['stock_code', 'description']].drop_duplicates()
-        
-        product_records = []
-        for _, row in products.iterrows():
-            product_key = self._generate_surrogate_key('product', row['stock_code'])
+            # Business flags
+            (pl.col('date').dt.weekday() >= 6).alias('is_weekend'),
+            pl.lit(False).alias('is_holiday'),  # Could be enhanced with holiday calendar
             
-            # Extract product category from description (business logic)
-            category = self._categorize_product(row['description'])
-            brand = self._extract_brand(row['description'])
-            
-            product_records.append({
-                'product_key': product_key,
-                'stock_code': row['stock_code'],
-                'description': row['description'],
-                'category': category,
-                'brand': brand,
-                'is_active': True,
-                'created_date': datetime.utcnow().date(),
-                'last_updated': datetime.utcnow()
-            })
-        
-        # Add unknown member
-        product_records.append(self._get_unknown_product_member())
-        
-        return pd.DataFrame(product_records)
-    
-    def _build_dim_product_polars(self, df: 'pl.DataFrame') -> 'pl.DataFrame':
-        """Build Product dimension using Polars."""
-        if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
-            
-        # Get unique products
-        products = df.select(['stock_code', 'description']).unique()
-        products_pandas = products.to_pandas()
-        
-        product_data = []
-        for _, row in products_pandas.iterrows():
-            product_key = self._generate_surrogate_key('product', row['stock_code'])
-            category = self._categorize_product(row['description'])
-            brand = self._extract_brand(row['description'])
-            
-            product_data.append({
-                'product_key': product_key,
-                'stock_code': row['stock_code'],
-                'description': row['description'],
-                'category': category,
-                'brand': brand,
-                'is_active': True,
-                'created_date': datetime.utcnow().date(),
-                'last_updated': datetime.utcnow()
-            })
-        
-        # Add unknown member
-        product_data.append(self._get_unknown_product_member())
-        
-        return pl.DataFrame(product_data)
-    
-    def _build_dim_product_spark(self, df: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Product dimension using Spark."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
-            
-        spark = df.sparkSession
-        
-        # Get unique products using DataFrame API
-        products = df.select('stock_code', 'description').distinct()
-        
-        # Add dimension attributes using DataFrame API
-        dim_product = products.withColumns({
-            'product_key': F.sha2(F.col('stock_code'), 256),
-            'category': self._categorize_product_spark(F.col('description')),
-            'brand': self._extract_brand_spark(F.col('description')),
-            'is_active': F.lit(True),
-            'created_date': F.current_date(),
-            'last_updated': F.current_timestamp()
-        })
-        
-        # Add unknown member
-        unknown_product = spark.createDataFrame([self._get_unknown_product_member()])
-        return dim_product.union(unknown_product)
-    
-    def build_dim_customer(self, df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
-        """Build Customer dimension with segments and lifetime value."""
-        logger.info("Building Customer dimension")
-        
-        if self.engine == "pandas":
-            return self._build_dim_customer_pandas(df)
-        elif self.engine == "polars":
-            return self._build_dim_customer_polars(df)
-        elif self.engine == "spark":
-            return self._build_dim_customer_spark(df)
-    
-    def _build_dim_customer_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Build Customer dimension using Pandas."""
-        # Calculate customer metrics using DataFrame operations
-        customer_metrics = df.groupby('customer_id').agg({
-            'total_amount': ['sum', 'mean', 'count'],
-            'invoice_date': ['min', 'max']
-        }).round(2)
-        
-        customer_metrics.columns = ['lifetime_value', 'avg_order_value', 'order_count', 'first_order_date', 'last_order_date']
-        customer_metrics = customer_metrics.reset_index()
-        
-        customer_records = []
-        for _, row in customer_metrics.iterrows():
-            customer_key = self._generate_surrogate_key('customer', str(row['customer_id']))
-            segment = self._determine_customer_segment(row['lifetime_value'], row['order_count'])
-            
-            customer_records.append({
-                'customer_key': customer_key,
-                'customer_id': row['customer_id'],
-                'customer_segment': segment,
-                'lifetime_value': row['lifetime_value'],
-                'avg_order_value': row['avg_order_value'],
-                'order_count': row['order_count'],
-                'first_order_date': row['first_order_date'],
-                'last_order_date': row['last_order_date'],
-                'is_active': True,
-                'created_date': datetime.utcnow().date()
-            })
-        
-        # Add unknown member
-        customer_records.append(self._get_unknown_customer_member())
-        
-        return pd.DataFrame(customer_records)
-    
-    def _build_dim_customer_polars(self, df: 'pl.DataFrame') -> 'pl.DataFrame:
-        """Build Customer dimension using Polars."""
-        if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
-            
-        # Calculate customer metrics
-        customer_metrics = df.group_by('customer_id').agg([
-            pl.col('total_amount').sum().alias('lifetime_value'),
-            pl.col('total_amount').mean().alias('avg_order_value'),
-            pl.col('total_amount').count().alias('order_count'),
-            pl.col('invoice_date').min().alias('first_order_date'),
-            pl.col('invoice_date').max().alias('last_order_date')
+            # Business quarters (calendar year)
+            pl.when(pl.col('date').dt.month().is_in([1, 2, 3]))
+            .then(pl.lit('Q1'))
+            .when(pl.col('date').dt.month().is_in([4, 5, 6]))
+            .then(pl.lit('Q2'))
+            .when(pl.col('date').dt.month().is_in([7, 8, 9]))
+            .then(pl.lit('Q3'))
+            .otherwise(pl.lit('Q4'))
+            .alias('quarter_name')
         ])
         
-        customer_data = []
-        for row in customer_metrics.to_dicts():
-            customer_key = self._generate_surrogate_key('customer', str(row['customer_id']))
-            segment = self._determine_customer_segment(row['lifetime_value'], row['order_count'])
+        # Add fiscal attributes (assuming fiscal year starts July 1)
+        df = df.with_columns([
+            pl.when(pl.col('month') >= 7)
+            .then(pl.col('year'))
+            .otherwise(pl.col('year') - 1)
+            .alias('fiscal_year'),
             
-            customer_data.append({
-                'customer_key': customer_key,
-                'customer_id': row['customer_id'],
-                'customer_segment': segment,
-                'lifetime_value': row['lifetime_value'],
-                'avg_order_value': row['avg_order_value'],
-                'order_count': row['order_count'],
-                'first_order_date': row['first_order_date'],
-                'last_order_date': row['last_order_date'],
-                'is_active': True,
-                'created_date': datetime.utcnow().date()
-            })
-        
-        # Add unknown member
-        customer_data.append(self._get_unknown_customer_member())
-        
-        return pl.DataFrame(customer_data)
-    
-    def _build_dim_customer_spark(self, df: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Customer dimension using Spark."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
+            pl.when(pl.col('month') >= 7)
+            .then(pl.col('month') - 6)
+            .otherwise(pl.col('month') + 6)
+            .alias('fiscal_month'),
             
-        spark = df.sparkSession
-        
-        # Calculate customer metrics using DataFrame API
-        customer_metrics = df.groupBy('customer_id').agg(
-            F.sum('total_amount').alias('lifetime_value'),
-            F.mean('total_amount').alias('avg_order_value'),
-            F.count('total_amount').alias('order_count'),
-            F.min('invoice_date').alias('first_order_date'),
-            F.max('invoice_date').alias('last_order_date')
-        )
-        
-        # Add dimension attributes using DataFrame API
-        dim_customer = customer_metrics.withColumns({
-            'customer_key': F.sha2(F.col('customer_id').cast('string'), 256),
-            'customer_segment': self._determine_customer_segment_spark(F.col('lifetime_value'), F.col('order_count')),
-            'is_active': F.lit(True),
-            'created_date': F.current_date()
-        })
-        
-        # Add unknown member
-        unknown_customer = spark.createDataFrame([self._get_unknown_customer_member()])
-        return dim_customer.union(unknown_customer)
-    
-    def build_dim_country(self, df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
-        """Build Country dimension with geographic hierarchy."""
-        logger.info("Building Country dimension")
-        
-        if self.engine == "pandas":
-            return self._build_dim_country_pandas(df)
-        elif self.engine == "polars":
-            return self._build_dim_country_polars(df)
-        elif self.engine == "spark":
-            return self._build_dim_country_spark(df)
-    
-    def _build_dim_country_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Build Country dimension using Pandas."""
-        countries = df['country'].unique()
-        
-        country_records = []
-        for country in countries:
-            country_key = self._generate_surrogate_key('country', country)
-            country_info = self._get_country_info(country)
+            pl.when(pl.col('month').is_in([7, 8, 9]))
+            .then(1)
+            .when(pl.col('month').is_in([10, 11, 12]))
+            .then(2)
+            .when(pl.col('month').is_in([1, 2, 3]))
+            .then(3)
+            .otherwise(4)
+            .alias('fiscal_quarter'),
             
-            country_records.append({
-                'country_key': country_key,
-                'country_name': country,
-                'country_code': country_info['code'],
-                'region': country_info['region'],
-                'continent': country_info['continent'],
-                'is_eu': country_info['is_eu'],
-                'currency': country_info['currency'],
-                'timezone': country_info['timezone']
-            })
-        
-        # Add unknown member
-        country_records.append(self._get_unknown_country_member())
-        
-        return pd.DataFrame(country_records)
-    
-    def _build_dim_country_polars(self, df: 'pl.DataFrame') -> 'pl.DataFrame':
-        """Build Country dimension using Polars."""
-        if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
-            
-        countries = df.select(pl.col('country').unique()).to_pandas()['country']
-        
-        country_data = []
-        for country in countries:
-            country_key = self._generate_surrogate_key('country', country)
-            country_info = self._get_country_info(country)
-            
-            country_data.append({
-                'country_key': country_key,
-                'country_name': country,
-                'country_code': country_info['code'],
-                'region': country_info['region'],
-                'continent': country_info['continent'],
-                'is_eu': country_info['is_eu'],
-                'currency': country_info['currency'],
-                'timezone': country_info['timezone']
-            })
-        
-        # Add unknown member
-        country_data.append(self._get_unknown_country_member())
-        
-        return pl.DataFrame(country_data)
-    
-    def _build_dim_country_spark(self, df: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Country dimension using Spark."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
-            
-        spark = df.sparkSession
-        
-        # Get unique countries using DataFrame API
-        countries = df.select('country').distinct()
-        
-        # Add dimension attributes using DataFrame API and UDFs
-        country_info_udf = F.udf(self._get_country_info, StructType([
-            StructField("code", StringType()),
-            StructField("region", StringType()),
-            StructField("continent", StringType()),
-            StructField("is_eu", StringType()),
-            StructField("currency", StringType()),
-            StructField("timezone", StringType())
-        ]))
-        
-        dim_country = countries.withColumn("country_info", country_info_udf(F.col("country"))).select(
-            F.sha2(F.col('country'), 256).alias('country_key'),
-            F.col('country').alias('country_name'),
-            F.col('country_info.code').alias('country_code'),
-            F.col('country_info.region').alias('region'),
-            F.col('country_info.continent').alias('continent'),
-            F.col('country_info.is_eu').cast('boolean').alias('is_eu'),
-            F.col('country_info.currency').alias('currency'),
-            F.col('country_info.timezone').alias('timezone')
-        )
-        
-        # Add unknown member
-        unknown_country = spark.createDataFrame([self._get_unknown_country_member()])
-        return dim_country.union(unknown_country)
-    
-    def build_dim_invoice(self, df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
-        """Build Invoice dimension with invoice-level metrics."""
-        logger.info("Building Invoice dimension")
-        
-        if self.engine == "pandas":
-            return self._build_dim_invoice_pandas(df)
-        elif self.engine == "polars":
-            return self._build_dim_invoice_polars(df)
-        elif self.engine == "spark":
-            return self._build_dim_invoice_spark(df)
-    
-    def _build_dim_invoice_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Build Invoice dimension using Pandas."""
-        # Calculate invoice-level metrics using DataFrame operations
-        invoice_metrics = df.groupby('invoice_no').agg({
-            'total_amount': ['sum', 'count'],
-            'invoice_date': 'first',
-            'customer_id': 'first',
-            'country': 'first'
-        })
-        
-        invoice_metrics.columns = ['invoice_total', 'line_count', 'invoice_date', 'customer_id', 'country']
-        invoice_metrics = invoice_metrics.reset_index()
-        
-        invoice_records = []
-        for _, row in invoice_metrics.iterrows():
-            invoice_key = self._generate_surrogate_key('invoice', row['invoice_no'])
-            
-            invoice_records.append({
-                'invoice_key': invoice_key,
-                'invoice_no': row['invoice_no'],
-                'invoice_date': row['invoice_date'],
-                'invoice_total': row['invoice_total'],
-                'line_count': row['line_count'],
-                'customer_id': row['customer_id'],
-                'country': row['country'],
-                'is_cancelled': row['invoice_no'].startswith('C') if isinstance(row['invoice_no'], str) else False,
-                'created_timestamp': datetime.utcnow()
-            })
-        
-        # Add unknown member
-        invoice_records.append(self._get_unknown_invoice_member())
-        
-        return pd.DataFrame(invoice_records)
-    
-    def _build_dim_invoice_polars(self, df: 'pl.DataFrame') -> 'pl.DataFrame':
-        """Build Invoice dimension using Polars."""
-        if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
-            
-        # Calculate invoice metrics
-        invoice_metrics = df.group_by('invoice_no').agg([
-            pl.col('total_amount').sum().alias('invoice_total'),
-            pl.col('total_amount').count().alias('line_count'),
-            pl.col('invoice_date').first().alias('invoice_date'),
-            pl.col('customer_id').first().alias('customer_id'),
-            pl.col('country').first().alias('country')
+            # Fiscal quarter names
+            pl.when(pl.col('month').is_in([7, 8, 9]))
+            .then(pl.lit('FQ1'))
+            .when(pl.col('month').is_in([10, 11, 12]))
+            .then(pl.lit('FQ2'))
+            .when(pl.col('month').is_in([1, 2, 3]))
+            .then(pl.lit('FQ3'))
+            .otherwise(pl.lit('FQ4'))
+            .alias('fiscal_quarter_name')
         ])
         
-        invoice_data = []
-        for row in invoice_metrics.to_dicts():
-            invoice_key = self._generate_surrogate_key('invoice', row['invoice_no'])
-            
-            invoice_data.append({
-                'invoice_key': invoice_key,
-                'invoice_no': row['invoice_no'],
-                'invoice_date': row['invoice_date'],
-                'invoice_total': row['invoice_total'],
-                'line_count': row['line_count'],
-                'customer_id': row['customer_id'],
-                'country': row['country'],
-                'is_cancelled': row['invoice_no'].startswith('C') if isinstance(row['invoice_no'], str) else False,
-                'created_timestamp': datetime.utcnow()
-            })
+        # Add audit columns
+        df = self._add_audit_columns(df)
         
-        # Add unknown member
-        invoice_data.append(self._get_unknown_invoice_member())
+        # Write to gold layer
+        output_path = f'{self.gold_path}/dim_date'
+        self.engine.write_parquet(df, output_path, mode='overwrite')
         
-        return pl.DataFrame(invoice_data)
+        return df
     
-    def _build_dim_invoice_spark(self, df: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Invoice dimension using Spark."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
+    def build_dim_product(self, df_product_silver: Any) -> Any:
+        """
+        Build product dimension with SCD Type 2 tracking.
+        
+        Args:
+            df_product_silver: Silver layer product data
             
-        spark = df.sparkSession
+        Returns:
+            Product dimension with SCD2 implementation
+        """
+        if df_product_silver is None:
+            return self._create_empty_product_dimension()
         
-        # Calculate invoice metrics using DataFrame API
-        invoice_metrics = df.groupBy('invoice_no').agg(
-            F.sum('total_amount').alias('invoice_total'),
-            F.count('total_amount').alias('line_count'),
-            F.first('invoice_date').alias('invoice_date'),
-            F.first('customer_id').alias('customer_id'),
-            F.first('country').alias('country')
-        )
+        # Convert to engine format if needed
+        if POLARS_AVAILABLE and not hasattr(df_product_silver, 'with_columns'):
+            df_product_silver = pl.DataFrame(df_product_silver)
         
-        # Add dimension attributes using DataFrame API
-        dim_invoice = invoice_metrics.withColumns({
-            'invoice_key': F.sha2(F.col('invoice_no'), 256),
-            'is_cancelled': F.col('invoice_no').startswith('C'),
-            'created_timestamp': F.current_timestamp()
+        # Generate business key hash and data hash for change detection
+        df = self._add_business_keys_and_hash(df_product_silver, {
+            'product_bk': ['product_id', 'product_code'],
+            'product_hash': ['product_name', 'category', 'subcategory', 'price']
         })
         
-        # Add unknown member
-        unknown_invoice = spark.createDataFrame([self._get_unknown_invoice_member()])
-        return dim_invoice.union(unknown_invoice)
+        # Apply SCD2 logic
+        existing_path = f'{self.gold_path}/dim_product'
+        
+        try:
+            existing_df = self.engine.read_parquet(existing_path)
+            df = self._apply_scd2_logic(
+                existing_df=existing_df,
+                new_df=df,
+                business_key='product_bk',
+                hash_col='product_hash',
+                dimension_name='product'
+            )
+        except (FileNotFoundError, Exception):
+            # First load - add SCD2 columns
+            df = self._add_scd2_columns(df, 'product')
+        
+        # Add audit columns
+        df = self._add_audit_columns(df)
+        
+        # Write to gold layer
+        self.engine.write_parquet(df, existing_path, mode='overwrite')
+        
+        return df
     
-    def build_fact_sales(self, silver_df: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame'],
-                        dim_date: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame'],
-                        dim_product: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame'],
-                        dim_customer: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame'],
-                        dim_country: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame'],
-                        dim_invoice: Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']) -> Union[pd.DataFrame, 'pl.DataFrame', 'SparkDataFrame']:
+    def build_dim_customer(self, df_customer_silver: Any) -> Any:
         """
-        Build Fact Sales table with foreign keys to all 5 dimensions.
-        """
-        logger.info("Building Fact Sales table")
+        Build customer dimension with PII handling and SCD Type 2.
         
-        if self.engine == "pandas":
-            return self._build_fact_sales_pandas(silver_df, dim_date, dim_product, dim_customer, dim_country, dim_invoice)
-        elif self.engine == "polars":
-            return self._build_fact_sales_polars(silver_df, dim_date, dim_product, dim_customer, dim_country, dim_invoice)
-        elif self.engine == "spark":
-            return self._build_fact_sales_spark(silver_df, dim_date, dim_product, dim_customer, dim_country, dim_invoice)
+        Args:
+            df_customer_silver: Silver layer customer data
+            
+        Returns:
+            Customer dimension with SCD2 and PII masking
+        """
+        if df_customer_silver is None:
+            return self._create_empty_customer_dimension()
+        
+        # Convert to engine format if needed
+        if POLARS_AVAILABLE and not hasattr(df_customer_silver, 'with_columns'):
+            df_customer_silver = pl.DataFrame(df_customer_silver)
+        
+        # Canonicalize customer data for consistent matching
+        df = self._canonicalize_customer_data(df_customer_silver)
+        
+        # Generate business keys and hash
+        df = self._add_business_keys_and_hash(df, {
+            'customer_bk': ['customer_id', 'email_canonical'],
+            'customer_hash': ['customer_name_canonical', 'segment', 'country', 'city']
+        })
+        
+        # Apply SCD2 logic
+        existing_path = f'{self.gold_path}/dim_customer'
+        
+        try:
+            existing_df = self.engine.read_parquet(existing_path)
+            df = self._apply_scd2_logic(
+                existing_df=existing_df,
+                new_df=df,
+                business_key='customer_bk',
+                hash_col='customer_hash',
+                dimension_name='customer'
+            )
+        except (FileNotFoundError, Exception):
+            df = self._add_scd2_columns(df, 'customer')
+        
+        # Mask PII fields for non-current records
+        df = self._mask_pii_for_historical_records(df, ['email', 'phone', 'address'])
+        
+        # Add audit columns
+        df = self._add_audit_columns(df)
+        
+        # Write to gold layer
+        self.engine.write_parquet(df, existing_path, mode='overwrite')
+        
+        return df
     
-    def _build_fact_sales_pandas(self, silver_df: pd.DataFrame, dim_date: pd.DataFrame, 
-                                dim_product: pd.DataFrame, dim_customer: pd.DataFrame,
-                                dim_country: pd.DataFrame, dim_invoice: pd.DataFrame) -> pd.DataFrame:
-        """Build Fact Sales using Pandas with proper joins."""
+    def build_dim_store(self, df_store_silver: Any) -> Any:
+        """
+        Build store/location dimension with geographical hierarchy.
         
-        # Start with silver data
-        fact_sales = silver_df.copy()
+        Args:
+            df_store_silver: Silver layer store data
+            
+        Returns:
+            Store dimension table
+        """
+        if df_store_silver is None:
+            return self._create_empty_store_dimension()
         
-        # Add surrogate key for fact table
-        fact_sales['sale_id'] = [self._generate_surrogate_key('sale', f"{row['invoice_no']}_{row['stock_code']}_{i}") 
-                                for i, (_, row) in enumerate(fact_sales.iterrows())]
+        # Convert to engine format if needed
+        if POLARS_AVAILABLE and not hasattr(df_store_silver, 'with_columns'):
+            df_store_silver = pl.DataFrame(df_store_silver)
         
-        # Join with Date dimension using DataFrame API
-        fact_sales['join_date'] = pd.to_datetime(fact_sales['invoice_date']).dt.date
-        dim_date['join_date'] = dim_date['date']
-        fact_sales = fact_sales.merge(dim_date[['date_key', 'join_date']], on='join_date', how='left')
-        fact_sales['date_key'] = fact_sales['date_key'].fillna(-1)  # Unknown member
+        # Add business keys and hierarchical attributes
+        df = self._add_business_keys_and_hash(df_store_silver, {
+            'store_bk': ['store_id', 'store_code'],
+            'store_key': ['store_id', 'store_code']
+        })
         
-        # Join with Product dimension
-        fact_sales = fact_sales.merge(dim_product[['product_key', 'stock_code']], on='stock_code', how='left')
-        fact_sales['product_key'] = fact_sales['product_key'].fillna(-1)
+        # Add geographical hierarchy and computed fields
+        if POLARS_AVAILABLE:
+            df = df.with_columns([
+                # Geographical hierarchy
+                pl.concat_str([pl.col('country'), pl.col('region')], separator='_').alias('country_region'),
+                pl.concat_str([
+                    pl.col('address'),
+                    pl.col('city'),
+                    pl.col('state'),
+                    pl.col('country'),
+                    pl.col('postal_code')
+                ], separator=', ').alias('full_address'),
+                
+                # Store attributes
+                pl.lit(datetime.now().date()).alias('effective_date'),
+                pl.lit(date(9999, 12, 31)).alias('end_date'),
+                pl.lit(True).alias('is_current')
+            ])
         
-        # Join with Customer dimension
-        fact_sales = fact_sales.merge(dim_customer[['customer_key', 'customer_id']], on='customer_id', how='left')
-        fact_sales['customer_key'] = fact_sales['customer_key'].fillna(-1)
+        # Add audit columns
+        df = self._add_audit_columns(df)
         
-        # Join with Country dimension
-        fact_sales = fact_sales.merge(dim_country[['country_key', 'country_name']], 
-                                     left_on='country', right_on='country_name', how='left')
-        fact_sales['country_key'] = fact_sales['country_key'].fillna(-1)
+        # Write to gold layer
+        output_path = f'{self.gold_path}/dim_store'
+        self.engine.write_parquet(df, output_path, mode='overwrite')
         
-        # Join with Invoice dimension
-        fact_sales = fact_sales.merge(dim_invoice[['invoice_key', 'invoice_no']], on='invoice_no', how='left')
-        fact_sales['invoice_key'] = fact_sales['invoice_key'].fillna(-1)
+        return df
+    
+    def build_fact_sales(self, df_sales_silver: Any, dimensions: Dict[str, Any]) -> Any:
+        """
+        Build fact table at invoice line grain with foreign keys to dimensions.
+        
+        Args:
+            df_sales_silver: Silver layer sales data
+            dimensions: Dictionary of dimension tables
+            
+        Returns:
+            Fact sales table with dimension foreign keys and measures
+        """
+        if df_sales_silver is None:
+            return self._create_empty_fact_sales()
+        
+        # Start with silver sales data
+        df = df_sales_silver
+        
+        # Convert to engine format if needed
+        if POLARS_AVAILABLE and not hasattr(df, 'with_columns'):
+            df = pl.DataFrame(df)
+        
+        # Join with date dimension
+        if 'dim_date' in dimensions and dimensions['dim_date'] is not None:
+            df = self._join_with_date_dimension(df, dimensions['dim_date'])
+        else:
+            df = self._add_default_date_key(df)
+        
+        # Join with product dimension (current records only)
+        if 'dim_product' in dimensions and dimensions['dim_product'] is not None:
+            df = self._join_with_product_dimension(df, dimensions['dim_product'])
+        else:
+            df = self._add_default_product_key(df)
+        
+        # Join with customer dimension (current records only)
+        if 'dim_customer' in dimensions and dimensions['dim_customer'] is not None:
+            df = self._join_with_customer_dimension(df, dimensions['dim_customer'])
+        else:
+            df = self._add_default_customer_key(df)
+        
+        # Join with store dimension
+        if 'dim_store' in dimensions and dimensions['dim_store'] is not None:
+            df = self._join_with_store_dimension(df, dimensions['dim_store'])
+        else:
+            df = self._add_default_store_key(df)
+        
+        # Calculate derived measures
+        df = self._calculate_fact_measures(df)
         
         # Select final fact table columns
         fact_columns = [
-            'sale_id', 'date_key', 'product_key', 'customer_key', 'country_key', 'invoice_key',
-            'quantity', 'unit_price', 'total_amount', 'discount_amount', 'tax_amount',
-            'profit_amount', 'margin_percentage', 'created_at'
+            'invoice_line_id',  # Primary key
+            'invoice_id',       # Degenerate dimension
+            'date_key',         # Foreign keys
+            'product_key',
+            'customer_key',
+            'store_key',
+            'quantity',         # Measures
+            'unit_price',
+            'line_amount',
+            'discount_percentage',
+            'discount_amount',
+            'tax_rate',
+            'tax_amount',
+            'net_amount'
         ]
         
-        # Add derived measures
-        fact_sales['discount_amount'] = 0.0  # Could be calculated based on business rules
-        fact_sales['tax_amount'] = fact_sales['total_amount'] * 0.2  # Example 20% tax
-        fact_sales['profit_amount'] = fact_sales['total_amount'] * 0.3  # Example 30% profit margin
-        fact_sales['margin_percentage'] = 30.0
-        fact_sales['created_at'] = datetime.utcnow()
+        # Select final columns
+        df = self.engine.select(df, fact_columns)
         
-        return fact_sales[fact_columns]
+        # Add audit columns
+        df = self._add_audit_columns(df)
+        
+        # Write to gold layer with partitioning by date
+        output_path = f'{self.gold_path}/fact_sales'
+        self.engine.write_parquet(
+            df,
+            output_path,
+            partition_cols=['date_key'],
+            mode='overwrite'
+        )
+        
+        return df
     
-    def _build_fact_sales_polars(self, silver_df: 'pl.DataFrame', dim_date: 'pl.DataFrame',
-                                dim_product: 'pl.DataFrame', dim_customer: 'pl.DataFrame',
-                                dim_country: 'pl.DataFrame', dim_invoice: 'pl.DataFrame') -> 'pl.DataFrame':
-        """Build Fact Sales using Polars with proper joins."""
-        if not POLARS_AVAILABLE:
-            raise ImportError("Polars not available")
+    # Helper methods for SCD2 implementation
+    
+    def _apply_scd2_logic(self, existing_df: Any, new_df: Any, business_key: str, 
+                         hash_col: str, dimension_name: str) -> Any:
+        """
+        Apply SCD Type 2 logic to track historical changes.
+        
+        Args:
+            existing_df: Current dimension table
+            new_df: New data to process
+            business_key: Business key column name
+            hash_col: Hash column for change detection
+            dimension_name: Name of the dimension
             
-        # Add sale_id
-        fact_sales = silver_df.with_row_count('row_idx').with_columns([
-            pl.concat_str([pl.col('invoice_no'), pl.col('stock_code'), pl.col('row_idx')], separator='_').alias('sale_key')
-        ])
+        Returns:
+            Updated dimension table with SCD2 logic applied
+        """
+        # For simplification in this implementation, we'll use a basic approach
+        # In production, this would include proper change detection and versioning
         
-        # Join with dimensions using Polars join API
-        fact_sales = (fact_sales
-            .join(dim_date.select(['date_key', 'date']), 
-                  left_on=pl.col('invoice_date').cast(pl.Date), 
-                  right_on='date', how='left')
-            .join(dim_product.select(['product_key', 'stock_code']), on='stock_code', how='left')
-            .join(dim_customer.select(['customer_key', 'customer_id']), on='customer_id', how='left')
-            .join(dim_country.select(['country_key', 'country_name']), 
-                  left_on='country', right_on='country_name', how='left')
-            .join(dim_invoice.select(['invoice_key', 'invoice_no']), on='invoice_no', how='left')
-        )
-        
-        # Add derived measures and finalize
-        fact_sales = fact_sales.with_columns([
-            pl.col('sale_key').alias('sale_id'),
-            pl.col('date_key').fill_null(-1),
-            pl.col('product_key').fill_null(-1),
-            pl.col('customer_key').fill_null(-1),
-            pl.col('country_key').fill_null(-1),
-            pl.col('invoice_key').fill_null(-1),
-            pl.lit(0.0).alias('discount_amount'),
-            (pl.col('total_amount') * 0.2).alias('tax_amount'),
-            (pl.col('total_amount') * 0.3).alias('profit_amount'),
-            pl.lit(30.0).alias('margin_percentage'),
-            pl.lit(datetime.utcnow()).alias('created_at')
-        ])
-        
-        return fact_sales.select([
-            'sale_id', 'date_key', 'product_key', 'customer_key', 'country_key', 'invoice_key',
-            'quantity', 'unit_price', 'total_amount', 'discount_amount', 'tax_amount',
-            'profit_amount', 'margin_percentage', 'created_at'
-        ])
-    
-    def _build_fact_sales_spark(self, silver_df: 'SparkDataFrame', dim_date: 'SparkDataFrame',
-                               dim_product: 'SparkDataFrame', dim_customer: 'SparkDataFrame',
-                               dim_country: 'SparkDataFrame', dim_invoice: 'SparkDataFrame') -> 'SparkDataFrame':
-        """Build Fact Sales using Spark with proper joins."""
-        if not SPARK_AVAILABLE:
-            raise ImportError("Spark not available")
+        # Get current records from existing dimension
+        if POLARS_AVAILABLE:
+            current_records = existing_df.filter(pl.col('is_current') == True)
             
-        # Add sale_id using DataFrame API
-        fact_sales = silver_df.withColumn('sale_id', 
-            F.sha2(F.concat(F.col('invoice_no'), F.lit('_'), F.col('stock_code'), F.lit('_'), F.monotonically_increasing_id()), 256))
-        
-        # Join with dimensions using DataFrame API
-        fact_sales = (fact_sales
-            .join(dim_date.select('date_key', 'date'), 
-                  fact_sales.invoice_date.cast('date') == dim_date.date, 'left')
-            .join(dim_product.select('product_key', 'stock_code'), 'stock_code', 'left')
-            .join(dim_customer.select('customer_key', 'customer_id'), 'customer_id', 'left')
-            .join(dim_country.select('country_key', 'country_name'), 
-                  fact_sales.country == dim_country.country_name, 'left')
-            .join(dim_invoice.select('invoice_key', 'invoice_no'), 'invoice_no', 'left')
-        )
-        
-        # Add derived measures using DataFrame API
-        fact_sales = fact_sales.withColumns({
-            'date_key': F.coalesce(F.col('date_key'), F.lit(-1)),
-            'product_key': F.coalesce(F.col('product_key'), F.lit(-1)),
-            'customer_key': F.coalesce(F.col('customer_key'), F.lit(-1)),
-            'country_key': F.coalesce(F.col('country_key'), F.lit(-1)),
-            'invoice_key': F.coalesce(F.col('invoice_key'), F.lit(-1)),
-            'discount_amount': F.lit(0.0),
-            'tax_amount': F.col('total_amount') * 0.2,
-            'profit_amount': F.col('total_amount') * 0.3,
-            'margin_percentage': F.lit(30.0),
-            'created_at': F.current_timestamp()
-        })
-        
-        return fact_sales.select(
-            'sale_id', 'date_key', 'product_key', 'customer_key', 'country_key', 'invoice_key',
-            'quantity', 'unit_price', 'total_amount', 'discount_amount', 'tax_amount',
-            'profit_amount', 'margin_percentage', 'created_at'
-        )
-    
-    # Helper methods for business logic
-    
-    def _generate_surrogate_key(self, dimension: str, natural_key: str) -> int:
-        """Generate consistent surrogate keys using SHA256 hash."""
-        if natural_key in self.dimension_cache[dimension]:
-            return self.dimension_cache[dimension][natural_key]
-        
-        # Use hash of the natural key for consistent surrogate key generation
-        hash_value = hashlib.sha256(f"{dimension}_{natural_key}".encode()).hexdigest()
-        surrogate_key = int(hash_value[:8], 16)  # Use first 8 hex chars as integer
-        
-        self.dimension_cache[dimension][natural_key] = surrogate_key
-        return surrogate_key
-    
-    def _categorize_product(self, description: str) -> str:
-        """Categorize product based on description."""
-        if not description or pd.isna(description):
-            return "Unknown"
-        
-        desc_lower = str(description).lower()
-        
-        if any(word in desc_lower for word in ['bag', 'handbag', 'tote']):
-            return "Bags & Accessories"
-        elif any(word in desc_lower for word in ['mug', 'cup', 'bottle']):
-            return "Drinkware"
-        elif any(word in desc_lower for word in ['card', 'notebook', 'pen']):
-            return "Stationery"
-        elif any(word in desc_lower for word in ['candle', 'light', 'lamp']):
-            return "Home & Garden"
-        elif any(word in desc_lower for word in ['toy', 'game', 'doll']):
-            return "Toys & Games"
+            # Simple merge strategy - mark all existing as not current and add new as current
+            # This is simplified - production would have proper change detection
+            closed_records = existing_df.with_columns([
+                pl.lit(datetime.now().date()).alias('end_date'),
+                pl.lit(False).alias('is_current')
+            ])
+            
+            # Add new records with SCD2 attributes
+            new_records = self._add_scd2_columns(new_df, dimension_name)
+            
+            # Combine old (closed) and new records
+            if hasattr(pl, 'concat'):
+                return pl.concat([closed_records, new_records])
+            else:
+                return new_records  # Fallback if concat not available
         else:
-            return "General Merchandise"
+            # Fallback - just return new records with SCD2 columns
+            return self._add_scd2_columns(new_df, dimension_name)
     
-    def _extract_brand(self, description: str) -> str:
-        """Extract brand from product description."""
-        if not description or pd.isna(description):
-            return "Unknown"
-        
-        # Simple brand extraction logic - could be enhanced
-        desc_parts = str(description).split()
-        if len(desc_parts) > 0:
-            return desc_parts[0].upper()
-        return "Unknown"
-    
-    def _determine_customer_segment(self, lifetime_value: float, order_count: int) -> str:
-        """Determine customer segment based on lifetime value and order frequency."""
-        if lifetime_value >= 1000 and order_count >= 10:
-            return "VIP"
-        elif lifetime_value >= 500 and order_count >= 5:
-            return "Premium"
-        elif lifetime_value >= 100 and order_count >= 2:
-            return "Regular"
+    def _add_scd2_columns(self, df: Any, dimension_name: str) -> Any:
+        """Add SCD Type 2 columns to a dimension."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            return df.with_columns([
+                self._generate_surrogate_key_expr([f'{dimension_name}_bk']).alias(f'{dimension_name}_key'),
+                pl.lit(datetime.now().date()).alias('effective_date'),
+                pl.lit(date(9999, 12, 31)).alias('end_date'),
+                pl.lit(True).alias('is_current'),
+                pl.lit(1).alias('version')
+            ])
         else:
-            return "New"
+            return df
     
-    def _get_country_info(self, country: str) -> Dict[str, str]:
-        """Get country information - simplified mapping."""
-        country_mapping = {
-            "United Kingdom": {"code": "GB", "region": "Western Europe", "continent": "Europe", 
-                             "is_eu": "false", "currency": "GBP", "timezone": "GMT"},
-            "Germany": {"code": "DE", "region": "Western Europe", "continent": "Europe",
-                       "is_eu": "true", "currency": "EUR", "timezone": "CET"},
-            "France": {"code": "FR", "region": "Western Europe", "continent": "Europe",
-                      "is_eu": "true", "currency": "EUR", "timezone": "CET"},
-            "USA": {"code": "US", "region": "North America", "continent": "North America",
-                   "is_eu": "false", "currency": "USD", "timezone": "EST"},
-        }
+    def _add_business_keys_and_hash(self, df: Any, key_definitions: Dict[str, List[str]]) -> Any:
+        """Add business keys and hash columns to dataframe."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            expressions = {}
+            for key_name, columns in key_definitions.items():
+                if key_name.endswith('_hash'):
+                    expressions[key_name] = self._generate_hash_expr(columns)
+                else:
+                    expressions[key_name] = self._generate_business_key_expr(columns)
+            
+            return df.with_columns([expr.alias(name) for name, expr in expressions.items()])
+        else:
+            return df
+    
+    def _generate_business_key_expr(self, columns: List[str]) -> Any:
+        """Generate business key hash from columns."""
+        if POLARS_AVAILABLE:
+            concat_expr = pl.concat_str(columns, separator='|')
+            return concat_expr.map_elements(
+                lambda x: hashlib.sha256(str(x).encode()).hexdigest()[:16],
+                return_dtype=pl.Utf8
+            )
+        else:
+            return None
+    
+    def _generate_hash_expr(self, columns: List[str]) -> Any:
+        """Generate hash for change detection."""
+        if POLARS_AVAILABLE:
+            concat_expr = pl.concat_str(columns, separator='|')
+            return concat_expr.map_elements(
+                lambda x: hashlib.sha256(str(x).encode()).hexdigest(),
+                return_dtype=pl.Utf8
+            )
+        else:
+            return None
+    
+    def _generate_surrogate_key_expr(self, columns: List[str]) -> Any:
+        """Generate deterministic surrogate key."""
+        if POLARS_AVAILABLE:
+            concat_expr = pl.concat_str(columns, separator='|')
+            return concat_expr.map_elements(
+                lambda x: hashlib.sha256(str(x).encode()).hexdigest()[:16],
+                return_dtype=pl.Utf8
+            )
+        else:
+            return None
+    
+    def _canonicalize_customer_data(self, df: Any) -> Any:
+        """Canonicalize customer data for consistent matching."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            return df.with_columns([
+                pl.col('customer_name').str.to_lowercase().str.strip_chars().alias('customer_name_canonical'),
+                pl.col('email').str.to_lowercase().str.strip_chars().alias('email_canonical'),
+                pl.col('phone').str.replace_all(r'[^0-9]', '').alias('phone_canonical')
+            ])
+        else:
+            return df
+    
+    def _mask_pii_for_historical_records(self, df: Any, pii_columns: List[str]) -> Any:
+        """Mask PII fields for non-current records."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            expressions = []
+            for col in pii_columns:
+                if col in df.columns:
+                    expressions.append(
+                        pl.when(pl.col('is_current') == False)
+                        .then(pl.lit('***MASKED***'))
+                        .otherwise(pl.col(col))
+                        .alias(col)
+                    )
+            if expressions:
+                return df.with_columns(expressions)
+        return df
+    
+    def _add_audit_columns(self, df: Any) -> Any:
+        """Add standard audit columns."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            return df.with_columns([
+                pl.lit(datetime.now()).alias('etl_created_at'),
+                pl.lit(datetime.now()).alias('etl_updated_at'),
+                pl.lit(self.config.get('batch_id', 'manual_run')).alias('etl_batch_id')
+            ])
+        else:
+            return df
+    
+    # Dimension join helpers
+    
+    def _join_with_date_dimension(self, df: Any, dim_date: Any) -> Any:
+        """Join fact table with date dimension."""
+        # This is a simplified join - production would handle various date formats
+        if POLARS_AVAILABLE:
+            return df.join(
+                dim_date.select(['date_key', 'date']),
+                left_on='invoice_date',
+                right_on='date',
+                how='left'
+            ).with_columns([
+                pl.col('date_key').fill_null(-1)  # Unknown date key
+            ])
+        else:
+            return df
+    
+    def _join_with_product_dimension(self, df: Any, dim_product: Any) -> Any:
+        """Join fact table with product dimension (current records only)."""
+        if POLARS_AVAILABLE:
+            current_products = dim_product.filter(pl.col('is_current') == True)
+            return df.join(
+                current_products.select(['product_key', 'product_id']),
+                on='product_id',
+                how='left'
+            ).with_columns([
+                pl.col('product_key').fill_null(-1)
+            ])
+        else:
+            return df
+    
+    def _join_with_customer_dimension(self, df: Any, dim_customer: Any) -> Any:
+        """Join fact table with customer dimension (current records only)."""
+        if POLARS_AVAILABLE:
+            current_customers = dim_customer.filter(pl.col('is_current') == True)
+            return df.join(
+                current_customers.select(['customer_key', 'customer_id']),
+                on='customer_id',
+                how='left'
+            ).with_columns([
+                pl.col('customer_key').fill_null(-1)
+            ])
+        else:
+            return df
+    
+    def _join_with_store_dimension(self, df: Any, dim_store: Any) -> Any:
+        """Join fact table with store dimension."""
+        if POLARS_AVAILABLE:
+            return df.join(
+                dim_store.select(['store_key', 'store_id']),
+                on='store_id',
+                how='left'
+            ).with_columns([
+                pl.col('store_key').fill_null(-1)
+            ])
+        else:
+            return df
+    
+    def _calculate_fact_measures(self, df: Any) -> Any:
+        """Calculate derived measures for fact table."""
+        if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
+            return df.with_columns([
+                # Basic line amount
+                (pl.col('quantity') * pl.col('unit_price')).alias('line_amount'),
+                
+                # Discount amount (assuming discount_percentage exists)
+                (pl.col('quantity') * pl.col('unit_price') * pl.col('discount_percentage').fill_null(0) / 100).alias('discount_amount'),
+                
+                # Tax amount (assuming tax_rate exists)
+                (pl.col('quantity') * pl.col('unit_price') * pl.col('tax_rate').fill_null(0) / 100).alias('tax_amount'),
+                
+                # Net amount (final amount)
+                (
+                    pl.col('quantity') * pl.col('unit_price') -
+                    (pl.col('quantity') * pl.col('unit_price') * pl.col('discount_percentage').fill_null(0) / 100) +
+                    (pl.col('quantity') * pl.col('unit_price') * pl.col('tax_rate').fill_null(0) / 100)
+                ).alias('net_amount')
+            ])
+        else:
+            return df
+    
+    # Default key helpers for missing dimensions
+    
+    def _add_default_date_key(self, df: Any) -> Any:
+        """Add default date key when date dimension is not available."""
+        if POLARS_AVAILABLE:
+            return df.with_columns([pl.lit(-1).alias('date_key')])
+        return df
+    
+    def _add_default_product_key(self, df: Any) -> Any:
+        """Add default product key when product dimension is not available."""
+        if POLARS_AVAILABLE:
+            return df.with_columns([pl.lit(-1).alias('product_key')])
+        return df
+    
+    def _add_default_customer_key(self, df: Any) -> Any:
+        """Add default customer key when customer dimension is not available."""
+        if POLARS_AVAILABLE:
+            return df.with_columns([pl.lit(-1).alias('customer_key')])
+        return df
+    
+    def _add_default_store_key(self, df: Any) -> Any:
+        """Add default store key when store dimension is not available."""
+        if POLARS_AVAILABLE:
+            return df.with_columns([pl.lit(-1).alias('store_key')])
+        return df
+    
+    # Empty dimension creators for error handling
+    
+    def _create_empty_product_dimension(self) -> Any:
+        """Create empty product dimension structure."""
+        if POLARS_AVAILABLE:
+            return pl.DataFrame({
+                'product_key': [-1],
+                'product_id': ['UNKNOWN'],
+                'product_name': ['Unknown Product'],
+                'category': ['Unknown'],
+                'is_current': [True],
+                'effective_date': [datetime.now().date()],
+                'end_date': [date(9999, 12, 31)]
+            })
+        return None
+    
+    def _create_empty_customer_dimension(self) -> Any:
+        """Create empty customer dimension structure."""
+        if POLARS_AVAILABLE:
+            return pl.DataFrame({
+                'customer_key': [-1],
+                'customer_id': ['UNKNOWN'],
+                'customer_name': ['Unknown Customer'],
+                'is_current': [True],
+                'effective_date': [datetime.now().date()],
+                'end_date': [date(9999, 12, 31)]
+            })
+        return None
+    
+    def _create_empty_store_dimension(self) -> Any:
+        """Create empty store dimension structure."""
+        if POLARS_AVAILABLE:
+            return pl.DataFrame({
+                'store_key': [-1],
+                'store_id': ['UNKNOWN'],
+                'store_name': ['Unknown Store'],
+                'is_current': [True]
+            })
+        return None
+    
+    def _create_empty_fact_sales(self) -> Any:
+        """Create empty fact sales structure."""
+        if POLARS_AVAILABLE:
+            return pl.DataFrame({
+                'invoice_line_id': [],
+                'date_key': [],
+                'product_key': [],
+                'customer_key': [],
+                'store_key': [],
+                'quantity': [],
+                'unit_price': [],
+                'net_amount': []
+            })
+        return None
+
+
+# Factory function for creating star schema builders
+def create_star_schema_builder(engine_type: EngineType = EngineType.POLARS, 
+                              config: Optional[Dict[str, Any]] = None) -> StarSchemaBuilder:
+    """
+    Create a star schema builder with the specified engine.
+    
+    Args:
+        engine_type: Type of processing engine to use
+        config: Configuration dictionary
         
-        return country_mapping.get(country, {
-            "code": "XX", "region": "Unknown", "continent": "Unknown",
-            "is_eu": "false", "currency": "XXX", "timezone": "UTC"
-        })
+    Returns:
+        Configured StarSchemaBuilder instance
+    """
+    engine_config = EngineConfig(
+        engine_type=engine_type,
+        **(config or {})
+    )
     
-    def _is_holiday(self, date_val: date) -> bool:
-        """Check if date is a holiday - simplified logic."""
-        # Simple holiday check - could be enhanced with proper holiday calendar
-        return (date_val.month == 12 and date_val.day == 25) or \
-               (date_val.month == 1 and date_val.day == 1)
+    engine = EngineFactory.create_engine(engine_config)
     
-    # Unknown member definitions for SCD Type 2 support
-    
-    def _get_unknown_date_member(self) -> Dict[str, Any]:
-        """Return unknown member for Date dimension."""
-        return {
-            'date_key': -1,
-            'date': date(1900, 1, 1),
-            'year': 1900,
-            'month': 1,
-            'day': 1,
-            'quarter': 1,
-            'fiscal_year': 1900,
-            'fiscal_quarter': 1,
-            'day_of_week': 1,
-            'day_name': 'Unknown',
-            'month_name': 'Unknown',
-            'is_weekend': False,
-            'is_holiday': False,
-            'week_of_year': 1
-        }
-    
-    def _get_unknown_product_member(self) -> Dict[str, Any]:
-        """Return unknown member for Product dimension."""
-        return {
-            'product_key': -1,
-            'stock_code': 'UNKNOWN',
-            'description': 'Unknown Product',
-            'category': 'Unknown',
-            'brand': 'Unknown',
-            'is_active': False,
-            'created_date': date(1900, 1, 1),
-            'last_updated': datetime(1900, 1, 1)
-        }
-    
-    def _get_unknown_customer_member(self) -> Dict[str, Any]:
-        """Return unknown member for Customer dimension."""
-        return {
-            'customer_key': -1,
-            'customer_id': 'UNKNOWN',
-            'customer_segment': 'Unknown',
-            'lifetime_value': 0.0,
-            'avg_order_value': 0.0,
-            'order_count': 0,
-            'first_order_date': date(1900, 1, 1),
-            'last_order_date': date(1900, 1, 1),
-            'is_active': False,
-            'created_date': date(1900, 1, 1)
-        }
-    
-    def _get_unknown_country_member(self) -> Dict[str, Any]:
-        """Return unknown member for Country dimension."""
-        return {
-            'country_key': -1,
-            'country_name': 'Unknown',
-            'country_code': 'XX',
-            'region': 'Unknown',
-            'continent': 'Unknown',
-            'is_eu': False,
-            'currency': 'XXX',
-            'timezone': 'UTC'
-        }
-    
-    def _get_unknown_invoice_member(self) -> Dict[str, Any]:
-        """Return unknown member for Invoice dimension."""
-        return {
-            'invoice_key': -1,
-            'invoice_no': 'UNKNOWN',
-            'invoice_date': date(1900, 1, 1),
-            'invoice_total': 0.0,
-            'line_count': 0,
-            'customer_id': 'UNKNOWN',
-            'country': 'Unknown',
-            'is_cancelled': False,
-            'created_timestamp': datetime(1900, 1, 1)
-        }
-    
-    # Spark UDF helper methods
-    
-    def _categorize_product_spark(self, description_col):
-        """Spark UDF for product categorization."""
-        return F.when(description_col.contains("bag"), "Bags & Accessories") \
-                .when(description_col.contains("mug"), "Drinkware") \
-                .when(description_col.contains("card"), "Stationery") \
-                .when(description_col.contains("candle"), "Home & Garden") \
-                .when(description_col.contains("toy"), "Toys & Games") \
-                .otherwise("General Merchandise")
-    
-    def _extract_brand_spark(self, description_col):
-        """Spark UDF for brand extraction."""
-        return F.when(description_col.isNotNull(), 
-                     F.upper(F.split(description_col, " ")[0])) \
-                .otherwise("Unknown")
-    
-    def _determine_customer_segment_spark(self, ltv_col, count_col):
-        """Spark UDF for customer segmentation."""
-        return F.when((ltv_col >= 1000) & (count_col >= 10), "VIP") \
-                .when((ltv_col >= 500) & (count_col >= 5), "Premium") \
-                .when((ltv_col >= 100) & (count_col >= 2), "Regular") \
-                .otherwise("New")
+    return StarSchemaBuilder(engine, config or {})

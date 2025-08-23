@@ -2,59 +2,56 @@
 Monitoring Dashboard
 Provides web-based dashboard for system monitoring and observability.
 """
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
-import json
 import asyncio
-from pathlib import Path
+from datetime import datetime
 
 try:
-    from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+    import uvicorn
+    from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
     from fastapi.responses import HTMLResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates
-    import uvicorn
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
 
 from core.logging import get_logger
-from core.monitoring.metrics import default_collector, MetricPoint, ETLJobMetrics
-from core.monitoring.health_checks import health_manager, HealthStatus
-from core.monitoring.alerting import alert_manager, AlertSeverity, AlertStatus
+from core.monitoring.alerting import AlertSeverity, alert_manager
+from core.monitoring.health_checks import health_manager
+from core.monitoring.metrics import default_collector
 
 logger = get_logger(__name__)
 
 
 class MonitoringDashboard:
     """Web-based monitoring dashboard."""
-    
-    def __init__(self, title: str = "PwC Data Engineer Challenge - Monitoring", 
+
+    def __init__(self, title: str = "PwC Data Engineer Challenge - Monitoring",
                  host: str = "localhost", port: int = 8080):
         if not FASTAPI_AVAILABLE:
             raise ImportError("FastAPI not available. Install with: pip install fastapi uvicorn jinja2")
-        
+
         self.title = title
         self.host = host
         self.port = port
-        
+
         # Create FastAPI app
         self.app = FastAPI(title=title, description="Monitoring Dashboard")
-        
+
         # Setup templates and static files
         self._setup_routes()
-        
+
         # Background tasks
         self._monitoring_tasks = []
-    
+
     def _setup_routes(self):
         """Setup dashboard routes."""
-        
+
         # Static dashboard page
         @self.app.get("/", response_class=HTMLResponse)
         async def dashboard_home(request: Request):
             return self._render_dashboard_html()
-        
+
         # API endpoints
         @self.app.get("/api/health")
         async def get_health():
@@ -63,7 +60,7 @@ class MonitoringDashboard:
                 # Run health checks
                 health_results = await health_manager.check_all()
                 overall_status = health_manager.get_overall_status()
-                
+
                 return {
                     "overall_status": overall_status.value,
                     "timestamp": datetime.utcnow().isoformat(),
@@ -80,7 +77,7 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting health status: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.get("/api/metrics/summary")
         async def get_metrics_summary():
             """Get metrics summary."""
@@ -90,7 +87,7 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting metrics summary: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.get("/api/metrics/jobs")
         async def get_job_metrics():
             """Get ETL job metrics."""
@@ -114,7 +111,7 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting job metrics: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.get("/api/alerts")
         async def get_alerts():
             """Get active alerts."""
@@ -127,7 +124,7 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting alerts: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.get("/api/alerts/history")
         async def get_alert_history(limit: int = 50):
             """Get alert history."""
@@ -137,24 +134,24 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting alert history: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.post("/api/alerts/{alert_id}/acknowledge")
         async def acknowledge_alert(alert_id: str, request: Request):
             """Acknowledge an alert."""
             try:
                 body = await request.json()
                 acknowledged_by = body.get("acknowledged_by", "dashboard_user")
-                
+
                 success = await alert_manager.acknowledge_alert(alert_id, acknowledged_by)
                 if success:
                     return {"status": "acknowledged", "alert_id": alert_id}
                 else:
                     raise HTTPException(status_code=404, detail="Alert not found")
-                    
+
             except Exception as e:
                 logger.error(f"Error acknowledging alert {alert_id}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.post("/api/alerts/{alert_id}/resolve")
         async def resolve_alert(alert_id: str):
             """Resolve an alert."""
@@ -164,11 +161,11 @@ class MonitoringDashboard:
                     return {"status": "resolved", "alert_id": alert_id}
                 else:
                     raise HTTPException(status_code=404, detail="Alert not found")
-                    
+
             except Exception as e:
                 logger.error(f"Error resolving alert {alert_id}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         @self.app.get("/api/metrics/history/{metric_name}")
         async def get_metric_history(metric_name: str, limit: int = 100):
             """Get metric history."""
@@ -185,15 +182,16 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting metric history for {metric_name}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-        
+
         # System info endpoint
         @self.app.get("/api/system/info")
         async def get_system_info():
             """Get system information."""
             try:
                 import platform
+
                 import psutil
-                
+
                 return {
                     "platform": platform.platform(),
                     "python_version": platform.python_version(),
@@ -205,7 +203,7 @@ class MonitoringDashboard:
             except Exception as e:
                 logger.error(f"Error getting system info: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
-    
+
     def _render_dashboard_html(self) -> str:
         """Render the main dashboard HTML."""
         return """
@@ -588,7 +586,7 @@ class MonitoringDashboard:
         </body>
         </html>
         """
-    
+
     def start_background_monitoring(self):
         """Start background monitoring tasks."""
         async def monitoring_loop():
@@ -600,41 +598,41 @@ class MonitoringDashboard:
                 except Exception as e:
                     logger.error(f"Error in monitoring loop: {e}")
                     await asyncio.sleep(30)
-        
+
         # Start monitoring loop
         task = asyncio.create_task(monitoring_loop())
         self._monitoring_tasks.append(task)
         logger.info("Background monitoring started")
-    
+
     async def _collect_system_metrics(self):
         """Collect system metrics for dashboard."""
         try:
             import psutil
-            
+
             # System resource metrics
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
-            
+
             # Update metrics collector
             default_collector.set_gauge("system_cpu_percent", cpu_percent)
             default_collector.set_gauge("system_memory_percent", memory.percent)
             default_collector.set_gauge("system_disk_percent", disk.percent)
-            
+
         except Exception as e:
             logger.error(f"Error collecting system metrics: {e}")
-    
+
     async def run(self):
         """Run the dashboard server."""
         if not FASTAPI_AVAILABLE:
             logger.error("FastAPI not available - cannot start dashboard")
             return
-        
+
         logger.info(f"Starting monitoring dashboard on {self.host}:{self.port}")
-        
+
         # Start background monitoring
         self.start_background_monitoring()
-        
+
         try:
             config = uvicorn.Config(
                 self.app,
@@ -644,7 +642,7 @@ class MonitoringDashboard:
             )
             server = uvicorn.Server(config)
             await server.serve()
-            
+
         except Exception as e:
             logger.error(f"Error running dashboard server: {e}")
             raise
@@ -652,7 +650,7 @@ class MonitoringDashboard:
             # Clean up background tasks
             for task in self._monitoring_tasks:
                 task.cancel()
-    
+
     def run_sync(self):
         """Run dashboard in sync mode."""
         asyncio.run(self.run())
@@ -660,8 +658,8 @@ class MonitoringDashboard:
 
 # Utility functions for dashboard setup
 
-def create_monitoring_dashboard(title: str = "System Monitoring Dashboard", 
-                              host: str = "localhost", 
+def create_monitoring_dashboard(title: str = "System Monitoring Dashboard",
+                              host: str = "localhost",
                               port: int = 8080) -> MonitoringDashboard:
     """Create and configure monitoring dashboard."""
     dashboard = MonitoringDashboard(title=title, host=host, port=port)
@@ -669,47 +667,47 @@ def create_monitoring_dashboard(title: str = "System Monitoring Dashboard",
     return dashboard
 
 
-async def setup_monitoring_stack(database_url: Optional[str] = None,
-                                redis_url: Optional[str] = None,
+async def setup_monitoring_stack(database_url: str | None = None,
+                                redis_url: str | None = None,
                                 enable_dashboard: bool = True,
                                 dashboard_port: int = 8080):
     """Setup complete monitoring stack."""
-    from core.monitoring.health_checks import setup_basic_health_checks
     from core.monitoring.alerting import (
-        create_health_check_rule, 
+        LogAlertChannel,
+        create_health_check_rule,
         create_system_resource_rule,
-        LogAlertChannel
     )
-    
+    from core.monitoring.health_checks import setup_basic_health_checks
+
     # Setup health checks
     setup_basic_health_checks(
         database_url=database_url,
         redis_url=redis_url,
         file_paths=["/tmp", "/var/log"] if database_url else None
     )
-    
+
     # Setup basic alert rules
     alert_manager.add_rule(create_health_check_rule("database"))
     alert_manager.add_rule(create_health_check_rule("redis"))
     alert_manager.add_rule(create_system_resource_rule("cpu", 80.0))
     alert_manager.add_rule(create_system_resource_rule("memory", 85.0))
-    
+
     # Setup alert channels
     log_channel = LogAlertChannel("system_log")
     alert_manager.add_channel(log_channel)
-    
+
     # Route all alerts to log channel
     for severity in [AlertSeverity.INFO, AlertSeverity.WARNING, AlertSeverity.ERROR, AlertSeverity.CRITICAL]:
         alert_manager.set_channel_routing(severity, ["system_log"])
-    
+
     # Start dashboard if requested
     dashboard = None
     if enable_dashboard and FASTAPI_AVAILABLE:
         dashboard = create_monitoring_dashboard(port=dashboard_port)
-        
+
         # Start dashboard in background
         dashboard_task = asyncio.create_task(dashboard.run())
         logger.info(f"Monitoring dashboard available at http://localhost:{dashboard_port}")
-    
+
     logger.info("Monitoring stack setup complete")
     return dashboard

@@ -4,18 +4,18 @@ Collects comprehensive business and technical metrics for monitoring
 """
 from __future__ import annotations
 
-import time
-import psutil
-import threading
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, asdict
-from collections import defaultdict, deque
 import json
 import sqlite3
+import threading
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
-from core.config import settings
+import psutil
+
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +27,7 @@ class MetricPoint:
     name: str
     value: float
     timestamp: datetime
-    tags: Dict[str, str]
+    tags: dict[str, str]
     unit: str = ""
     description: str = ""
 
@@ -64,28 +64,28 @@ class BusinessMetrics:
     transaction_count: int
     unique_customers: int
     avg_order_value: float
-    top_products: List[str]
-    top_countries: List[str]
+    top_products: list[str]
+    top_countries: list[str]
     timestamp: datetime
 
 
 class MetricsCollector:
     """Advanced metrics collection and storage system."""
-    
-    def __init__(self, storage_path: Optional[Path] = None, retention_days: int = 30):
+
+    def __init__(self, storage_path: Path | None = None, retention_days: int = 30):
         self.storage_path = storage_path or Path("./data/metrics/metrics.db")
         self.retention_days = retention_days
         self.metrics_buffer = deque(maxlen=10000)  # In-memory buffer
         self.collection_interval = 60  # seconds
         self.is_collecting = False
         self.collection_thread = None
-        
+
         # Initialize storage
         self._init_storage()
-        
+
         # Metric aggregations
         self.aggregations = defaultdict(list)
-        
+
         # Alert thresholds
         self.thresholds = {
             'cpu_usage_percent': 80.0,
@@ -95,11 +95,11 @@ class MetricsCollector:
             'data_quality_score': 80.0,
             'processing_time_threshold': 300.0  # 5 minutes
         }
-        
+
     def _init_storage(self):
         """Initialize SQLite storage for metrics."""
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with sqlite3.connect(self.storage_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS system_metrics (
@@ -112,7 +112,7 @@ class MetricsCollector:
                     network_bytes_received INTEGER
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS etl_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +127,7 @@ class MetricsCollector:
                     warnings_count INTEGER
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS business_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,7 +140,7 @@ class MetricsCollector:
                     top_countries TEXT
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS custom_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,31 +152,31 @@ class MetricsCollector:
                     description TEXT
                 )
             """)
-            
+
             # Create indexes for better query performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_system_timestamp ON system_metrics(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_etl_timestamp ON etl_metrics(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_business_timestamp ON business_metrics(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_custom_name_timestamp ON custom_metrics(name, timestamp)")
-            
+
     def start_collection(self):
         """Start automatic metrics collection."""
         if self.is_collecting:
             logger.warning("Metrics collection already running")
             return
-            
+
         self.is_collecting = True
         self.collection_thread = threading.Thread(target=self._collection_loop, daemon=True)
         self.collection_thread.start()
         logger.info("Started automatic metrics collection")
-        
+
     def stop_collection(self):
         """Stop automatic metrics collection."""
         self.is_collecting = False
         if self.collection_thread:
             self.collection_thread.join(timeout=5)
         logger.info("Stopped automatic metrics collection")
-        
+
     def _collection_loop(self):
         """Main collection loop running in background thread."""
         while self.is_collecting:
@@ -184,26 +184,26 @@ class MetricsCollector:
                 # Collect system metrics
                 system_metrics = self.collect_system_metrics()
                 self.store_system_metrics(system_metrics)
-                
+
                 # Check thresholds and generate alerts
                 self._check_system_thresholds(system_metrics)
-                
+
                 time.sleep(self.collection_interval)
-                
+
             except Exception as e:
                 logger.error(f"Error in metrics collection loop: {e}")
                 time.sleep(10)  # Wait before retry
-                
+
     def collect_system_metrics(self) -> SystemMetrics:
         """Collect current system performance metrics."""
         try:
             # CPU usage
             cpu_percent = psutil.cpu_percent(interval=1)
-            
+
             # Memory usage
             memory = psutil.virtual_memory()
             memory_percent = memory.percent
-            
+
             # Disk usage (for data directory)
             data_path = Path("./data")
             if data_path.exists():
@@ -211,10 +211,10 @@ class MetricsCollector:
                 disk_percent = (disk_usage.used / disk_usage.total) * 100
             else:
                 disk_percent = 0.0
-                
+
             # Network I/O
             network = psutil.net_io_counters()
-            
+
             return SystemMetrics(
                 cpu_usage_percent=cpu_percent,
                 memory_usage_percent=memory_percent,
@@ -223,12 +223,12 @@ class MetricsCollector:
                 network_bytes_received=network.bytes_recv,
                 timestamp=datetime.now()
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to collect system metrics: {e}")
             return SystemMetrics(0, 0, 0, 0, 0, datetime.now())
-            
-    def record_etl_metrics(self, pipeline_name: str, stage: str, 
+
+    def record_etl_metrics(self, pipeline_name: str, stage: str,
                           records_processed: int, records_failed: int,
                           processing_time: float, data_quality_score: float,
                           error_count: int = 0, warnings_count: int = 0):
@@ -244,13 +244,13 @@ class MetricsCollector:
             warnings_count=warnings_count,
             timestamp=datetime.now()
         )
-        
+
         self.store_etl_metrics(metrics)
         self._check_etl_thresholds(metrics)
-        
+
     def record_business_metrics(self, total_revenue: float, transaction_count: int,
                                unique_customers: int, avg_order_value: float,
-                               top_products: List[str], top_countries: List[str]):
+                               top_products: list[str], top_countries: list[str]):
         """Record business intelligence metrics."""
         metrics = BusinessMetrics(
             total_revenue=total_revenue,
@@ -261,11 +261,11 @@ class MetricsCollector:
             top_countries=top_countries,
             timestamp=datetime.now()
         )
-        
+
         self.store_business_metrics(metrics)
-        
-    def record_custom_metric(self, name: str, value: float, 
-                           tags: Optional[Dict[str, str]] = None,
+
+    def record_custom_metric(self, name: str, value: float,
+                           tags: dict[str, str] | None = None,
                            unit: str = "", description: str = ""):
         """Record a custom metric."""
         metric = MetricPoint(
@@ -276,10 +276,10 @@ class MetricsCollector:
             unit=unit,
             description=description
         )
-        
+
         self.metrics_buffer.append(metric)
         self.store_custom_metric(metric)
-        
+
     def store_system_metrics(self, metrics: SystemMetrics):
         """Store system metrics to database."""
         try:
@@ -299,7 +299,7 @@ class MetricsCollector:
                 ))
         except Exception as e:
             logger.error(f"Failed to store system metrics: {e}")
-            
+
     def store_etl_metrics(self, metrics: ETLMetrics):
         """Store ETL metrics to database."""
         try:
@@ -323,7 +323,7 @@ class MetricsCollector:
                 ))
         except Exception as e:
             logger.error(f"Failed to store ETL metrics: {e}")
-            
+
     def store_business_metrics(self, metrics: BusinessMetrics):
         """Store business metrics to database."""
         try:
@@ -344,7 +344,7 @@ class MetricsCollector:
                 ))
         except Exception as e:
             logger.error(f"Failed to store business metrics: {e}")
-            
+
     def store_custom_metric(self, metric: MetricPoint):
         """Store custom metric to database."""
         try:
@@ -363,48 +363,48 @@ class MetricsCollector:
                 ))
         except Exception as e:
             logger.error(f"Failed to store custom metric: {e}")
-            
+
     def _check_system_thresholds(self, metrics: SystemMetrics):
         """Check system metrics against thresholds and trigger alerts."""
         alerts = []
-        
+
         if metrics.cpu_usage_percent > self.thresholds['cpu_usage_percent']:
             alerts.append(f"High CPU usage: {metrics.cpu_usage_percent:.1f}%")
-            
+
         if metrics.memory_usage_percent > self.thresholds['memory_usage_percent']:
             alerts.append(f"High memory usage: {metrics.memory_usage_percent:.1f}%")
-            
+
         if metrics.disk_usage_percent > self.thresholds['disk_usage_percent']:
             alerts.append(f"High disk usage: {metrics.disk_usage_percent:.1f}%")
-            
+
         for alert in alerts:
             logger.warning(f"SYSTEM ALERT: {alert}")
-            
+
     def _check_etl_thresholds(self, metrics: ETLMetrics):
         """Check ETL metrics against thresholds and trigger alerts."""
         alerts = []
-        
+
         # Error rate check
         if metrics.records_processed > 0:
             error_rate = (metrics.records_failed / metrics.records_processed) * 100
             if error_rate > self.thresholds['etl_error_rate']:
                 alerts.append(f"High ETL error rate: {error_rate:.1f}%")
-                
+
         # Data quality check
         if metrics.data_quality_score < self.thresholds['data_quality_score']:
             alerts.append(f"Low data quality score: {metrics.data_quality_score:.1f}")
-            
+
         # Processing time check
         if metrics.processing_time_seconds > self.thresholds['processing_time_threshold']:
             alerts.append(f"Long processing time: {metrics.processing_time_seconds:.1f}s")
-            
+
         for alert in alerts:
             logger.warning(f"ETL ALERT [{metrics.pipeline_name}:{metrics.stage}]: {alert}")
-            
-    def get_metrics_summary(self, hours: int = 24) -> Dict[str, Any]:
+
+    def get_metrics_summary(self, hours: int = 24) -> dict[str, Any]:
         """Get metrics summary for the last N hours."""
         cutoff_time = datetime.now() - timedelta(hours=hours)
-        
+
         try:
             with sqlite3.connect(self.storage_path) as conn:
                 # System metrics summary
@@ -414,7 +414,7 @@ class MetricsCollector:
                     FROM system_metrics 
                     WHERE timestamp > ?
                 """, (cutoff_time.isoformat(),))
-                
+
                 system_row = system_cursor.fetchone()
                 system_summary = {
                     'avg_cpu': system_row[0] or 0,
@@ -422,7 +422,7 @@ class MetricsCollector:
                     'avg_disk': system_row[2] or 0,
                     'sample_count': system_row[3] or 0
                 }
-                
+
                 # ETL metrics summary
                 etl_cursor = conn.execute("""
                     SELECT pipeline_name, SUM(records_processed), SUM(records_failed),
@@ -431,7 +431,7 @@ class MetricsCollector:
                     WHERE timestamp > ?
                     GROUP BY pipeline_name
                 """, (cutoff_time.isoformat(),))
-                
+
                 etl_summary = {}
                 for row in etl_cursor.fetchall():
                     pipeline_name = row[0]
@@ -441,49 +441,49 @@ class MetricsCollector:
                         'avg_quality_score': row[3] or 0,
                         'run_count': row[4] or 0
                     }
-                
+
                 return {
                     'period_hours': hours,
                     'system': system_summary,
                     'etl_pipelines': etl_summary,
                     'generated_at': datetime.now().isoformat()
                 }
-                
+
         except Exception as e:
             logger.error(f"Failed to generate metrics summary: {e}")
             return {'error': str(e)}
-            
+
     def export_metrics(self, output_file: Path, hours: int = 24) -> bool:
         """Export metrics to JSON file."""
         try:
             summary = self.get_metrics_summary(hours)
-            
+
             with open(output_file, 'w') as f:
                 json.dump(summary, f, indent=2)
-                
+
             logger.info(f"Metrics exported to {output_file}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to export metrics: {e}")
             return False
-            
+
     def cleanup_old_metrics(self):
         """Remove old metrics beyond retention period."""
         cutoff_time = datetime.now() - timedelta(days=self.retention_days)
-        
+
         try:
             with sqlite3.connect(self.storage_path) as conn:
                 tables = ['system_metrics', 'etl_metrics', 'business_metrics', 'custom_metrics']
-                
+
                 for table in tables:
                     result = conn.execute(f"""
                         DELETE FROM {table} WHERE timestamp < ?
                     """, (cutoff_time.isoformat(),))
-                    
+
                     if result.rowcount > 0:
                         logger.info(f"Cleaned up {result.rowcount} old records from {table}")
-                        
+
         except Exception as e:
             logger.error(f"Failed to cleanup old metrics: {e}")
 
@@ -500,7 +500,7 @@ def get_metrics_collector() -> MetricsCollector:
     return _metrics_collector
 
 
-def record_etl_run(pipeline_name: str, stage: str, records_processed: int, 
+def record_etl_run(pipeline_name: str, stage: str, records_processed: int,
                    processing_time: float, **kwargs):
     """Convenience function to record ETL metrics."""
     collector = get_metrics_collector()

@@ -2,9 +2,11 @@
 
 from .entities.customer import (
     CustomerEntity as Customer,
+)
+from .entities.customer import (
     CustomerSegment,
-    CustomerValueTier,
     CustomerStatus,
+    CustomerValueTier,
 )
 from .entities.invoice import (
     Invoice,

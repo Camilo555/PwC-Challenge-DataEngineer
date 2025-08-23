@@ -4,7 +4,8 @@ Provides comprehensive monitoring settings for production deployment
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Any
+from typing import Any
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +14,7 @@ from .base_config import Environment
 
 class MonitoringConfig(BaseSettings):
     """Configuration for monitoring and observability."""
-    
+
     # Logging configuration
     log_level: str = Field(default="INFO")
     log_format: str = Field(default="json")  # json, text
@@ -21,80 +22,80 @@ class MonitoringConfig(BaseSettings):
     log_file_path: str = Field(default="logs/application.log")
     log_rotation_size: str = Field(default="100MB")
     log_retention_days: int = Field(default=30)
-    
+
     # Metrics configuration
     prometheus_enabled: bool = Field(default=False)
     prometheus_host: str = Field(default="localhost")
     prometheus_port: int = Field(default=9090)
     prometheus_metrics_path: str = Field(default="/metrics")
-    
+
     # Grafana configuration
     grafana_enabled: bool = Field(default=False)
     grafana_host: str = Field(default="localhost")
     grafana_port: int = Field(default=3001)
     grafana_admin_password: str = Field(default="admin")
-    
+
     # Elasticsearch/ELK configuration
     elasticsearch_enabled: bool = Field(default=False)
     elasticsearch_host: str = Field(default="localhost")
     elasticsearch_port: int = Field(default=9200)
-    
+
     kibana_enabled: bool = Field(default=False)
     kibana_host: str = Field(default="localhost")
     kibana_port: int = Field(default=5601)
-    
+
     logstash_enabled: bool = Field(default=False)
     logstash_host: str = Field(default="localhost")
     logstash_port: int = Field(default=5044)
-    
+
     # Health check configuration
     health_check_enabled: bool = Field(default=True)
     health_check_interval_seconds: int = Field(default=30)
     health_check_timeout_seconds: int = Field(default=10)
-    
+
     # Performance monitoring
     performance_monitoring_enabled: bool = Field(default=True)
     slow_query_threshold_seconds: float = Field(default=5.0)
     memory_usage_alert_threshold: float = Field(default=0.85)
     cpu_usage_alert_threshold: float = Field(default=0.80)
-    
+
     # Alerting configuration
     alerting_enabled: bool = Field(default=False)
-    alert_channels: List[str] = Field(default_factory=lambda: ["email"])
-    
+    alert_channels: list[str] = Field(default_factory=lambda: ["email"])
+
     # Email alerts
-    smtp_host: Optional[str] = Field(default=None)
+    smtp_host: str | None = Field(default=None)
     smtp_port: int = Field(default=587)
-    smtp_user: Optional[str] = Field(default=None)
-    smtp_password: Optional[str] = Field(default=None)
+    smtp_user: str | None = Field(default=None)
+    smtp_password: str | None = Field(default=None)
     alert_email_from: str = Field(default="alerts@example.com")
-    alert_email_to: List[str] = Field(default_factory=list)
-    
+    alert_email_to: list[str] = Field(default_factory=list)
+
     # Slack alerts
-    slack_webhook_url: Optional[str] = Field(default=None)
+    slack_webhook_url: str | None = Field(default=None)
     slack_channel: str = Field(default="#alerts")
-    
+
     # PagerDuty alerts
-    pagerduty_service_key: Optional[str] = Field(default=None)
-    
+    pagerduty_service_key: str | None = Field(default=None)
+
     # Tracing configuration
     tracing_enabled: bool = Field(default=False)
     jaeger_enabled: bool = Field(default=False)
     jaeger_host: str = Field(default="localhost")
     jaeger_port: int = Field(default=14268)
-    
+
     # Custom metrics
     custom_metrics_enabled: bool = Field(default=True)
     business_metrics_enabled: bool = Field(default=True)
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="allow"
     )
-    
-    def get_environment_overrides(self, environment: Environment) -> Dict[str, Any]:
+
+    def get_environment_overrides(self, environment: Environment) -> dict[str, Any]:
         """Get environment-specific monitoring overrides."""
         overrides = {
             Environment.DEVELOPMENT: {
@@ -105,7 +106,7 @@ class MonitoringConfig(BaseSettings):
                 "alerting_enabled": False,
             },
             Environment.TESTING: {
-                "log_level": "WARNING", 
+                "log_level": "WARNING",
                 "prometheus_enabled": False,
                 "grafana_enabled": False,
                 "elasticsearch_enabled": False,
@@ -130,9 +131,9 @@ class MonitoringConfig(BaseSettings):
                 "tracing_enabled": True,
             }
         }
-        
+
         return overrides.get(environment, {})
-    
+
     def get_prometheus_config(self) -> str:
         """Generate Prometheus configuration."""
         return f"""
@@ -167,8 +168,8 @@ alerting:
         - targets:
           - alertmanager:9093
 """
-    
-    def get_grafana_dashboards(self) -> Dict[str, Dict]:
+
+    def get_grafana_dashboards(self) -> dict[str, dict]:
         """Get Grafana dashboard configurations."""
         return {
             "retail_etl_overview": {
@@ -181,7 +182,7 @@ alerting:
                 ]
             },
             "spark_cluster": {
-                "title": "Spark Cluster Metrics", 
+                "title": "Spark Cluster Metrics",
                 "panels": [
                     {"title": "Cluster CPU Usage", "type": "graph"},
                     {"title": "Cluster Memory Usage", "type": "graph"},
@@ -199,8 +200,8 @@ alerting:
                 ]
             }
         }
-    
-    def get_alert_rules(self) -> List[Dict]:
+
+    def get_alert_rules(self) -> list[dict]:
         """Get Prometheus alert rules."""
         return [
             {
@@ -224,7 +225,7 @@ alerting:
                 }
             },
             {
-                "alert": "DataQualityScoreLow", 
+                "alert": "DataQualityScoreLow",
                 "expr": "data_quality_score < 0.8",
                 "for": "1m",
                 "labels": {"severity": "critical"},

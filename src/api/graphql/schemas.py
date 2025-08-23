@@ -2,29 +2,25 @@
 GraphQL Schemas and Types
 Defines GraphQL types and schemas for the retail data API.
 """
-from datetime import datetime, date
-from decimal import Decimal
-from typing import List, Optional
-from uuid import UUID
+from datetime import date, datetime
 
 import strawberry
-from strawberry.types import Info
 
 
 @strawberry.type
 class Customer:
     """Customer GraphQL type."""
     customer_key: int
-    customer_id: Optional[str]
-    customer_segment: Optional[str]
-    lifetime_value: Optional[float]
-    total_orders: Optional[int]
-    total_spent: Optional[float]
-    avg_order_value: Optional[float]
-    recency_score: Optional[int]
-    frequency_score: Optional[int]
-    monetary_score: Optional[int]
-    rfm_segment: Optional[str]
+    customer_id: str | None
+    customer_segment: str | None
+    lifetime_value: float | None
+    total_orders: int | None
+    total_spent: float | None
+    avg_order_value: float | None
+    recency_score: int | None
+    frequency_score: int | None
+    monetary_score: int | None
+    rfm_segment: str | None
 
 
 @strawberry.type
@@ -32,12 +28,12 @@ class Product:
     """Product GraphQL type."""
     product_key: int
     stock_code: str
-    description: Optional[str]
-    category: Optional[str]
-    subcategory: Optional[str]
-    brand: Optional[str]
-    unit_cost: Optional[float]
-    recommended_price: Optional[float]
+    description: str | None
+    category: str | None
+    subcategory: str | None
+    brand: str | None
+    unit_cost: float | None
+    recommended_price: float | None
 
 
 @strawberry.type
@@ -46,11 +42,11 @@ class Country:
     country_key: int
     country_code: str
     country_name: str
-    region: Optional[str]
-    continent: Optional[str]
-    currency_code: Optional[str]
-    gdp_per_capita: Optional[float]
-    population: Optional[int]
+    region: str | None
+    continent: str | None
+    currency_code: str | None
+    gdp_per_capita: float | None
+    population: int | None
 
 
 @strawberry.type
@@ -62,12 +58,12 @@ class Sale:
     total_amount: float
     discount_amount: float
     tax_amount: float
-    profit_amount: Optional[float]
-    margin_percentage: Optional[float]
+    profit_amount: float | None
+    margin_percentage: float | None
     created_at: datetime
-    
+
     # Related entities (resolved via data loaders)
-    customer: Optional[Customer]
+    customer: Customer | None
     product: Product
     country: Country
 
@@ -97,8 +93,8 @@ class CustomerSegment:
 class ProductPerformance:
     """Product performance metrics."""
     stock_code: str
-    description: Optional[str]
-    category: Optional[str]
+    description: str | None
+    category: str | None
     total_revenue: float
     total_quantity: int
     transaction_count: int
@@ -122,9 +118,9 @@ class TaskStatus:
     task_name: str
     status: str
     submitted_at: datetime
-    progress: Optional[int]
-    result: Optional[str]  # JSON string
-    error: Optional[str]
+    progress: int | None
+    result: str | None  # JSON string
+    error: str | None
 
 
 # Input types for mutations and complex queries
@@ -132,13 +128,13 @@ class TaskStatus:
 @strawberry.input
 class SalesFilters:
     """Filters for sales queries."""
-    date_from: Optional[date] = None
-    date_to: Optional[date] = None
-    country: Optional[str] = None
-    product_category: Optional[str] = None
-    customer_segment: Optional[str] = None
-    min_amount: Optional[float] = None
-    max_amount: Optional[float] = None
+    date_from: date | None = None
+    date_to: date | None = None
+    country: str | None = None
+    product_category: str | None = None
+    customer_segment: str | None = None
+    min_amount: float | None = None
+    max_amount: float | None = None
 
 
 @strawberry.input
@@ -158,7 +154,7 @@ class TaskSubmissionInput:
 @strawberry.type
 class PaginatedSales:
     """Paginated sales results."""
-    items: List[Sale]
+    items: list[Sale]
     total_count: int
     page: int
     page_size: int
@@ -182,7 +178,7 @@ class TimeGranularity:
 class MetricType:
     """Metric types for product performance."""
     REVENUE = "revenue"
-    QUANTITY = "quantity" 
+    QUANTITY = "quantity"
     PROFIT = "profit"
     MARGIN = "margin"
 

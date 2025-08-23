@@ -3,15 +3,15 @@ API Features Router
 Provides information about API capabilities and feature overview.
 """
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Any
 
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/features", tags=["features"])
 
 
-@router.get("/overview", response_model=Dict[str, Any])
-async def get_api_overview() -> Dict[str, Any]:
+@router.get("/overview", response_model=dict[str, Any])
+async def get_api_overview() -> dict[str, Any]:
     """Get comprehensive overview of API features and capabilities."""
     return {
         "api_info": {
@@ -118,7 +118,7 @@ async def get_api_overview() -> Dict[str, Any]:
             ],
             "main_types": [
                 "Sale",
-                "Customer", 
+                "Customer",
                 "Product",
                 "Country",
                 "SalesAnalytics",
@@ -144,7 +144,7 @@ async def get_api_overview() -> Dict[str, Any]:
             ],
             "security_headers": [
                 "CORS protection",
-                "Rate limiting", 
+                "Rate limiting",
                 "Input validation",
                 "SQL injection prevention"
             ]
@@ -193,29 +193,29 @@ async def get_api_overview() -> Dict[str, Any]:
     }
 
 
-@router.get("/endpoints", response_model=List[Dict[str, Any]])
-async def list_all_endpoints() -> List[Dict[str, Any]]:
+@router.get("/endpoints", response_model=list[dict[str, Any]])
+async def list_all_endpoints() -> list[dict[str, Any]]:
     """List all available API endpoints with descriptions."""
     endpoints = [
         # Authentication
         {"method": "POST", "path": "/api/v1/auth/login", "description": "User login", "auth_required": False},
         {"method": "POST", "path": "/api/v1/auth/token", "description": "Get JWT token", "auth_required": False},
         {"method": "POST", "path": "/api/v1/auth/refresh", "description": "Refresh JWT token", "auth_required": True},
-        
+
         # Health & Info
         {"method": "GET", "path": "/api/v1/health", "description": "API health check", "auth_required": False},
         {"method": "GET", "path": "/api/v1/features/overview", "description": "API feature overview", "auth_required": True},
-        
+
         # Sales V1
         {"method": "GET", "path": "/api/v1/sales", "description": "List sales with basic filtering", "auth_required": True},
-        
+
         # Sales V2 (Enhanced)
         {"method": "GET", "path": "/api/v2/sales", "description": "Enhanced sales with advanced filtering", "auth_required": True},
         {"method": "POST", "path": "/api/v2/sales/analytics", "description": "Comprehensive sales analytics", "auth_required": True},
         {"method": "POST", "path": "/api/v2/sales/export", "description": "Export sales data", "auth_required": True},
         {"method": "GET", "path": "/api/v2/sales/schema", "description": "Get enhanced schema", "auth_required": True},
         {"method": "GET", "path": "/api/v2/sales/performance/benchmark", "description": "Performance benchmark", "auth_required": True},
-        
+
         # Data Mart
         {"method": "GET", "path": "/api/v1/datamart/dashboard/overview", "description": "Dashboard KPIs", "auth_required": True},
         {"method": "GET", "path": "/api/v1/datamart/sales/analytics", "description": "Sales analytics", "auth_required": True},
@@ -225,7 +225,7 @@ async def list_all_endpoints() -> List[Dict[str, Any]]:
         {"method": "GET", "path": "/api/v1/datamart/countries/performance", "description": "Country performance", "auth_required": True},
         {"method": "GET", "path": "/api/v1/datamart/trends/seasonal", "description": "Seasonal trends", "auth_required": True},
         {"method": "GET", "path": "/api/v1/datamart/metrics/business", "description": "Business metrics", "auth_required": True},
-        
+
         # Async Tasks
         {"method": "POST", "path": "/api/v1/tasks/submit", "description": "Submit async task", "auth_required": True},
         {"method": "GET", "path": "/api/v1/tasks/{task_id}/status", "description": "Get task status", "auth_required": True},
@@ -235,23 +235,23 @@ async def list_all_endpoints() -> List[Dict[str, Any]]:
         {"method": "POST", "path": "/api/v1/tasks/reports/generate", "description": "Generate report", "auth_required": True},
         {"method": "POST", "path": "/api/v1/tasks/etl/process", "description": "Process dataset", "auth_required": True},
         {"method": "POST", "path": "/api/v1/tasks/analytics/run", "description": "Run analytics", "auth_required": True},
-        
+
         # GraphQL
         {"method": "POST", "path": "/api/graphql", "description": "GraphQL endpoint", "auth_required": True},
         {"method": "GET", "path": "/api/graphql", "description": "GraphQL playground", "auth_required": True},
-        
+
         # Search (if enabled)
         {"method": "GET", "path": "/api/v1/search", "description": "Vector search", "auth_required": True},
-        
+
         # Supabase Integration
         {"method": "GET", "path": "/api/v1/supabase/*", "description": "Supabase operations", "auth_required": True},
     ]
-    
+
     return endpoints
 
 
-@router.get("/migration-guide", response_model=Dict[str, Any])
-async def get_migration_guide() -> Dict[str, Any]:
+@router.get("/migration-guide", response_model=dict[str, Any])
+async def get_migration_guide() -> dict[str, Any]:
     """Get migration guide from v1 to v2 API."""
     return {
         "title": "API v1 to v2 Migration Guide",
@@ -263,7 +263,7 @@ async def get_migration_guide() -> Dict[str, Any]:
         ],
         "new_features": [
             "Real-time aggregations",
-            "Data quality scoring", 
+            "Data quality scoring",
             "Advanced export options",
             "Performance benchmarking",
             "Enhanced analytics"
@@ -294,14 +294,14 @@ async def get_migration_guide() -> Dict[str, Any]:
     }
 
 
-@router.get("/performance", response_model=Dict[str, Any])
-async def get_performance_info() -> Dict[str, Any]:
+@router.get("/performance", response_model=dict[str, Any])
+async def get_performance_info() -> dict[str, Any]:
     """Get API performance characteristics and optimization tips."""
     return {
         "performance_metrics": {
             "typical_response_times": {
                 "simple_queries": "< 200ms",
-                "with_aggregations": "< 500ms", 
+                "with_aggregations": "< 500ms",
                 "complex_analytics": "< 2s",
                 "large_exports": "5-30 minutes (async)"
             },

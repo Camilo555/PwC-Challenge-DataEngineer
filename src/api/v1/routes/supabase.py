@@ -237,9 +237,9 @@ async def create_backup(backup_dir: str = "backups/supabase") -> dict[str, Any]:
     try:
         client = get_supabase_client()
         backup_summary = await client.create_full_backup(backup_dir)
-        
+
         logger.info(f"Database backup completed: {backup_summary['status']}")
-        
+
         return {
             "message": "Database backup completed",
             "backup_summary": backup_summary,
@@ -267,15 +267,15 @@ async def backup_table(table_name: str, backup_dir: str = "backups/supabase") ->
         from pathlib import Path
         client = get_supabase_client()
         backup_path = Path(backup_dir)
-        
+
         backup_result = await client.backup_table_data(table_name, backup_path)
-        
+
         if backup_result['status'] == 'failed':
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=backup_result['error']
             )
-        
+
         logger.info(f"Table backup completed: {table_name}")
         return backup_result
 
@@ -298,23 +298,23 @@ async def monitor_connection() -> dict[str, Any]:
 
     try:
         client = get_supabase_client()
-        
+
         # Test with different retry scenarios
         connection_tests = {
             'basic_connection': await client.test_connection(max_retries=1),
             'resilience_test': await client.test_connection(max_retries=3)
         }
-        
+
         # Get table statistics for monitoring
         table_stats = await client.get_table_statistics()
-        
+
         monitoring_report = {
             'connection_tests': connection_tests,
             'table_statistics': table_stats,
             'monitoring_timestamp': pd.Timestamp.now().isoformat(),
             'connection_health': 'excellent' if connection_tests['basic_connection']['retry_count'] == 0 else 'good'
         }
-        
+
         logger.info("Advanced connection monitoring completed")
         return monitoring_report
 

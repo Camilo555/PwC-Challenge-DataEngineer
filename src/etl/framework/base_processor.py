@@ -3,18 +3,17 @@ Base ETL Processor Framework
 Provides a unified interface and common functionality for all ETL processors.
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Union, Type
-from datetime import datetime
-import os
 import json
-import logging
-from pathlib import Path
+import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 from core.logging import get_logger
-from monitoring import get_metrics_collector, trigger_custom_alert, AlertSeverity
+from monitoring import AlertSeverity, get_metrics_collector, trigger_custom_alert
 
 
 class ProcessingEngine(Enum):
@@ -43,10 +42,10 @@ class ProcessingResult:
     data_quality_score: float
     error_count: int
     warnings_count: int
-    output_path: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    errors: Optional[List[str]] = None
-    warnings: Optional[List[str]] = None
+    output_path: str | None = None
+    metadata: dict[str, Any] | None = None
+    errors: list[str] | None = None
+    warnings: list[str] | None = None
 
 
 @dataclass
@@ -59,13 +58,13 @@ class ProcessingConfig:
     enable_monitoring: bool = True
     enable_quality_checks: bool = True
     enable_caching: bool = False
-    batch_size: Optional[int] = None
+    batch_size: int | None = None
     parallel_processing: bool = False
-    compression: Optional[str] = None
-    partition_by: Optional[List[str]] = None
+    compression: str | None = None
+    partition_by: list[str] | None = None
     quality_threshold: float = 0.95
     max_errors: int = 1000
-    custom_config: Optional[Dict[str, Any]] = None
+    custom_config: dict[str, Any] | None = None
 
 
 class BaseETLProcessor(ABC):
@@ -79,30 +78,30 @@ class BaseETLProcessor(ABC):
     - Data quality validation
     - Configuration management
     """
-    
+
     def __init__(self, config: ProcessingConfig):
         self.config = config
         self.logger = get_logger(self.__class__.__name__)
         self.metrics_collector = get_metrics_collector() if config.enable_monitoring else None
-        self.start_time: Optional[datetime] = None
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
-        
+        self.start_time: datetime | None = None
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+
         # Initialize processing state
         self._initialize_processor()
-    
+
     def _initialize_processor(self):
         """Initialize processor-specific components"""
         self.logger.info(f"Initializing {self.__class__.__name__} with {self.config.engine.value} engine")
-        
+
         # Create output directories
         output_dir = Path(self.config.output_path)
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize monitoring if enabled
         if self.config.enable_monitoring and self.metrics_collector:
             self.logger.info("Monitoring enabled for processor")
-    
+
     @abstractmethod
     def process(self) -> ProcessingResult:
         """
@@ -112,7 +111,7 @@ class BaseETLProcessor(ABC):
             ProcessingResult: Standardized processing result
         """
         pass
-    
+
     @abstractmethod
     def validate_input(self) -> bool:
         """
@@ -122,7 +121,7 @@ class BaseETLProcessor(ABC):
             bool: True if validation passes
         """
         pass
-    
+
     def run(self) -> ProcessingResult:
         """
         Execute the complete processing pipeline with error handling and monitoring.
@@ -132,31 +131,31 @@ class BaseETLProcessor(ABC):
         """
         self.start_time = datetime.now()
         self.logger.info(f"Starting {self.config.stage.value} processing")
-        
+
         try:
             # Pre-processing validation
             if not self.validate_input():
                 return self._create_failure_result("Input validation failed")
-            
+
             # Execute main processing
             result = self.process()
-            
+
             # Post-processing validation
             if result.success:
                 result = self._post_process_validation(result)
-            
+
             # Record metrics
             self._record_metrics(result)
-            
+
             # Log completion
             self._log_completion(result)
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Processing failed with exception: {e}", exc_info=True)
             self.errors.append(str(e))
-            
+
             # Send alert for critical failures
             if self.config.enable_monitoring:
                 trigger_custom_alert(
@@ -165,9 +164,9 @@ class BaseETLProcessor(ABC):
                     severity=AlertSeverity.HIGH,
                     source="etl_processor"
                 )
-            
+
             return self._create_failure_result(str(e))
-    
+
     def _post_process_validation(self, result: ProcessingResult) -> ProcessingResult:
         """Validate processing results and output"""
         try:
@@ -175,15 +174,15 @@ class BaseETLProcessor(ABC):
             if result.output_path and not os.path.exists(result.output_path):
                 self.warnings.append(f"Output path does not exist: {result.output_path}")
                 result.warnings_count += 1
-            
+
             # Check data quality threshold
-            if (self.config.enable_quality_checks and 
+            if (self.config.enable_quality_checks and
                 result.data_quality_score < self.config.quality_threshold):
                 warning_msg = (f"Data quality score {result.data_quality_score:.3f} "
                              f"below threshold {self.config.quality_threshold}")
                 self.warnings.append(warning_msg)
                 result.warnings_count += 1
-                
+
                 if self.config.enable_monitoring:
                     trigger_custom_alert(
                         title="Data Quality Warning",
@@ -191,28 +190,28 @@ class BaseETLProcessor(ABC):
                         severity=AlertSeverity.MEDIUM,
                         source="etl_processor"
                     )
-            
+
             # Update result with collected warnings
             result.warnings = self.warnings
             result.warnings_count = len(self.warnings)
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Post-processing validation failed: {e}")
             result.success = False
             result.errors = result.errors or []
             result.errors.append(f"Post-processing validation failed: {str(e)}")
             return result
-    
+
     def _record_metrics(self, result: ProcessingResult):
         """Record processing metrics"""
         if not self.config.enable_monitoring or not self.metrics_collector:
             return
-        
+
         try:
             processing_time = result.processing_time_seconds
-            
+
             self.metrics_collector.record_etl_metrics(
                 pipeline_name=f"{self.__class__.__name__}",
                 stage=self.config.stage.value,
@@ -223,12 +222,12 @@ class BaseETLProcessor(ABC):
                 error_count=result.error_count,
                 warnings_count=result.warnings_count
             )
-            
+
             self.logger.info(f"Metrics recorded for {self.config.stage.value} processing")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to record metrics: {e}")
-    
+
     def _log_completion(self, result: ProcessingResult):
         """Log processing completion details"""
         status = "SUCCESS" if result.success else "FAILED"
@@ -238,23 +237,23 @@ class BaseETLProcessor(ABC):
             f"{result.processing_time_seconds:.2f}s "
             f"(Quality: {result.data_quality_score:.3f})"
         )
-        
+
         if result.errors:
             self.logger.error(f"Errors encountered: {len(result.errors)}")
             for error in result.errors[:5]:  # Log first 5 errors
                 self.logger.error(f"  - {error}")
-        
+
         if result.warnings:
             self.logger.warning(f"Warnings encountered: {len(result.warnings)}")
             for warning in result.warnings[:5]:  # Log first 5 warnings
                 self.logger.warning(f"  - {warning}")
-    
+
     def _create_failure_result(self, error_message: str) -> ProcessingResult:
         """Create a failure result with error details"""
         processing_time = 0.0
         if self.start_time:
             processing_time = (datetime.now() - self.start_time).total_seconds()
-        
+
         return ProcessingResult(
             success=False,
             records_processed=0,
@@ -266,16 +265,16 @@ class BaseETLProcessor(ABC):
             errors=[error_message] + self.errors,
             warnings=self.warnings
         )
-    
+
     def save_processing_report(self, result: ProcessingResult) -> str:
         """Save detailed processing report"""
         try:
             report_dir = Path("./reports") / "etl" / self.config.stage.value
             report_dir.mkdir(parents=True, exist_ok=True)
-            
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_file = report_dir / f"processing_report_{timestamp}.json"
-            
+
             report_data = {
                 "processor": self.__class__.__name__,
                 "config": {
@@ -299,13 +298,13 @@ class BaseETLProcessor(ABC):
                 "metadata": result.metadata or {},
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             with open(report_file, 'w') as f:
                 json.dump(report_data, f, indent=2)
-            
+
             self.logger.info(f"Processing report saved: {report_file}")
             return str(report_file)
-            
+
         except Exception as e:
             self.logger.error(f"Failed to save processing report: {e}")
             return ""
@@ -313,25 +312,25 @@ class BaseETLProcessor(ABC):
 
 class ProcessorFactory:
     """Factory for creating ETL processors"""
-    
-    _processors: Dict[str, Type[BaseETLProcessor]] = {}
-    
+
+    _processors: dict[str, type[BaseETLProcessor]] = {}
+
     @classmethod
-    def register_processor(cls, name: str, processor_class: Type[BaseETLProcessor]):
+    def register_processor(cls, name: str, processor_class: type[BaseETLProcessor]):
         """Register a processor class"""
         cls._processors[name] = processor_class
-    
+
     @classmethod
     def create_processor(cls, name: str, config: ProcessingConfig) -> BaseETLProcessor:
         """Create a processor instance"""
         if name not in cls._processors:
             raise ValueError(f"Processor '{name}' not registered")
-        
+
         processor_class = cls._processors[name]
         return processor_class(config)
-    
+
     @classmethod
-    def list_processors(cls) -> List[str]:
+    def list_processors(cls) -> list[str]:
         """List available processors"""
         return list(cls._processors.keys())
 
@@ -340,39 +339,39 @@ class ProcessingPipeline:
     """
     Chain multiple processors together in a pipeline
     """
-    
+
     def __init__(self, name: str):
         self.name = name
-        self.processors: List[BaseETLProcessor] = []
+        self.processors: list[BaseETLProcessor] = []
         self.logger = get_logger(f"Pipeline-{name}")
-    
+
     def add_processor(self, processor: BaseETLProcessor):
         """Add a processor to the pipeline"""
         self.processors.append(processor)
         self.logger.info(f"Added {processor.__class__.__name__} to pipeline")
-    
-    def run(self) -> List[ProcessingResult]:
+
+    def run(self) -> list[ProcessingResult]:
         """Execute the complete pipeline"""
         self.logger.info(f"Starting pipeline '{self.name}' with {len(self.processors)} processors")
-        
+
         results = []
         for i, processor in enumerate(self.processors):
             self.logger.info(f"Executing processor {i+1}/{len(self.processors)}: {processor.__class__.__name__}")
-            
+
             result = processor.run()
             results.append(result)
-            
+
             # Stop pipeline if processor fails (unless configured otherwise)
             if not result.success:
                 self.logger.error(f"Pipeline stopped due to processor failure: {processor.__class__.__name__}")
                 break
-        
+
         # Generate pipeline summary
         total_records = sum(r.records_processed for r in results)
         total_failures = sum(r.records_failed for r in results)
         total_errors = sum(r.error_count for r in results)
         avg_quality = sum(r.data_quality_score for r in results) / len(results) if results else 0
-        
+
         self.logger.info(
             f"Pipeline '{self.name}' completed: "
             f"{total_records:,} records processed, "
@@ -380,22 +379,22 @@ class ProcessingPipeline:
             f"{total_errors} errors, "
             f"avg quality: {avg_quality:.3f}"
         )
-        
+
         return results
 
 
 class ConfigurationManager:
     """Manage ETL processor configurations"""
-    
+
     def __init__(self, config_dir: str = "./config/etl"):
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger("ConfigurationManager")
-    
+
     def save_config(self, name: str, config: ProcessingConfig):
         """Save a configuration"""
         config_file = self.config_dir / f"{name}.json"
-        
+
         config_data = {
             "engine": config.engine.value,
             "stage": config.stage.value,
@@ -412,22 +411,22 @@ class ConfigurationManager:
             "max_errors": config.max_errors,
             "custom_config": config.custom_config
         }
-        
+
         with open(config_file, 'w') as f:
             json.dump(config_data, f, indent=2)
-        
+
         self.logger.info(f"Configuration saved: {config_file}")
-    
+
     def load_config(self, name: str) -> ProcessingConfig:
         """Load a configuration"""
         config_file = self.config_dir / f"{name}.json"
-        
+
         if not config_file.exists():
             raise FileNotFoundError(f"Configuration not found: {config_file}")
-        
-        with open(config_file, 'r') as f:
+
+        with open(config_file) as f:
             config_data = json.load(f)
-        
+
         return ProcessingConfig(
             engine=ProcessingEngine(config_data["engine"]),
             stage=ProcessingStage(config_data["stage"]),
@@ -444,8 +443,8 @@ class ConfigurationManager:
             max_errors=config_data.get("max_errors", 1000),
             custom_config=config_data.get("custom_config")
         )
-    
-    def list_configs(self) -> List[str]:
+
+    def list_configs(self) -> list[str]:
         """List available configurations"""
         config_files = self.config_dir.glob("*.json")
         return [f.stem for f in config_files]
@@ -453,41 +452,41 @@ class ConfigurationManager:
 
 class ProcessingOrchestrator:
     """Orchestrate ETL processing workflows"""
-    
+
     def __init__(self):
         self.config_manager = ConfigurationManager()
         self.logger = get_logger("ProcessingOrchestrator")
-        
-    def execute_workflow(self, workflow_config: Dict[str, Any]) -> Dict[str, Any]:
+
+    def execute_workflow(self, workflow_config: dict[str, Any]) -> dict[str, Any]:
         """Execute a complete ETL workflow"""
         workflow_name = workflow_config.get("name", "unnamed_workflow")
         processors_config = workflow_config.get("processors", [])
-        
+
         self.logger.info(f"Executing workflow: {workflow_name}")
-        
+
         pipeline = ProcessingPipeline(workflow_name)
-        
+
         # Create and add processors to pipeline
         for proc_config in processors_config:
             processor_name = proc_config["processor"]
             config_name = proc_config["config"]
-            
+
             # Load configuration
             config = self.config_manager.load_config(config_name)
-            
+
             # Override config values if specified
             if "overrides" in proc_config:
                 for key, value in proc_config["overrides"].items():
                     if hasattr(config, key):
                         setattr(config, key, value)
-            
+
             # Create processor
             processor = ProcessorFactory.create_processor(processor_name, config)
             pipeline.add_processor(processor)
-        
+
         # Execute pipeline
         results = pipeline.run()
-        
+
         # Compile workflow results
         workflow_result = {
             "workflow_name": workflow_name,
@@ -507,13 +506,13 @@ class ProcessingOrchestrator:
                     "data_quality_score": result.data_quality_score,
                     "processing_time": result.processing_time_seconds
                 }
-                for proc, result in zip(pipeline.processors, results)
+                for proc, result in zip(pipeline.processors, results, strict=False)
             ]
         }
-        
+
         self.logger.info(
             f"Workflow '{workflow_name}' completed: "
             f"{workflow_result['successful_processors']}/{workflow_result['total_processors']} processors successful"
         )
-        
+
         return workflow_result

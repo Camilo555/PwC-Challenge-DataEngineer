@@ -62,7 +62,7 @@ redis = "^5.2.1"
 # OpenTelemetry/Distributed Tracing
 opentelemetry-api = "^1.27.0"
 opentelemetry-sdk = "^1.27.0"
-opentelemetry-exporter-jaeger-thrift = "^1.27.0"
+# opentelemetry-exporter-jaeger-thrift = "^1.27.0"  # Temporarily disabled due to dependency conflicts
 opentelemetry-exporter-otlp = "^1.27.0"
 opentelemetry-instrumentation-fastapi = "^0.48b0"
 opentelemetry-instrumentation-sqlalchemy = "^0.48b0"

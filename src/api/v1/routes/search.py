@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
-from vector_search.typesense_client import get_typesense_client, EnhancedTypesenseClient
 from core.logging import get_logger
+from vector_search.typesense_client import EnhancedTypesenseClient, get_typesense_client
 
 router = APIRouter(prefix="/search", tags=["search"])
 logger = get_logger(__name__)
@@ -61,13 +61,13 @@ def search_typesense(
 @router.get("/enhanced")
 def enhanced_search(
     q: str = Query(..., min_length=1, description="Search query"),
-    category: Optional[str] = Query(None, description="Filter by product category"),
-    price_min: Optional[float] = Query(None, description="Minimum price filter"),
-    price_max: Optional[float] = Query(None, description="Maximum price filter"),
-    country: Optional[str] = Query(None, description="Filter by country"),
-    date_from: Optional[str] = Query(None, description="Start date filter (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date filter (YYYY-MM-DD)"),
-    customer_segment: Optional[str] = Query(None, description="Filter by customer segment"),
+    category: str | None = Query(None, description="Filter by product category"),
+    price_min: float | None = Query(None, description="Minimum price filter"),
+    price_max: float | None = Query(None, description="Maximum price filter"),
+    country: str | None = Query(None, description="Filter by country"),
+    date_from: str | None = Query(None, description="Start date filter (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date filter (YYYY-MM-DD)"),
+    customer_segment: str | None = Query(None, description="Filter by customer segment"),
     per_page: int = Query(20, ge=1, le=100, description="Results per page"),
     page: int = Query(1, ge=1, description="Page number")
 ) -> dict[str, Any]:
@@ -83,7 +83,7 @@ def enhanced_search(
     """
     try:
         enhanced_client = EnhancedTypesenseClient()
-        
+
         results = enhanced_client.search_with_filters(
             query=q,
             category_filter=category,
@@ -96,7 +96,7 @@ def enhanced_search(
             per_page=per_page,
             page=page
         )
-        
+
         return {
             "query": q,
             "results": results,
@@ -111,7 +111,7 @@ def enhanced_search(
                 "filters_applied": results.get("filters_applied", {})
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Enhanced search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
@@ -120,7 +120,7 @@ def enhanced_search(
 @router.get("/faceted")
 def faceted_search(
     q: str = Query(..., min_length=1, description="Search query"),
-    facet_fields: List[str] = Query(["category", "country", "customer_segment"], description="Fields to get facets for"),
+    facet_fields: list[str] = Query(["category", "country", "customer_segment"], description="Fields to get facets for"),
     max_facet_values: int = Query(10, ge=1, le=50, description="Maximum facet values per field")
 ) -> dict[str, Any]:
     """
@@ -130,20 +130,20 @@ def faceted_search(
     """
     try:
         enhanced_client = EnhancedTypesenseClient()
-        
+
         results = enhanced_client.faceted_search(
             query=q,
             facet_fields=facet_fields,
             max_facet_values=max_facet_values
         )
-        
+
         return {
             "query": q,
             "facets": results.get("facet_counts", []),
             "total_results": results.get("total_results", 0),
             "search_time_ms": results.get("search_time_ms", 0)
         }
-        
+
     except Exception as e:
         logger.error(f"Faceted search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Faceted search failed: {str(e)}")
@@ -162,13 +162,13 @@ def geographic_search(
     """
     try:
         enhanced_client = EnhancedTypesenseClient()
-        
+
         results = enhanced_client.geo_search(
             query=q,
             country=country,
             per_page=per_page
         )
-        
+
         return {
             "query": q,
             "country": country,
@@ -178,7 +178,7 @@ def geographic_search(
                 "search_time_ms": results.get("search_time_ms", 0)
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Geographic search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Geographic search failed: {str(e)}")
@@ -205,10 +205,10 @@ def advanced_filter_search(
     """
     try:
         enhanced_client = EnhancedTypesenseClient()
-        
+
         if filters is None:
             filters = {}
-        
+
         results = enhanced_client.advanced_filter_search(
             filters=filters,
             query=query,
@@ -216,7 +216,7 @@ def advanced_filter_search(
             per_page=per_page,
             page=page
         )
-        
+
         return {
             "query": query,
             "results": results,
@@ -231,7 +231,7 @@ def advanced_filter_search(
                 "search_time_ms": results.get("search_time_ms", 0)
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Advanced search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Advanced search failed: {str(e)}")
@@ -249,16 +249,16 @@ def get_filter_suggestions(
     """
     try:
         enhanced_client = EnhancedTypesenseClient()
-        
+
         suggestions = enhanced_client.get_filter_suggestions(field, query)
-        
+
         return {
             "field": field,
             "query": query,
             "suggestions": suggestions,
             "count": len(suggestions)
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get suggestions for {field}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get suggestions: {str(e)}")

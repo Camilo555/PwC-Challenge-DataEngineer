@@ -19,6 +19,7 @@ try:
     SQLMODEL_AVAILABLE = True
 except ImportError:
     SQLMODEL_AVAILABLE = False
+    AsyncSession = None
 
 try:
     import redis.asyncio as redis
@@ -176,7 +177,7 @@ def sqlite_file_url(temp_dir) -> str:
 
 
 @pytest.fixture
-async def async_db_session(async_sqlite_memory_url) -> AsyncGenerator[AsyncSession, None]:
+async def async_db_session(async_sqlite_memory_url) -> AsyncGenerator:
     """Create async database session for testing."""
     if not SQLMODEL_AVAILABLE:
         pytest.skip("SQLModel not available")

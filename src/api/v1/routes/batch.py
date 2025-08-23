@@ -2,17 +2,17 @@
 Batch Operations API Router
 Provides batch CRUD operations for efficient bulk data processing.
 """
-from typing import List, Dict, Any, Optional
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from api.v1.services.batch_service import BatchService
-from data_access.db import get_session
 from core.logging import get_logger
-from domain.entities.sales_transaction import SalesTransactionCreate, SalesTransactionResponse
+from data_access.db import get_session
+from domain.entities.sales_transaction import SalesTransactionCreate
 
 router = APIRouter(prefix="/batch", tags=["batch-operations"])
 logger = get_logger(__name__)
@@ -20,10 +20,10 @@ logger = get_logger(__name__)
 
 class BatchCreateRequest(BaseModel):
     """Request model for batch create operations."""
-    items: List[SalesTransactionCreate] = Field(..., min_items=1, max_items=1000)
+    items: list[SalesTransactionCreate] = Field(..., min_items=1, max_items=1000)
     validate_items: bool = Field(default=True, description="Whether to validate each item")
     fail_on_error: bool = Field(default=False, description="Whether to fail entire batch on single item error")
-    
+
     class Config:
         json_encoders = {
             UUID: lambda v: str(v)
@@ -32,9 +32,9 @@ class BatchCreateRequest(BaseModel):
 
 class BatchUpdateRequest(BaseModel):
     """Request model for batch update operations."""
-    updates: List[Dict[str, Any]] = Field(..., min_items=1, max_items=1000)
+    updates: list[dict[str, Any]] = Field(..., min_items=1, max_items=1000)
     upsert: bool = Field(default=False, description="Whether to create items if they don't exist")
-    
+
     class Config:
         json_encoders = {
             UUID: lambda v: str(v)
@@ -43,7 +43,7 @@ class BatchUpdateRequest(BaseModel):
 
 class BatchDeleteRequest(BaseModel):
     """Request model for batch delete operations."""
-    ids: List[UUID] = Field(..., min_items=1, max_items=1000)
+    ids: list[UUID] = Field(..., min_items=1, max_items=1000)
     soft_delete: bool = Field(default=True, description="Whether to perform soft delete")
 
 
@@ -53,10 +53,10 @@ class BatchOperationResponse(BaseModel):
     total_requested: int
     successful: int
     failed: int
-    errors: List[Dict[str, Any]]
+    errors: list[dict[str, Any]]
     processing_time_ms: float
-    batch_id: Optional[str] = None
-    
+    batch_id: str | None = None
+
     class Config:
         json_encoders = {
             UUID: lambda v: str(v)
@@ -79,24 +79,24 @@ async def batch_create_transactions(
     - Background processing for large batches
     """
     logger.info(f"Batch create request for {len(request.items)} items")
-    
+
     try:
         batch_service = BatchService(session)
-        
+
         # Process batch creation
         result = await batch_service.batch_create_transactions(
             items=request.items,
             validate_items=request.validate_items,
             fail_on_error=request.fail_on_error
         )
-        
+
         # If large batch, process in background
         if len(request.items) > 100:
             background_tasks.add_task(
                 batch_service.optimize_post_batch_creation,
                 result.get("batch_id")
             )
-        
+
         return BatchOperationResponse(
             operation="create",
             total_requested=len(request.items),
@@ -106,7 +106,7 @@ async def batch_create_transactions(
             processing_time_ms=result.get("processing_time_ms", 0),
             batch_id=result.get("batch_id")
         )
-        
+
     except Exception as e:
         logger.error(f"Batch create failed: {str(e)}")
         raise HTTPException(
@@ -131,23 +131,23 @@ async def batch_update_transactions(
     - Optimistic concurrency control
     """
     logger.info(f"Batch update request for {len(request.updates)} items")
-    
+
     try:
         batch_service = BatchService(session)
-        
+
         # Process batch updates
         result = await batch_service.batch_update_transactions(
             updates=request.updates,
             upsert=request.upsert
         )
-        
+
         # Background optimization for large batches
         if len(request.updates) > 100:
             background_tasks.add_task(
                 batch_service.optimize_post_batch_update,
                 result.get("batch_id")
             )
-        
+
         return BatchOperationResponse(
             operation="update",
             total_requested=len(request.updates),
@@ -157,7 +157,7 @@ async def batch_update_transactions(
             processing_time_ms=result.get("processing_time_ms", 0),
             batch_id=result.get("batch_id")
         )
-        
+
     except Exception as e:
         logger.error(f"Batch update failed: {str(e)}")
         raise HTTPException(
@@ -182,23 +182,23 @@ async def batch_delete_transactions(
     - Audit trail for deletions
     """
     logger.info(f"Batch delete request for {len(request.ids)} items")
-    
+
     try:
         batch_service = BatchService(session)
-        
+
         # Process batch deletions
         result = await batch_service.batch_delete_transactions(
             ids=request.ids,
             soft_delete=request.soft_delete
         )
-        
+
         # Background cleanup for large batches
         if len(request.ids) > 100:
             background_tasks.add_task(
                 batch_service.cleanup_post_batch_delete,
                 result.get("batch_id")
             )
-        
+
         return BatchOperationResponse(
             operation="delete",
             total_requested=len(request.ids),
@@ -208,7 +208,7 @@ async def batch_delete_transactions(
             processing_time_ms=result.get("processing_time_ms", 0),
             batch_id=result.get("batch_id")
         )
-        
+
     except Exception as e:
         logger.error(f"Batch delete failed: {str(e)}")
         raise HTTPException(
@@ -232,16 +232,16 @@ async def batch_upsert_transactions(
     - Optimized for data synchronization
     """
     logger.info(f"Batch upsert request for {len(request.items)} items")
-    
+
     try:
         batch_service = BatchService(session)
-        
+
         # Process batch upserts
         result = await batch_service.batch_upsert_transactions(
             items=request.items,
             validate_items=request.validate_items
         )
-        
+
         return BatchOperationResponse(
             operation="upsert",
             total_requested=len(request.items),
@@ -251,7 +251,7 @@ async def batch_upsert_transactions(
             processing_time_ms=result.get("processing_time_ms", 0),
             batch_id=result.get("batch_id")
         )
-        
+
     except Exception as e:
         logger.error(f"Batch upsert failed: {str(e)}")
         raise HTTPException(
@@ -264,7 +264,7 @@ async def batch_upsert_transactions(
 async def get_batch_status(
     batch_id: str,
     session: Session = Depends(get_session)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get status of a batch operation.
     
@@ -273,15 +273,15 @@ async def get_batch_status(
     try:
         batch_service = BatchService(session)
         status_info = await batch_service.get_batch_status(batch_id)
-        
+
         if not status_info:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Batch operation {batch_id} not found"
             )
-        
+
         return status_info
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -295,7 +295,7 @@ async def get_batch_status(
 @router.get("/operations/active")
 async def get_active_batch_operations(
     session: Session = Depends(get_session)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get list of currently active batch operations.
     
@@ -304,13 +304,13 @@ async def get_active_batch_operations(
     try:
         batch_service = BatchService(session)
         active_operations = await batch_service.get_active_operations()
-        
+
         return {
             "active_operations": active_operations,
             "count": len(active_operations),
             "timestamp": batch_service.get_current_timestamp()
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get active operations: {str(e)}")
         raise HTTPException(
@@ -323,7 +323,7 @@ async def get_active_batch_operations(
 async def validate_batch_data(
     request: BatchCreateRequest,
     session: Session = Depends(get_session)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate batch data without performing operations.
     
@@ -332,7 +332,7 @@ async def validate_batch_data(
     try:
         batch_service = BatchService(session)
         validation_result = await batch_service.validate_batch_data(request.items)
-        
+
         return {
             "total_items": len(request.items),
             "valid_items": validation_result.get("valid_count", 0),
@@ -341,7 +341,7 @@ async def validate_batch_data(
             "is_valid": validation_result.get("is_valid", False),
             "recommendations": validation_result.get("recommendations", [])
         }
-        
+
     except Exception as e:
         logger.error(f"Batch validation failed: {str(e)}")
         raise HTTPException(
@@ -351,7 +351,7 @@ async def validate_batch_data(
 
 
 @router.get("/limits")
-def get_batch_limits() -> Dict[str, Any]:
+def get_batch_limits() -> dict[str, Any]:
     """
     Get information about batch operation limits and constraints.
     """

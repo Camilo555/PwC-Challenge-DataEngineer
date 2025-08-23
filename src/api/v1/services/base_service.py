@@ -2,12 +2,13 @@
 Base Service for API Layer
 Provides abstract base class for service layer implementation.
 """
+import builtins
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, TypeVar, Generic
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from sqlmodel import Session
 from pydantic import BaseModel
+from sqlmodel import Session
 
 from core.logging import get_logger
 
@@ -24,10 +25,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     
     Provides standardized service layer patterns for all domain entities.
     """
-    
+
     def __init__(self, session: Session):
         self.session = session
-    
+
     @abstractmethod
     async def create(self, item: CreateT) -> T:
         """
@@ -40,9 +41,9 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             Created entity
         """
         pass
-    
+
     @abstractmethod
-    async def read(self, id: UUID) -> Optional[T]:
+    async def read(self, id: UUID) -> T | None:
         """
         Read an entity by ID.
         
@@ -53,9 +54,9 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             Entity if found, None otherwise
         """
         pass
-    
+
     @abstractmethod
-    async def update(self, id: UUID, item: UpdateT) -> Optional[T]:
+    async def update(self, id: UUID, item: UpdateT) -> T | None:
         """
         Update an entity.
         
@@ -67,7 +68,7 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             Updated entity if found, None otherwise
         """
         pass
-    
+
     @abstractmethod
     async def delete(self, id: UUID) -> bool:
         """
@@ -80,14 +81,14 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             True if deleted, False if not found
         """
         pass
-    
+
     @abstractmethod
     async def list(
         self,
         skip: int = 0,
         limit: int = 100,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[T]:
+        filters: dict[str, Any] | None = None
+    ) -> list[T]:
         """
         List entities with pagination and filtering.
         
@@ -100,9 +101,9 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             List of entities
         """
         pass
-    
+
     @abstractmethod
-    async def count(self, filters: Optional[Dict[str, Any]] = None) -> int:
+    async def count(self, filters: dict[str, Any] | None = None) -> int:
         """
         Count entities with optional filtering.
         
@@ -113,9 +114,9 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             Count of entities
         """
         pass
-    
+
     # Optional batch operations
-    async def batch_create(self, items: List[CreateT]) -> List[T]:
+    async def batch_create(self, items: builtins.list[CreateT]) -> builtins.list[T]:
         """
         Create multiple entities in batch.
         
@@ -130,8 +131,8 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             created = await self.create(item)
             results.append(created)
         return results
-    
-    async def batch_update(self, updates: List[Dict[str, Any]]) -> List[Optional[T]]:
+
+    async def batch_update(self, updates: builtins.list[dict[str, Any]]) -> builtins.list[T | None]:
         """
         Update multiple entities in batch.
         
@@ -147,8 +148,8 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             updated = await self.update(entity_id, update_data)
             results.append(updated)
         return results
-    
-    async def batch_delete(self, ids: List[UUID]) -> List[bool]:
+
+    async def batch_delete(self, ids: builtins.list[UUID]) -> builtins.list[bool]:
         """
         Delete multiple entities in batch.
         
@@ -163,10 +164,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             deleted = await self.delete(entity_id)
             results.append(deleted)
         return results
-    
+
     # Utility methods
-    
-    def _apply_filters(self, query, filters: Optional[Dict[str, Any]]):
+
+    def _apply_filters(self, query, filters: dict[str, Any] | None):
         """
         Apply filters to a query.
         
@@ -179,15 +180,15 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
         """
         if not filters:
             return query
-        
+
         # This is a basic implementation - should be overridden in concrete services
         for field, value in filters.items():
             if hasattr(query.column_descriptions[0]['type'], field):
                 query = query.filter(getattr(query.column_descriptions[0]['type'], field) == value)
-        
+
         return query
-    
-    def _log_operation(self, operation: str, entity_id: Optional[UUID] = None, details: Optional[str] = None):
+
+    def _log_operation(self, operation: str, entity_id: UUID | None = None, details: str | None = None):
         """
         Log service operations for auditing.
         
@@ -201,9 +202,9 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
             log_message += f" (ID: {entity_id})"
         if details:
             log_message += f" - {details}"
-        
+
         logger.info(log_message)
-    
+
     def _validate_pagination(self, skip: int, limit: int) -> tuple[int, int]:
         """
         Validate and normalize pagination parameters.
@@ -217,7 +218,7 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
         """
         skip = max(0, skip)  # Ensure non-negative
         limit = max(1, min(1000, limit))  # Ensure between 1 and 1000
-        
+
         return skip, limit
 
 
@@ -225,7 +226,7 @@ class BusinessLogicMixin:
     """
     Mixin providing common business logic methods.
     """
-    
+
     def validate_business_rules(self, entity: Any) -> None:
         """
         Validate business rules for an entity.
@@ -238,7 +239,7 @@ class BusinessLogicMixin:
         """
         # This should be implemented by concrete services
         pass
-    
+
     def calculate_derived_fields(self, entity: Any) -> Any:
         """
         Calculate derived fields for an entity.
@@ -251,8 +252,8 @@ class BusinessLogicMixin:
         """
         # This should be implemented by concrete services
         return entity
-    
-    def audit_operation(self, operation: str, entity: Any, user_id: Optional[str] = None) -> None:
+
+    def audit_operation(self, operation: str, entity: Any, user_id: str | None = None) -> None:
         """
         Audit an operation for compliance and tracking.
         
@@ -269,7 +270,7 @@ class CachingMixin:
     """
     Mixin providing caching capabilities.
     """
-    
+
     def _get_cache_key(self, operation: str, **kwargs) -> str:
         """
         Generate cache key for an operation.
@@ -285,8 +286,8 @@ class CachingMixin:
         for k, v in sorted(kwargs.items()):
             key_parts.append(f"{k}:{v}")
         return ":".join(key_parts)
-    
-    async def _get_from_cache(self, key: str) -> Optional[Any]:
+
+    async def _get_from_cache(self, key: str) -> Any | None:
         """
         Get value from cache.
         
@@ -298,7 +299,7 @@ class CachingMixin:
         """
         # In a real implementation, this would interface with Redis or similar
         return None
-    
+
     async def _set_cache(self, key: str, value: Any, ttl: int = 300) -> None:
         """
         Set value in cache.
@@ -310,7 +311,7 @@ class CachingMixin:
         """
         # In a real implementation, this would interface with Redis or similar
         pass
-    
+
     async def _invalidate_cache(self, pattern: str) -> None:
         """
         Invalidate cache entries matching a pattern.
@@ -326,7 +327,7 @@ class MetricsMixin:
     """
     Mixin providing metrics collection capabilities.
     """
-    
+
     def _record_operation_metric(self, operation: str, duration_ms: float, success: bool = True) -> None:
         """
         Record operation metrics.
@@ -338,8 +339,8 @@ class MetricsMixin:
         """
         # In a real implementation, this would send metrics to monitoring system
         logger.debug(f"Metric: {operation} took {duration_ms}ms, success: {success}")
-    
-    def _increment_counter(self, metric_name: str, labels: Optional[Dict[str, str]] = None) -> None:
+
+    def _increment_counter(self, metric_name: str, labels: dict[str, str] | None = None) -> None:
         """
         Increment a counter metric.
         
@@ -349,8 +350,8 @@ class MetricsMixin:
         """
         # In a real implementation, this would send to monitoring system
         pass
-    
-    def _record_histogram(self, metric_name: str, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+
+    def _record_histogram(self, metric_name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """
         Record a histogram metric.
         
@@ -367,7 +368,7 @@ class EnhancedBaseService(BaseService[T, CreateT, UpdateT], BusinessLogicMixin, 
     """
     Enhanced base service with business logic, caching, and metrics capabilities.
     """
-    
+
     def __init__(self, session: Session):
         super().__init__(session)
         self.enable_caching = True

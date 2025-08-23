@@ -3,9 +3,8 @@ Secret Management Integration
 Provides secure secret management for production deployments.
 """
 
-import os
 import logging
-from typing import Dict, Any, Optional
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -16,26 +15,26 @@ logger = logging.getLogger(__name__)
 class SecretConfig:
     """Configuration for secret management."""
     provider: str  # 'vault', 'aws', 'azure', 'gcp', 'env'
-    vault_url: Optional[str] = None
-    vault_token: Optional[str] = None
+    vault_url: str | None = None
+    vault_token: str | None = None
     vault_mount_point: str = 'secret'
-    aws_region: Optional[str] = None
-    azure_vault_url: Optional[str] = None
+    aws_region: str | None = None
+    azure_vault_url: str | None = None
 
 
 class SecretProvider(ABC):
     """Abstract base class for secret providers."""
-    
+
     @abstractmethod
-    async def get_secret(self, key: str) -> Optional[str]:
+    async def get_secret(self, key: str) -> str | None:
         """Get a secret by key."""
         pass
-    
+
     @abstractmethod
     async def set_secret(self, key: str, value: str) -> bool:
         """Set a secret."""
         pass
-    
+
     @abstractmethod
     async def delete_secret(self, key: str) -> bool:
         """Delete a secret."""
@@ -44,16 +43,16 @@ class SecretProvider(ABC):
 
 class EnvironmentSecretProvider(SecretProvider):
     """Environment variable secret provider (for development)."""
-    
-    async def get_secret(self, key: str) -> Optional[str]:
+
+    async def get_secret(self, key: str) -> str | None:
         """Get secret from environment variable."""
         return os.getenv(key)
-    
+
     async def set_secret(self, key: str, value: str) -> bool:
         """Cannot set environment variables at runtime."""
         logger.warning("Cannot set environment variables at runtime")
         return False
-    
+
     async def delete_secret(self, key: str) -> bool:
         """Cannot delete environment variables at runtime."""
         logger.warning("Cannot delete environment variables at runtime")
@@ -62,11 +61,11 @@ class EnvironmentSecretProvider(SecretProvider):
 
 class HashiCorpVaultProvider(SecretProvider):
     """HashiCorp Vault secret provider."""
-    
+
     def __init__(self, config: SecretConfig):
         self.config = config
         self._client = None
-    
+
     async def _get_client(self):
         """Get or create vault client."""
         if self._client is None:
@@ -81,8 +80,8 @@ class HashiCorpVaultProvider(SecretProvider):
             except ImportError:
                 raise ImportError("hvac package required for Vault integration")
         return self._client
-    
-    async def get_secret(self, key: str) -> Optional[str]:
+
+    async def get_secret(self, key: str) -> str | None:
         """Get secret from Vault."""
         try:
             client = await self._get_client()
@@ -94,7 +93,7 @@ class HashiCorpVaultProvider(SecretProvider):
         except Exception as e:
             logger.error(f"Error getting secret from Vault: {e}")
             return None
-    
+
     async def set_secret(self, key: str, value: str) -> bool:
         """Set secret in Vault."""
         try:
@@ -108,7 +107,7 @@ class HashiCorpVaultProvider(SecretProvider):
         except Exception as e:
             logger.error(f"Error setting secret in Vault: {e}")
             return False
-    
+
     async def delete_secret(self, key: str) -> bool:
         """Delete secret from Vault."""
         try:
@@ -125,11 +124,11 @@ class HashiCorpVaultProvider(SecretProvider):
 
 class AWSSecretsManagerProvider(SecretProvider):
     """AWS Secrets Manager provider."""
-    
+
     def __init__(self, config: SecretConfig):
         self.config = config
         self._client = None
-    
+
     async def _get_client(self):
         """Get or create AWS client."""
         if self._client is None:
@@ -142,8 +141,8 @@ class AWSSecretsManagerProvider(SecretProvider):
             except ImportError:
                 raise ImportError("boto3 package required for AWS Secrets Manager")
         return self._client
-    
-    async def get_secret(self, key: str) -> Optional[str]:
+
+    async def get_secret(self, key: str) -> str | None:
         """Get secret from AWS Secrets Manager."""
         try:
             client = await self._get_client()
@@ -152,7 +151,7 @@ class AWSSecretsManagerProvider(SecretProvider):
         except Exception as e:
             logger.error(f"Error getting secret from AWS: {e}")
             return None
-    
+
     async def set_secret(self, key: str, value: str) -> bool:
         """Set secret in AWS Secrets Manager."""
         try:
@@ -166,7 +165,7 @@ class AWSSecretsManagerProvider(SecretProvider):
         except Exception as e:
             logger.error(f"Error setting secret in AWS: {e}")
             return False
-    
+
     async def delete_secret(self, key: str) -> bool:
         """Delete secret from AWS Secrets Manager."""
         try:
@@ -183,13 +182,13 @@ class SecretManager:
     High-level secret manager that coordinates secret providers.
     Provides caching, fallback, and security features.
     """
-    
+
     def __init__(self, config: SecretConfig):
         self.config = config
         self._provider = self._create_provider()
-        self._cache: Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
         self._cache_enabled = True
-    
+
     def _create_provider(self) -> SecretProvider:
         """Create secret provider based on configuration."""
         if self.config.provider == 'vault':
@@ -200,8 +199,8 @@ class SecretManager:
             return EnvironmentSecretProvider()
         else:
             raise ValueError(f"Unsupported secret provider: {self.config.provider}")
-    
-    async def get_secret(self, key: str, use_cache: bool = True) -> Optional[str]:
+
+    async def get_secret(self, key: str, use_cache: bool = True) -> str | None:
         """
         Get secret with caching and fallback.
         
@@ -215,41 +214,41 @@ class SecretManager:
         # Check cache first
         if use_cache and self._cache_enabled and key in self._cache:
             return self._cache[key]
-        
+
         # Get from provider
         value = await self._provider.get_secret(key)
-        
+
         # Cache the value
         if value and self._cache_enabled:
             self._cache[key] = value
-        
+
         return value
-    
+
     async def get_required_secret(self, key: str) -> str:
         """Get required secret that must exist."""
         value = await self.get_secret(key)
         if value is None:
             raise ValueError(f"Required secret '{key}' not found")
         return value
-    
+
     async def set_secret(self, key: str, value: str) -> bool:
         """Set secret and update cache."""
         success = await self._provider.set_secret(key, value)
         if success and self._cache_enabled:
             self._cache[key] = value
         return success
-    
+
     async def delete_secret(self, key: str) -> bool:
         """Delete secret and remove from cache."""
         success = await self._provider.delete_secret(key)
         if success and key in self._cache:
             del self._cache[key]
         return success
-    
+
     def clear_cache(self) -> None:
         """Clear secret cache."""
         self._cache.clear()
-    
+
     def disable_cache(self) -> None:
         """Disable secret caching."""
         self._cache_enabled = False
@@ -257,17 +256,17 @@ class SecretManager:
 
 
 # Global secret manager instance
-_secret_manager: Optional[SecretManager] = None
+_secret_manager: SecretManager | None = None
 
 
 def get_secret_manager() -> SecretManager:
     """Get or create global secret manager."""
     global _secret_manager
-    
+
     if _secret_manager is None:
         # Create from environment configuration
         provider = os.getenv('SECRET_PROVIDER', 'env')
-        
+
         config = SecretConfig(
             provider=provider,
             vault_url=os.getenv('VAULT_URL'),
@@ -276,13 +275,13 @@ def get_secret_manager() -> SecretManager:
             aws_region=os.getenv('AWS_REGION', 'us-east-1'),
             azure_vault_url=os.getenv('AZURE_VAULT_URL')
         )
-        
+
         _secret_manager = SecretManager(config)
-    
+
     return _secret_manager
 
 
-async def get_secret(key: str) -> Optional[str]:
+async def get_secret(key: str) -> str | None:
     """Convenience function to get a secret."""
     manager = get_secret_manager()
     return await manager.get_secret(key)
@@ -299,7 +298,7 @@ def generate_strong_password(length: int = 32) -> str:
     """Generate a cryptographically strong password."""
     import secrets
     import string
-    
+
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
@@ -317,13 +316,13 @@ def generate_secret_key() -> str:
 
 
 # Production secret initialization
-async def initialize_production_secrets() -> Dict[str, str]:
+async def initialize_production_secrets() -> dict[str, str]:
     """
     Initialize all production secrets with strong values.
     Should be run during deployment setup.
     """
     manager = get_secret_manager()
-    
+
     secrets_to_generate = {
         'SECRET_KEY': generate_secret_key(),
         'JWT_SECRET_KEY': generate_secret_key(),
@@ -333,7 +332,7 @@ async def initialize_production_secrets() -> Dict[str, str]:
         'REDIS_PASSWORD': generate_strong_password(),
         'GRAFANA_ADMIN_PASSWORD': generate_strong_password()
     }
-    
+
     generated = {}
     for key, value in secrets_to_generate.items():
         success = await manager.set_secret(key, value)
@@ -342,5 +341,5 @@ async def initialize_production_secrets() -> Dict[str, str]:
             logger.info(f"Generated and stored secret: {key}")
         else:
             logger.error(f"Failed to store secret: {key}")
-    
+
     return generated

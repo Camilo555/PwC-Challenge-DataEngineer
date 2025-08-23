@@ -4,28 +4,29 @@ Automatic configuration and initialization of distributed tracing on application
 """
 
 import os
-from typing import Dict, Any, Optional
+from typing import Any
 
-from .otel_config import configure_opentelemetry, TracingConfig, is_tracing_enabled
-from .instrumentation import auto_instrument_all, get_instrumentation_status
 from core.logging import get_logger
+
+from .instrumentation import auto_instrument_all, get_instrumentation_status
+from .otel_config import TracingConfig, configure_opentelemetry, is_tracing_enabled
 
 logger = get_logger(__name__)
 
 
 class TracingStartupManager:
     """Manages tracing initialization during application startup."""
-    
+
     def __init__(self):
-        self.config: Optional[TracingConfig] = None
+        self.config: TracingConfig | None = None
         self.initialized = False
         self.instrumentation_results = {}
-    
+
     async def initialize_tracing(
-        self, 
-        config: Optional[TracingConfig] = None,
+        self,
+        config: TracingConfig | None = None,
         auto_instrument: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Initialize distributed tracing system.
         
@@ -44,48 +45,48 @@ class TracingStartupManager:
             'errors': [],
             'warnings': []
         }
-        
+
         try:
             # Configure OpenTelemetry
             self.config = config or TracingConfig.from_environment()
             results['configuration'] = self._config_to_dict(self.config)
-            
+
             if self.config.enabled:
                 success = configure_opentelemetry(self.config)
-                
+
                 if success:
                     results['tracing_enabled'] = True
                     logger.info(f"OpenTelemetry configured with {self.config.backend} backend")
-                    
+
                     # Auto-instrument libraries if enabled
                     if auto_instrument and self.config.auto_instrument:
                         self.instrumentation_results = auto_instrument_all()
                         results['instrumentation'] = self.instrumentation_results
-                        
+
                         # Log instrumentation summary
                         successful = sum(1 for r in self.instrumentation_results.values() if r)
                         total = len(self.instrumentation_results)
                         logger.info(f"Auto-instrumentation: {successful}/{total} libraries")
-                    
+
                     self.initialized = True
-                    
+
                 else:
                     results['status'] = 'error'
                     results['errors'].append("Failed to configure OpenTelemetry")
-                    
+
             else:
                 results['tracing_enabled'] = False
                 results['warnings'].append("Tracing disabled by configuration")
                 logger.info("Distributed tracing disabled")
-            
+
         except Exception as e:
             results['status'] = 'error'
             results['errors'].append(f"Tracing initialization failed: {str(e)}")
             logger.error(f"Failed to initialize tracing: {e}")
-        
+
         return results
-    
-    def _config_to_dict(self, config: TracingConfig) -> Dict[str, Any]:
+
+    def _config_to_dict(self, config: TracingConfig) -> dict[str, Any]:
         """Convert TracingConfig to dictionary for logging."""
         return {
             'enabled': config.enabled,
@@ -97,8 +98,8 @@ class TracingStartupManager:
             'sampling_rate': config.sampling_rate,
             'auto_instrument': config.auto_instrument
         }
-    
-    def get_health_status(self) -> Dict[str, Any]:
+
+    def get_health_status(self) -> dict[str, Any]:
         """Get tracing system health status."""
         status = {
             'initialized': self.initialized,
@@ -106,22 +107,22 @@ class TracingStartupManager:
             'configuration': {},
             'instrumentation_status': {}
         }
-        
+
         if self.config:
             status['configuration'] = self._config_to_dict(self.config)
-        
+
         if self.instrumentation_results:
             status['instrumentation_status'] = self.instrumentation_results
-        
+
         # Get current instrumentation status
         try:
             current_status = get_instrumentation_status()
             status['current_instrumentation'] = current_status
         except Exception as e:
             logger.debug(f"Failed to get instrumentation status: {e}")
-        
+
         return status
-    
+
     def shutdown(self) -> None:
         """Shutdown tracing system."""
         if self.initialized:
@@ -135,20 +136,20 @@ class TracingStartupManager:
 
 
 # Global startup manager
-_startup_manager: Optional[TracingStartupManager] = None
+_startup_manager: TracingStartupManager | None = None
 
 
 def get_tracing_startup_manager() -> TracingStartupManager:
     """Get or create global tracing startup manager."""
     global _startup_manager
-    
+
     if _startup_manager is None:
         _startup_manager = TracingStartupManager()
-    
+
     return _startup_manager
 
 
-async def initialize_tracing(config: Optional[TracingConfig] = None) -> Dict[str, Any]:
+async def initialize_tracing(config: TracingConfig | None = None) -> dict[str, Any]:
     """
     Convenience function to initialize tracing.
     
@@ -162,7 +163,7 @@ async def initialize_tracing(config: Optional[TracingConfig] = None) -> Dict[str
     return await manager.initialize_tracing(config)
 
 
-def get_tracing_health() -> Dict[str, Any]:
+def get_tracing_health() -> dict[str, Any]:
     """Get tracing system health status."""
     manager = get_tracing_startup_manager()
     return manager.get_health_status()
@@ -175,18 +176,18 @@ def shutdown_tracing_system() -> None:
 
 
 # Integration with main startup system
-async def setup_tracing_for_startup() -> Dict[str, Any]:
+async def setup_tracing_for_startup() -> dict[str, Any]:
     """
     Set up tracing during application startup.
     Called by the main startup system.
     """
     logger.info("🔍 Initializing distributed tracing...")
-    
+
     try:
         # Check if tracing should be enabled
         environment = os.getenv('ENVIRONMENT', 'development').lower()
         tracing_enabled = os.getenv('OTEL_ENABLED', 'true').lower() in ('true', '1', 'yes')
-        
+
         if not tracing_enabled:
             logger.info("Distributed tracing disabled by configuration")
             return {
@@ -194,32 +195,32 @@ async def setup_tracing_for_startup() -> Dict[str, Any]:
                 'tracing_enabled': False,
                 'message': 'Disabled by configuration'
             }
-        
+
         # Initialize tracing
         results = await initialize_tracing()
-        
+
         if results['status'] == 'success' and results['tracing_enabled']:
             logger.info("✅ Distributed tracing initialized successfully")
-            
+
             # Log configuration summary
             config = results.get('configuration', {})
             logger.info(f"Tracing backend: {config.get('backend', 'unknown')}")
             logger.info(f"Service: {config.get('service_name', 'unknown')}")
-            
+
             # Log instrumentation summary
             instrumentation = results.get('instrumentation', {})
             if instrumentation:
                 successful = sum(1 for r in instrumentation.values() if r)
                 total = len(instrumentation)
                 logger.info(f"Instrumented libraries: {successful}/{total}")
-        
+
         elif results['status'] == 'error':
             logger.error("❌ Failed to initialize distributed tracing")
             for error in results.get('errors', []):
                 logger.error(f"  - {error}")
-        
+
         return results
-        
+
     except Exception as e:
         logger.error(f"Tracing startup failed: {e}")
         return {
@@ -235,7 +236,7 @@ def get_development_config() -> TracingConfig:
     return TracingConfig(
         enabled=True,
         service_name="retail-etl-dev",
-        environment="development", 
+        environment="development",
         backend="console",
         sampling_rate=1.0,
         auto_instrument=True
@@ -270,7 +271,7 @@ def get_config_for_environment(environment: str) -> TracingConfig:
         TracingConfig appropriate for the environment
     """
     environment = environment.lower()
-    
+
     if environment == 'production':
         return get_production_config()
     elif environment == 'staging':

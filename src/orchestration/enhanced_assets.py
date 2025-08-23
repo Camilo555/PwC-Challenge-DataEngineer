@@ -4,27 +4,33 @@ Provides comprehensive asset definitions with advanced features
 """
 from __future__ import annotations
 
-import asyncio
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import pandas as pd
 from dagster import (
-    asset, AssetExecutionContext, ConfigurableResource, Config,
-    AssetMaterialization, Output, MetadataValue, AssetIn, AssetOut,
-    multi_asset, AssetKey, DependsOn, Definitions,
-    ScheduleDefinition, SensorDefinition, sensor, schedule,
-    DefaultSensorStatus, SkipReason, RunRequest, SensorEvaluationContext,
-    AssetSelection, define_asset_job, job, op, In, Out, GraphDefinition,
-    resource, get_dagster_logger, DagsterLogManager
+    AssetExecutionContext,
+    AssetOut,
+    AssetSelection,
+    Config,
+    ConfigurableResource,
+    DefaultSensorStatus,
+    Definitions,
+    RunRequest,
+    SensorEvaluationContext,
+    SkipReason,
+    asset,
+    define_asset_job,
+    get_dagster_logger,
+    multi_asset,
+    schedule,
+    sensor,
 )
 from dagster._core.definitions.partition import StaticPartitionsDefinition
 from dagster._core.definitions.time_window_partitions import DailyPartitionsDefinition
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from core.config.base_config import BaseConfig, Environment, ProcessingEngine
+from core.config.base_config import BaseConfig, ProcessingEngine
 from core.config.dagster_config import DagsterConfig
 from core.logging import get_logger
 from external_apis.enrichment_service import DataEnrichmentService
@@ -35,7 +41,7 @@ app_logger = get_logger(__name__)
 
 class RetailDataConfig(Config):
     """Configuration for retail data processing."""
-    
+
     enable_external_enrichment: bool = Field(default=True, description="Enable external API enrichment")
     enable_data_quality_checks: bool = Field(default=True, description="Enable comprehensive data quality checks")
     enable_spark_processing: bool = Field(default=False, description="Use Spark for large-scale processing")
@@ -46,15 +52,15 @@ class RetailDataConfig(Config):
 
 class DataQualityResource(ConfigurableResource):
     """Resource for data quality assessment."""
-    
+
     min_quality_score: float = Field(default=0.8)
     max_null_percentage: float = Field(default=0.1)
     max_duplicate_percentage: float = Field(default=0.05)
-    
-    def assess_dataframe(self, df: pd.DataFrame) -> Dict[str, Any]:
+
+    def assess_dataframe(self, df: pd.DataFrame) -> dict[str, Any]:
         """Assess data quality of a DataFrame."""
         total_records = len(df)
-        
+
         if total_records == 0:
             return {
                 "total_records": 0,
@@ -63,30 +69,30 @@ class DataQualityResource(ConfigurableResource):
                 "duplicate_percentage": 0.0,
                 "passes_quality_check": False
             }
-        
+
         # Calculate null percentage
         null_count = df.isnull().sum().sum()
         total_cells = total_records * len(df.columns)
         null_percentage = null_count / total_cells if total_cells > 0 else 0
-        
+
         # Calculate duplicate percentage
         duplicate_count = df.duplicated().sum()
         duplicate_percentage = duplicate_count / total_records
-        
+
         # Calculate overall quality score
         completeness_score = 1 - null_percentage
         uniqueness_score = 1 - duplicate_percentage
-        
+
         # Simple quality scoring (can be enhanced)
         quality_score = (completeness_score + uniqueness_score) / 2
-        
+
         # Determine if passes quality check
         passes_check = (
             quality_score >= self.min_quality_score and
             null_percentage <= self.max_null_percentage and
             duplicate_percentage <= self.max_duplicate_percentage
         )
-        
+
         return {
             "total_records": total_records,
             "quality_score": quality_score,
@@ -100,18 +106,18 @@ class DataQualityResource(ConfigurableResource):
 
 class ExternalAPIResource(ConfigurableResource):
     """Resource for external API integration."""
-    
+
     timeout_seconds: int = Field(default=30)
     retry_attempts: int = Field(default=3)
     enable_currency_api: bool = Field(default=True)
     enable_country_api: bool = Field(default=True)
     enable_product_api: bool = Field(default=True)
-    
+
     async def enrich_data(self, df: pd.DataFrame, batch_size: int = 100) -> pd.DataFrame:
         """Enrich data with external APIs."""
         try:
             enrichment_service = DataEnrichmentService()
-            
+
             # Convert DataFrame to transaction objects for enrichment
             transactions = []
             for _, row in df.iterrows():
@@ -126,7 +132,7 @@ class ExternalAPIResource(ConfigurableResource):
                     'country': row.get('country')
                 }
                 transactions.append(transaction)
-            
+
             # Enrich transactions
             enriched_transactions = await enrichment_service.enrich_batch_transactions(
                 transactions,
@@ -135,13 +141,13 @@ class ExternalAPIResource(ConfigurableResource):
                 include_country=self.enable_country_api,
                 include_product=self.enable_product_api
             )
-            
+
             # Convert back to DataFrame
             enriched_df = pd.DataFrame(enriched_transactions)
-            
+
             app_logger.info(f"Successfully enriched {len(enriched_df)} records")
             return enriched_df
-            
+
         except Exception as e:
             app_logger.warning(f"External API enrichment failed: {e}")
             # Return original DataFrame if enrichment fails
@@ -150,15 +156,15 @@ class ExternalAPIResource(ConfigurableResource):
 
 class SparkResource(ConfigurableResource):
     """Resource for Spark session management."""
-    
+
     app_name: str = Field(default="Dagster-Retail-ETL")
-    spark_conf: Dict[str, str] = Field(
+    spark_conf: dict[str, str] = Field(
         default_factory=lambda: {
             "spark.sql.adaptive.enabled": "true",
             "spark.sql.adaptive.coalescePartitions.enabled": "true"
         }
     )
-    
+
     def create_spark_session(self):
         """Create and configure Spark session."""
         try:
@@ -194,17 +200,17 @@ processing_engine_partitions = StaticPartitionsDefinition(["pandas", "spark"])
 def raw_retail_data(context: AssetExecutionContext) -> pd.DataFrame:
     """Load raw retail data from CSV files."""
     config = BaseConfig()
-    
+
     # Get partition date if partitioned
     partition_date_str = context.partition_key if context.has_partition_key else None
-    
+
     raw_data_path = config.raw_data_path
     csv_files = list(raw_data_path.rglob("*.csv"))
-    
+
     if not csv_files:
         context.log.warning(f"No CSV files found in {raw_data_path}")
         return pd.DataFrame()
-    
+
     # Read and combine CSV files
     dfs = []
     for csv_file in csv_files:
@@ -216,12 +222,12 @@ def raw_retail_data(context: AssetExecutionContext) -> pd.DataFrame:
         except Exception as e:
             context.log.error(f"Failed to read {csv_file}: {e}")
             continue
-    
+
     if not dfs:
         return pd.DataFrame()
-    
+
     combined_df = pd.concat(dfs, ignore_index=True)
-    
+
     # Add metadata
     context.add_output_metadata({
         "total_records": len(combined_df),
@@ -230,7 +236,7 @@ def raw_retail_data(context: AssetExecutionContext) -> pd.DataFrame:
         "memory_usage_mb": combined_df.memory_usage(deep=True).sum() / 1024 / 1024,
         "partition_date": partition_date_str or "latest"
     })
-    
+
     return combined_df
 
 
@@ -253,13 +259,13 @@ async def bronze_retail_data(
     data_quality: DataQualityResource,
 ) -> pd.DataFrame:
     """Process raw data into Bronze layer with standardization."""
-    
+
     if raw_retail_data.empty:
         context.log.warning("No raw data to process")
         return pd.DataFrame()
-    
+
     context.log.info(f"Processing {len(raw_retail_data)} raw records")
-    
+
     # Standardize column names
     column_mapping = {
         'InvoiceNo': 'invoice_no',
@@ -271,9 +277,9 @@ async def bronze_retail_data(
         'CustomerID': 'customer_id',
         'Country': 'country'
     }
-    
+
     df = raw_retail_data.rename(columns=column_mapping)
-    
+
     # Data type conversion
     try:
         if 'invoice_timestamp' in df.columns:
@@ -284,12 +290,12 @@ async def bronze_retail_data(
             df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
     except Exception as e:
         context.log.warning(f"Data type conversion issues: {e}")
-    
+
     # Add processing metadata
     df['_processed_at'] = pd.Timestamp.now()
     df['_bronze_version'] = '2.0'
     df['_processing_engine'] = 'dagster_pandas'
-    
+
     # External API enrichment (if enabled)
     if config.enable_external_enrichment:
         try:
@@ -297,11 +303,11 @@ async def bronze_retail_data(
             context.log.info("External API enrichment completed")
         except Exception as e:
             context.log.warning(f"External API enrichment failed: {e}")
-    
+
     # Data quality assessment
     if config.enable_data_quality_checks:
         quality_report = data_quality.assess_dataframe(df)
-        
+
         # Log quality metrics
         context.add_output_metadata({
             "quality_score": quality_report["quality_score"],
@@ -310,14 +316,14 @@ async def bronze_retail_data(
             "passes_quality_check": quality_report["passes_quality_check"],
             "total_records": len(df)
         })
-        
+
         context.log.info(
             f"Data quality assessment: "
             f"Score={quality_report['quality_score']:.2%}, "
             f"Nulls={quality_report['null_percentage']:.2%}, "
             f"Duplicates={quality_report['duplicate_percentage']:.2%}"
         )
-        
+
         # Raise warning if quality is low
         if not quality_report["passes_quality_check"]:
             context.log.warning(
@@ -325,7 +331,7 @@ async def bronze_retail_data(
                 f"Score: {quality_report['quality_score']:.2%} "
                 f"(required: {config.quality_threshold:.2%})"
             )
-    
+
     return df
 
 
@@ -347,25 +353,25 @@ def silver_retail_data(
     data_quality: DataQualityResource
 ) -> pd.DataFrame:
     """Transform Bronze data into Silver layer with business rules."""
-    
+
     if bronze_retail_data.empty:
         context.log.warning("No bronze data to process")
         return pd.DataFrame()
-    
+
     df = bronze_retail_data.copy()
     original_count = len(df)
-    
+
     # Apply business rules
     # Remove invalid quantities and prices
     df = df[
-        (df['quantity'] > 0) & 
+        (df['quantity'] > 0) &
         (df['unit_price'] >= 0) &
         (df['invoice_no'].notna())
     ]
-    
+
     # Calculate derived columns
     df['total_amount'] = df['quantity'] * df['unit_price']
-    
+
     # Add date components
     if 'invoice_timestamp' in df.columns:
         df['invoice_date'] = df['invoice_timestamp'].dt.date
@@ -373,17 +379,17 @@ def silver_retail_data(
         df['invoice_month'] = df['invoice_timestamp'].dt.month
         df['invoice_quarter'] = df['invoice_timestamp'].dt.quarter
         df['invoice_day_of_week'] = df['invoice_timestamp'].dt.day_name()
-    
+
     # Add business flags
     df['is_return'] = df['invoice_no'].str.startswith('C', na=False)
     df['is_high_value'] = df['total_amount'] > df['total_amount'].quantile(0.95)
-    
+
     # Remove duplicates
     df = df.drop_duplicates(subset=['invoice_no', 'stock_code'], keep='first')
-    
+
     # Final quality check
     quality_report = data_quality.assess_dataframe(df)
-    
+
     # Add metadata
     context.add_output_metadata({
         "original_records": original_count,
@@ -396,12 +402,12 @@ def silver_retail_data(
         "unique_customers": df['customer_id'].nunique() if 'customer_id' in df.columns else 0,
         "unique_products": df['stock_code'].nunique() if 'stock_code' in df.columns else 0
     })
-    
+
     context.log.info(
         f"Silver layer processing completed: "
         f"{len(df)} records (filtered {original_count - len(df)} invalid records)"
     )
-    
+
     return df
 
 
@@ -413,13 +419,13 @@ def silver_retail_data(
             metadata={"aggregation_level": "country_month"}
         ),
         "customer_metrics": AssetOut(
-            description="Customer behavior and segmentation metrics", 
+            description="Customer behavior and segmentation metrics",
             group_name="gold_layer",
             metadata={"aggregation_level": "customer"}
         ),
         "product_performance": AssetOut(
             description="Product sales performance analytics",
-            group_name="gold_layer", 
+            group_name="gold_layer",
             metadata={"aggregation_level": "product"}
         )
     },
@@ -432,14 +438,14 @@ def gold_analytics_tables(
     silver_retail_data: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Generate Gold layer analytics tables."""
-    
+
     if silver_retail_data.empty:
         context.log.warning("No silver data for analytics")
         empty_df = pd.DataFrame()
         return empty_df, empty_df, empty_df
-    
+
     df = silver_retail_data
-    
+
     # Sales Summary
     sales_summary = (df.groupby(['country', 'invoice_year', 'invoice_month'])
                     .agg({
@@ -450,13 +456,13 @@ def gold_analytics_tables(
                         'stock_code': 'nunique'
                     })
                     .round(2))
-    
+
     sales_summary.columns = [
         'total_transactions', 'total_revenue', 'avg_transaction_value',
         'total_quantity', 'unique_customers', 'unique_products'
     ]
     sales_summary = sales_summary.reset_index()
-    
+
     # Customer Metrics
     customer_metrics = (df.groupby('customer_id')
                        .agg({
@@ -465,28 +471,28 @@ def gold_analytics_tables(
                            'stock_code': 'nunique',
                            'invoice_timestamp': ['min', 'max']
                        }))
-    
+
     customer_metrics.columns = [
         'total_spent', 'avg_transaction_value', 'transaction_count',
         'total_quantity', 'unique_products', 'first_purchase', 'last_purchase'
     ]
     customer_metrics = customer_metrics.reset_index()
-    
+
     # Calculate customer lifetime in days
     customer_metrics['customer_lifetime_days'] = (
         customer_metrics['last_purchase'] - customer_metrics['first_purchase']
     ).dt.days
-    
+
     # Product Performance
     product_performance = (df.groupby(['stock_code', 'description'])
                           .agg({
                               'total_amount': 'sum',
-                              'quantity': 'sum', 
+                              'quantity': 'sum',
                               'invoice_no': 'nunique',
                               'customer_id': 'nunique'
                           })
                           .round(2))
-    
+
     product_performance.columns = [
         'total_revenue', 'total_quantity', 'total_orders', 'unique_customers'
     ]
@@ -494,26 +500,26 @@ def gold_analytics_tables(
     product_performance['revenue_per_order'] = (
         product_performance['total_revenue'] / product_performance['total_orders']
     ).round(2)
-    
+
     # Add metadata for each output
     context.add_output_metadata(
         metadata={
             "sales_summary_records": len(sales_summary),
-            "customer_metrics_records": len(customer_metrics), 
+            "customer_metrics_records": len(customer_metrics),
             "product_performance_records": len(product_performance),
             "total_revenue_analyzed": df['total_amount'].sum(),
             "analysis_period": f"{df['invoice_timestamp'].min()} to {df['invoice_timestamp'].max()}"
         },
         output_name="sales_summary"
     )
-    
+
     context.log.info(
         f"Gold layer analytics completed: "
         f"Sales summary: {len(sales_summary)}, "
         f"Customer metrics: {len(customer_metrics)}, "
         f"Product performance: {len(product_performance)}"
     )
-    
+
     return sales_summary, customer_metrics, product_performance
 
 
@@ -526,26 +532,26 @@ def file_sensor(context: SensorEvaluationContext):
     """Sensor that triggers on new file arrivals."""
     config = BaseConfig()
     raw_data_path = config.raw_data_path
-    
+
     # Check for new CSV files
     csv_files = list(raw_data_path.glob("*.csv"))
-    
+
     if not csv_files:
         return SkipReason("No CSV files found")
-    
+
     # Check modification times
     recent_files = []
     cutoff_time = datetime.now() - timedelta(minutes=30)
-    
+
     for file_path in csv_files:
         if datetime.fromtimestamp(file_path.stat().st_mtime) > cutoff_time:
             recent_files.append(file_path)
-    
+
     if not recent_files:
         return SkipReason("No recent files found")
-    
+
     context.log.info(f"Found {len(recent_files)} recent files: {[f.name for f in recent_files]}")
-    
+
     return RunRequest(
         run_key=f"file_sensor_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         tags={
@@ -581,7 +587,7 @@ retail_etl_job = define_asset_job(
 )
 
 data_quality_job = define_asset_job(
-    "data_quality_job", 
+    "data_quality_job",
     selection=AssetSelection.groups("bronze_layer", "silver_layer"),
     description="Data quality focused pipeline"
 )
@@ -621,11 +627,11 @@ def create_enhanced_definitions():
     """Create enhanced Dagster definitions."""
     config = BaseConfig()
     dagster_config = DagsterConfig()
-    
+
     resources = get_resources(config, dagster_config)
     # Remove None values
     resources = {k: v for k, v in resources.items() if v is not None}
-    
+
     return Definitions(
         assets=[
             raw_retail_data,

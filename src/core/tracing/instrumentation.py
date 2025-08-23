@@ -4,19 +4,19 @@ Provides automatic instrumentation for common libraries and frameworks.
 """
 
 import os
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 try:
     from opentelemetry.instrumentation.auto_instrumentation import AutoInstrumentor
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-    from opentelemetry.instrumentation.requests import RequestsInstrumentor
-    from opentelemetry.instrumentation.redis import RedisInstrumentor
-    from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
-    from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-    from opentelemetry.instrumentation.urllib import URLLibInstrumentor
     from opentelemetry.instrumentation.logging import LoggingInstrumentor
+    from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
+    from opentelemetry.instrumentation.urllib import URLLibInstrumentor
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -29,12 +29,12 @@ logger = get_logger(__name__)
 
 class InstrumentationManager:
     """Manages automatic instrumentation for various libraries."""
-    
+
     def __init__(self):
         self.instrumented_libraries = set()
         self.instrumentation_config = self._load_config()
-    
-    def _load_config(self) -> Dict[str, Any]:
+
+    def _load_config(self) -> dict[str, Any]:
         """Load instrumentation configuration from environment."""
         return {
             'fastapi': {
@@ -73,19 +73,19 @@ class InstrumentationManager:
                 'log_level': os.getenv('OTEL_LOGGING_LEVEL', 'INFO').upper()
             }
         }
-    
+
     def instrument_fastapi(self, app=None) -> bool:
         """Instrument FastAPI application."""
         if not OTEL_AVAILABLE or not self.instrumentation_config['fastapi']['enabled']:
             return False
-        
+
         if 'fastapi' in self.instrumented_libraries:
             logger.debug("FastAPI already instrumented")
             return True
-        
+
         try:
             config = self.instrumentation_config['fastapi']
-            
+
             if app:
                 # Instrument specific app instance
                 FastAPIInstrumentor.instrument_app(
@@ -101,27 +101,27 @@ class InstrumentationManager:
                     client_request_hook=config.get('client_request_hook'),
                     excluded_urls=config.get('excluded_urls')
                 )
-            
+
             self.instrumented_libraries.add('fastapi')
             logger.info("FastAPI instrumentation enabled")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to instrument FastAPI: {e}")
             return False
-    
+
     def instrument_sqlalchemy(self, engine=None) -> bool:
         """Instrument SQLAlchemy database operations."""
         if not OTEL_AVAILABLE or not self.instrumentation_config['sqlalchemy']['enabled']:
             return False
-        
+
         if 'sqlalchemy' in self.instrumented_libraries:
             logger.debug("SQLAlchemy already instrumented")
             return True
-        
+
         try:
             config = self.instrumentation_config['sqlalchemy']
-            
+
             if engine:
                 # Instrument specific engine
                 SQLAlchemyInstrumentor.instrument(
@@ -135,63 +135,63 @@ class InstrumentationManager:
                     enable_commenter=config.get('enable_commenter', True),
                     commenter_options=config.get('commenter_options', {})
                 )
-            
+
             self.instrumented_libraries.add('sqlalchemy')
             logger.info("SQLAlchemy instrumentation enabled")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to instrument SQLAlchemy: {e}")
             return False
-    
+
     def instrument_requests(self) -> bool:
         """Instrument requests library."""
         if not OTEL_AVAILABLE or not self.instrumentation_config['requests']['enabled']:
             return False
-        
+
         if 'requests' in self.instrumented_libraries:
             logger.debug("Requests already instrumented")
             return True
-        
+
         try:
             config = self.instrumentation_config['requests']
-            
+
             RequestsInstrumentor().instrument(
                 excluded_urls=config.get('excluded_urls')
             )
-            
+
             self.instrumented_libraries.add('requests')
             logger.info("Requests library instrumentation enabled")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to instrument requests: {e}")
             return False
-    
+
     def instrument_redis(self) -> bool:
         """Instrument Redis operations."""
         if not OTEL_AVAILABLE or not self.instrumentation_config['redis']['enabled']:
             return False
-        
+
         if 'redis' in self.instrumented_libraries:
             logger.debug("Redis already instrumented")
             return True
-        
+
         try:
             RedisInstrumentor().instrument()
-            
+
             self.instrumented_libraries.add('redis')
             logger.info("Redis instrumentation enabled")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to instrument Redis: {e}")
             return False
-    
+
     def instrument_database_drivers(self) -> bool:
         """Instrument database drivers (psycopg2, sqlite3)."""
         success = True
-        
+
         # PostgreSQL (psycopg2)
         if OTEL_AVAILABLE and self.instrumentation_config['psycopg2']['enabled']:
             if 'psycopg2' not in self.instrumented_libraries:
@@ -202,7 +202,7 @@ class InstrumentationManager:
                 except Exception as e:
                     logger.error(f"Failed to instrument psycopg2: {e}")
                     success = False
-        
+
         # SQLite3
         if OTEL_AVAILABLE and self.instrumentation_config['sqlite3']['enabled']:
             if 'sqlite3' not in self.instrumented_libraries:
@@ -213,13 +213,13 @@ class InstrumentationManager:
                 except Exception as e:
                     logger.error(f"Failed to instrument sqlite3: {e}")
                     success = False
-        
+
         return success
-    
+
     def instrument_http_clients(self) -> bool:
         """Instrument HTTP client libraries."""
         success = True
-        
+
         # HTTPX
         if OTEL_AVAILABLE and self.instrumentation_config['httpx']['enabled']:
             if 'httpx' not in self.instrumented_libraries:
@@ -230,7 +230,7 @@ class InstrumentationManager:
                 except Exception as e:
                     logger.error(f"Failed to instrument HTTPX: {e}")
                     success = False
-        
+
         # urllib
         if OTEL_AVAILABLE and self.instrumentation_config['urllib']['enabled']:
             if 'urllib' not in self.instrumented_libraries:
@@ -241,35 +241,35 @@ class InstrumentationManager:
                 except Exception as e:
                     logger.error(f"Failed to instrument urllib: {e}")
                     success = False
-        
+
         return success
-    
+
     def instrument_logging(self) -> bool:
         """Instrument Python logging to correlate with traces."""
         if not OTEL_AVAILABLE or not self.instrumentation_config['logging']['enabled']:
             return False
-        
+
         if 'logging' in self.instrumented_libraries:
             logger.debug("Logging already instrumented")
             return True
-        
+
         try:
             config = self.instrumentation_config['logging']
-            
+
             LoggingInstrumentor().instrument(
                 set_logging_format=config.get('set_logging_format', True),
                 logging_level=config.get('log_level', 'INFO')
             )
-            
+
             self.instrumented_libraries.add('logging')
             logger.info("Logging instrumentation enabled")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to instrument logging: {e}")
             return False
-    
-    def auto_instrument_all(self, app=None, engine=None) -> Dict[str, bool]:
+
+    def auto_instrument_all(self, app=None, engine=None) -> dict[str, bool]:
         """
         Automatically instrument all enabled libraries.
         
@@ -281,11 +281,11 @@ class InstrumentationManager:
             Dictionary with instrumentation results
         """
         results = {}
-        
+
         if not OTEL_AVAILABLE:
             logger.warning("OpenTelemetry not available, skipping instrumentation")
             return results
-        
+
         # Instrument libraries
         results['fastapi'] = self.instrument_fastapi(app)
         results['sqlalchemy'] = self.instrument_sqlalchemy(engine)
@@ -294,34 +294,34 @@ class InstrumentationManager:
         results['database_drivers'] = self.instrument_database_drivers()
         results['http_clients'] = self.instrument_http_clients()
         results['logging'] = self.instrument_logging()
-        
+
         successful = sum(1 for success in results.values() if success)
         total = len(results)
-        
+
         logger.info(f"Auto-instrumentation completed: {successful}/{total} libraries instrumented")
-        
+
         return results
-    
-    def get_instrumented_libraries(self) -> List[str]:
+
+    def get_instrumented_libraries(self) -> list[str]:
         """Get list of successfully instrumented libraries."""
         return list(self.instrumented_libraries)
-    
+
     def is_library_instrumented(self, library: str) -> bool:
         """Check if a specific library is instrumented."""
         return library in self.instrumented_libraries
 
 
 # Global instrumentation manager
-_instrumentation_manager: Optional[InstrumentationManager] = None
+_instrumentation_manager: InstrumentationManager | None = None
 
 
 def get_instrumentation_manager() -> InstrumentationManager:
     """Get or create global instrumentation manager."""
     global _instrumentation_manager
-    
+
     if _instrumentation_manager is None:
         _instrumentation_manager = InstrumentationManager()
-    
+
     return _instrumentation_manager
 
 
@@ -350,16 +350,16 @@ def instrument_redis() -> bool:
     return manager.instrument_redis()
 
 
-def auto_instrument_all(app=None, engine=None) -> Dict[str, bool]:
+def auto_instrument_all(app=None, engine=None) -> dict[str, bool]:
     """Auto-instrument all enabled libraries."""
     manager = get_instrumentation_manager()
     return manager.auto_instrument_all(app, engine)
 
 
-def get_instrumentation_status() -> Dict[str, Any]:
+def get_instrumentation_status() -> dict[str, Any]:
     """Get current instrumentation status."""
     manager = get_instrumentation_manager()
-    
+
     return {
         'otel_available': OTEL_AVAILABLE,
         'instrumented_libraries': manager.get_instrumented_libraries(),

@@ -117,11 +117,11 @@ async def health() -> dict[str, Any]:
 auth_dependency = [Depends(verify_jwt_token)] if security_config.jwt_auth_enabled else [Depends(verify_basic_auth_fallback)]
 
 # Import additional routers
-from api.v1.routes.datamart import router as datamart_router
+from api.graphql.router import graphql_router
 from api.v1.routes.async_tasks import router as async_tasks_router
+from api.v1.routes.datamart import router as datamart_router
 from api.v1.routes.features import router as features_router
 from api.v2.routes.sales import router as sales_v2_router
-from api.graphql.router import graphql_router
 
 # Mount v1 routers with proper authentication
 app.include_router(auth_router, prefix="/api/v1")  # No auth required for auth endpoints

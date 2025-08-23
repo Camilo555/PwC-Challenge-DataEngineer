@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
@@ -399,17 +398,17 @@ class SupabaseClient:
         """
         try:
             backup_path.mkdir(parents=True, exist_ok=True)
-            
+
             with self.engine.connect() as conn:
                 # Export table data to CSV
                 result = conn.execute(text(f"SELECT * FROM {table_name}"))
                 df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                
+
                 timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
                 backup_file = backup_path / f"{table_name}_backup_{timestamp}.csv"
-                
+
                 df.to_csv(backup_file, index=False)
-                
+
                 backup_metadata = {
                     'table_name': table_name,
                     'backup_file': str(backup_file),
@@ -418,10 +417,10 @@ class SupabaseClient:
                     'backup_timestamp': pd.Timestamp.now().isoformat(),
                     'status': 'completed'
                 }
-                
+
                 logger.info(f"Table backup completed: {backup_metadata}")
                 return backup_metadata
-                
+
         except Exception as e:
             logger.error(f"Backup failed for table {table_name}: {e}")
             return {
@@ -445,17 +444,17 @@ class SupabaseClient:
         try:
             if not backup_file.exists():
                 raise FileNotFoundError(f"Backup file not found: {backup_file}")
-            
+
             df = pd.read_csv(backup_file)
-            
+
             with self.engine.connect() as conn:
                 # Clear existing data (optional - could be parameterized)
                 conn.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
-                
+
                 # Insert backup data
                 df.to_sql(table_name, conn, if_exists='append', index=False)
                 conn.commit()
-                
+
                 restore_metadata = {
                     'table_name': table_name,
                     'backup_file': str(backup_file),
@@ -463,10 +462,10 @@ class SupabaseClient:
                     'restore_timestamp': pd.Timestamp.now().isoformat(),
                     'status': 'completed'
                 }
-                
+
                 logger.info(f"Table restore completed: {restore_metadata}")
                 return restore_metadata
-                
+
         except Exception as e:
             logger.error(f"Restore failed for table {table_name}: {e}")
             return {
@@ -488,9 +487,9 @@ class SupabaseClient:
             'status': 'completed',
             'errors': []
         }
-        
+
         tables = ["fact_sale", "dim_product", "dim_customer", "dim_country", "dim_invoice", "dim_date"]
-        
+
         for table in tables:
             try:
                 result = await self.backup_table_data(table, backup_path)
@@ -505,10 +504,10 @@ class SupabaseClient:
                     'table_name': table,
                     'error': str(e)
                 })
-        
+
         if backup_summary['errors']:
             backup_summary['status'] = 'partial'
-            
+
         logger.info(f"Full backup completed: {len(backup_summary['tables_backed_up'])} tables, {backup_summary['total_records']} records")
         return backup_summary
 

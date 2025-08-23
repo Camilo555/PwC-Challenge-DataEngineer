@@ -11,7 +11,7 @@ from .pool_config import ConnectionPoolConfig
 
 __all__ = [
     "DatabaseManager",
-    "get_database_manager", 
+    "get_database_manager",
     "IndexManager",
     "create_performance_indexes",
     "DatabasePerformanceOptimizer",

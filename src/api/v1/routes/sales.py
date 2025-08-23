@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.v1.schemas.sales import PaginatedSales, SaleItem
 from api.v1.services.sales_service import SalesService

@@ -101,12 +101,12 @@ def setup_windows_environment() -> bool:
         # Setup Hadoop for Windows - use local hadoop directory
         project_root = Path(__file__).parent.parent.parent.parent
         hadoop_dir = project_root / "hadoop"
-        
+
         if hadoop_dir.exists():
             hadoop_home = str(hadoop_dir.absolute())
             os.environ["HADOOP_HOME"] = hadoop_home
             os.environ["HADOOP_CONF_DIR"] = hadoop_home
-            
+
             # Ensure winutils.exe exists
             winutils_path = hadoop_dir / "bin" / "winutils.exe"
             if not winutils_path.exists():
@@ -121,13 +121,13 @@ def setup_windows_environment() -> bool:
                     logger.info(f"Downloaded winutils.exe to {winutils_path}")
                 except Exception as e:
                     logger.warning(f"Failed to download winutils.exe: {e}")
-            
+
             logger.info(f"Using local HADOOP_HOME: {hadoop_home}")
         else:
             # Create minimal hadoop structure
             hadoop_dir.mkdir(parents=True, exist_ok=True)
             (hadoop_dir / "bin").mkdir(parents=True, exist_ok=True)
-            
+
             # Try to download winutils.exe
             try:
                 import urllib.request
@@ -135,7 +135,7 @@ def setup_windows_environment() -> bool:
                 winutils_path = hadoop_dir / "bin" / "winutils.exe"
                 urllib.request.urlretrieve(winutils_url, winutils_path)
                 logger.info(f"Downloaded winutils.exe to {winutils_path}")
-                
+
                 hadoop_home = str(hadoop_dir.absolute())
                 os.environ["HADOOP_HOME"] = hadoop_home
                 os.environ["HADOOP_CONF_DIR"] = hadoop_home
@@ -172,7 +172,7 @@ def get_windows_spark_config(skip_delta: bool = True) -> dict[str, str]:
     # Create safe temporary directories
     temp_dir = Path.cwd() / "temp"
     temp_dir.mkdir(exist_ok=True)
-    
+
     config = {
         # Basic configuration
         "spark.app.name": settings.spark_app_name,
@@ -191,35 +191,35 @@ def get_windows_spark_config(skip_delta: bool = True) -> dict[str, str]:
         "spark.ui.enabled": "false",
         "spark.ui.showConsoleProgress": "false",
         "spark.sql.execution.arrow.pyspark.enabled": "false",
-        
+
         # Hadoop configuration for Windows
         "spark.hadoop.fs.file.impl": "org.apache.hadoop.fs.LocalFileSystem",
         "spark.hadoop.fs.file.impl.disable.cache": "false",
-        
+
         # Native library workarounds
         "spark.hadoop.io.nativeio.NativeIO$Windows.enabled": "false",
         "spark.sql.catalogImplementation": "in-memory",
-        
+
         # File handling optimizations
         "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
         "spark.hadoop.parquet.enable.summary-metadata": "false",
         "spark.sql.parquet.mergeSchema": "false",
         "spark.sql.parquet.filterPushdown": "true",
-        
+
         # Temporary directory configuration
         "spark.local.dir": str(temp_dir),
         "spark.sql.warehouse.dir": str(temp_dir / "spark-warehouse"),
         "spark.hadoop.hadoop.tmp.dir": str(temp_dir / "hadoop-tmp"),
-        
+
         # Memory and GC tuning for Windows
         "spark.driver.maxResultSize": "1g",
         "spark.sql.adaptive.skewJoin.enabled": "false",  # Disable to reduce complexity
         "spark.sql.adaptive.localShuffleReader.enabled": "false",
-        
+
         # Reduce logging noise
         "spark.sql.adaptive.logLevel": "ERROR",
         "spark.sql.execution.arrow.maxRecordsPerBatch": "1000",
-        
+
         # Checkpoint and recovery
         "spark.sql.recovery.checkpointInterval": "20",
         "spark.cleaner.referenceTracking.cleanCheckpoints": "true",
@@ -269,7 +269,7 @@ def create_windows_spark_session(app_name: str = "WindowsRetailETL") -> SparkSes
         for key, value in spark_config.items():
             builder = builder.config(key, value)
 
-        # Skip Delta Lake packages on Windows due to native library issues  
+        # Skip Delta Lake packages on Windows due to native library issues
         # Only add PostgreSQL and SQLite for database connectivity
         packages = [
             "org.postgresql:postgresql:42.7.3",

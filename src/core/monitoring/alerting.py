@@ -2,21 +2,20 @@
 Alerting System
 Provides comprehensive alerting capabilities for monitoring events.
 """
-from typing import Dict, List, Any, Optional, Callable, Union, Set
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
 import asyncio
 import smtplib
-import json
-from email.mime.text import MIMEText
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
+from email.mime.text import MIMEText
+from enum import Enum
+from typing import Any
+
 import aiohttp
 
 from core.logging import get_logger
-from core.monitoring.health_checks import HealthStatus, HealthCheckResult
+from core.monitoring.health_checks import HealthStatus
 
 logger = get_logger(__name__)
 
@@ -24,7 +23,7 @@ logger = get_logger(__name__)
 class AlertSeverity(Enum):
     """Alert severity levels."""
     INFO = "info"
-    WARNING = "warning" 
+    WARNING = "warning"
     ERROR = "error"
     CRITICAL = "critical"
 
@@ -47,13 +46,13 @@ class Alert:
     source: str
     timestamp: datetime
     status: AlertStatus = AlertStatus.ACTIVE
-    labels: Dict[str, str] = field(default_factory=dict)
-    annotations: Dict[str, str] = field(default_factory=dict)
-    resolved_at: Optional[datetime] = None
-    acknowledged_at: Optional[datetime] = None
-    acknowledged_by: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    labels: dict[str, str] = field(default_factory=dict)
+    annotations: dict[str, str] = field(default_factory=dict)
+    resolved_at: datetime | None = None
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert alert to dictionary."""
         return {
             "id": self.id,
@@ -71,36 +70,36 @@ class Alert:
         }
 
 
-@dataclass 
+@dataclass
 class AlertRule:
     """Alert rule configuration."""
     id: str
     name: str
-    condition: Callable[[Dict[str, Any]], bool]
+    condition: Callable[[dict[str, Any]], bool]
     severity: AlertSeverity
     description: str
-    labels: Dict[str, str] = field(default_factory=dict)
-    annotations: Dict[str, str] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
+    annotations: dict[str, str] = field(default_factory=dict)
     cooldown: timedelta = timedelta(minutes=15)
     auto_resolve: bool = True
-    resolve_condition: Optional[Callable[[Dict[str, Any]], bool]] = None
-    
+    resolve_condition: Callable[[dict[str, Any]], bool] | None = None
+
     # State tracking
-    last_fired: Optional[datetime] = None
-    last_resolved: Optional[datetime] = None
+    last_fired: datetime | None = None
+    last_resolved: datetime | None = None
 
 
 class BaseAlertChannel:
     """Base class for alert notification channels."""
-    
+
     def __init__(self, name: str, enabled: bool = True):
         self.name = name
         self.enabled = enabled
-    
+
     async def send_alert(self, alert: Alert) -> bool:
         """Send alert notification. Override in subclasses."""
         raise NotImplementedError
-    
+
     def format_alert_message(self, alert: Alert) -> str:
         """Format alert message for this channel."""
         severity_emoji = {
@@ -109,26 +108,26 @@ class BaseAlertChannel:
             AlertSeverity.ERROR: "❌",
             AlertSeverity.CRITICAL: "🚨"
         }
-        
+
         emoji = severity_emoji.get(alert.severity, "📢")
-        
+
         message = f"{emoji} **{alert.severity.value.upper()}** - {alert.title}\n"
         message += f"📝 {alert.description}\n"
         message += f"🕒 {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
         message += f"📍 Source: {alert.source}\n"
-        
+
         if alert.labels:
             message += f"🏷️ Labels: {', '.join(f'{k}={v}' for k, v in alert.labels.items())}\n"
-        
+
         return message
 
 
 class EmailAlertChannel(BaseAlertChannel):
     """Email notification channel."""
-    
+
     def __init__(self, name: str, smtp_host: str, smtp_port: int,
                  username: str, password: str, from_email: str,
-                 to_emails: List[str], use_tls: bool = True):
+                 to_emails: list[str], use_tls: bool = True):
         super().__init__(name)
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
@@ -137,7 +136,7 @@ class EmailAlertChannel(BaseAlertChannel):
         self.from_email = from_email
         self.to_emails = to_emails
         self.use_tls = use_tls
-    
+
     async def send_alert(self, alert: Alert) -> bool:
         """Send alert via email."""
         try:
@@ -145,42 +144,42 @@ class EmailAlertChannel(BaseAlertChannel):
             msg['From'] = self.from_email
             msg['To'] = ', '.join(self.to_emails)
             msg['Subject'] = f"[{alert.severity.value.upper()}] {alert.title}"
-            
+
             # Create HTML and text versions
             text_body = self.format_alert_message(alert)
             html_body = self._format_html_alert(alert)
-            
+
             msg.attach(MIMEText(text_body, 'plain'))
             msg.attach(MIMEText(html_body, 'html'))
-            
+
             # Send email
             server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             if self.use_tls:
                 server.starttls()
             server.login(self.username, self.password)
-            
+
             text = msg.as_string()
             server.sendmail(self.from_email, self.to_emails, text)
             server.quit()
-            
+
             logger.info(f"Alert sent via email: {alert.id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to send email alert {alert.id}: {e}")
             return False
-    
+
     def _format_html_alert(self, alert: Alert) -> str:
         """Format alert as HTML."""
         severity_colors = {
             AlertSeverity.INFO: "#2196F3",
-            AlertSeverity.WARNING: "#FF9800", 
+            AlertSeverity.WARNING: "#FF9800",
             AlertSeverity.ERROR: "#F44336",
             AlertSeverity.CRITICAL: "#9C27B0"
         }
-        
+
         color = severity_colors.get(alert.severity, "#757575")
-        
+
         html = f"""
         <html>
         <head>
@@ -205,32 +204,32 @@ class EmailAlertChannel(BaseAlertChannel):
                     <p><strong>Alert ID:</strong> {alert.id}</p>
                 </div>
         """
-        
+
         if alert.labels:
             html += '<div class="labels"><strong>Labels:</strong><br>'
             for key, value in alert.labels.items():
                 html += f'<span class="label">{key}={value}</span>'
             html += '</div>'
-        
+
         html += """
             </div>
         </body>
         </html>
         """
-        
+
         return html
 
 
 class WebhookAlertChannel(BaseAlertChannel):
     """Webhook notification channel."""
-    
-    def __init__(self, name: str, webhook_url: str, headers: Optional[Dict[str, str]] = None,
+
+    def __init__(self, name: str, webhook_url: str, headers: dict[str, str] | None = None,
                  timeout: float = 10.0):
         super().__init__(name)
         self.webhook_url = webhook_url
         self.headers = headers or {"Content-Type": "application/json"}
         self.timeout = timeout
-    
+
     async def send_alert(self, alert: Alert) -> bool:
         """Send alert via webhook."""
         try:
@@ -239,10 +238,10 @@ class WebhookAlertChannel(BaseAlertChannel):
                 "message": self.format_alert_message(alert),
                 "timestamp": datetime.utcnow().isoformat()
             }
-            
+
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
-                async with session.post(self.webhook_url, 
-                                      json=payload, 
+                async with session.post(self.webhook_url,
+                                      json=payload,
                                       headers=self.headers) as response:
                     if response.status < 300:
                         logger.info(f"Alert sent via webhook: {alert.id}")
@@ -250,7 +249,7 @@ class WebhookAlertChannel(BaseAlertChannel):
                     else:
                         logger.error(f"Webhook returned status {response.status} for alert {alert.id}")
                         return False
-                        
+
         except Exception as e:
             logger.error(f"Failed to send webhook alert {alert.id}: {e}")
             return False
@@ -258,30 +257,30 @@ class WebhookAlertChannel(BaseAlertChannel):
 
 class SlackAlertChannel(WebhookAlertChannel):
     """Slack notification channel using webhooks."""
-    
+
     def __init__(self, name: str, webhook_url: str):
         super().__init__(name, webhook_url)
-    
-    def format_alert_message(self, alert: Alert) -> Dict[str, Any]:
+
+    def format_alert_message(self, alert: Alert) -> dict[str, Any]:
         """Format alert for Slack."""
         severity_colors = {
             AlertSeverity.INFO: "#36a64f",
             AlertSeverity.WARNING: "#ff9900",
-            AlertSeverity.ERROR: "#ff0000", 
+            AlertSeverity.ERROR: "#ff0000",
             AlertSeverity.CRITICAL: "#8b0000"
         }
-        
+
         color = severity_colors.get(alert.severity, "#000000")
-        
+
         fields = [
             {"title": "Source", "value": alert.source, "short": True},
             {"title": "Timestamp", "value": alert.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC'), "short": True}
         ]
-        
+
         if alert.labels:
             labels_text = ", ".join(f"{k}={v}" for k, v in alert.labels.items())
             fields.append({"title": "Labels", "value": labels_text, "short": False})
-        
+
         return {
             "attachments": [
                 {
@@ -294,12 +293,12 @@ class SlackAlertChannel(WebhookAlertChannel):
                 }
             ]
         }
-    
+
     async def send_alert(self, alert: Alert) -> bool:
         """Send alert to Slack."""
         try:
             payload = self.format_alert_message(alert)
-            
+
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
                 async with session.post(self.webhook_url, json=payload) as response:
                     if response.status < 300:
@@ -308,7 +307,7 @@ class SlackAlertChannel(WebhookAlertChannel):
                     else:
                         logger.error(f"Slack webhook returned status {response.status} for alert {alert.id}")
                         return False
-                        
+
         except Exception as e:
             logger.error(f"Failed to send Slack alert {alert.id}: {e}")
             return False
@@ -316,17 +315,17 @@ class SlackAlertChannel(WebhookAlertChannel):
 
 class LogAlertChannel(BaseAlertChannel):
     """Log file notification channel."""
-    
-    def __init__(self, name: str, log_file_path: Optional[str] = None):
+
+    def __init__(self, name: str, log_file_path: str | None = None):
         super().__init__(name)
         self.log_file_path = log_file_path
         self.logger = get_logger(f"alerts.{name}")
-    
+
     async def send_alert(self, alert: Alert) -> bool:
         """Log alert message."""
         try:
             message = self.format_alert_message(alert)
-            
+
             if alert.severity == AlertSeverity.CRITICAL:
                 self.logger.critical(message)
             elif alert.severity == AlertSeverity.ERROR:
@@ -335,9 +334,9 @@ class LogAlertChannel(BaseAlertChannel):
                 self.logger.warning(message)
             else:
                 self.logger.info(message)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to log alert {alert.id}: {e}")
             return False
@@ -345,53 +344,53 @@ class LogAlertChannel(BaseAlertChannel):
 
 class AlertManager:
     """Central alert management system."""
-    
+
     def __init__(self):
-        self.rules: Dict[str, AlertRule] = {}
-        self.channels: Dict[str, BaseAlertChannel] = {}
-        self.active_alerts: Dict[str, Alert] = {}
-        self.alert_history: List[Alert] = []
-        self.channel_routing: Dict[AlertSeverity, List[str]] = {
+        self.rules: dict[str, AlertRule] = {}
+        self.channels: dict[str, BaseAlertChannel] = {}
+        self.active_alerts: dict[str, Alert] = {}
+        self.alert_history: list[Alert] = []
+        self.channel_routing: dict[AlertSeverity, list[str]] = {
             AlertSeverity.INFO: [],
             AlertSeverity.WARNING: [],
             AlertSeverity.ERROR: [],
             AlertSeverity.CRITICAL: []
         }
         self.global_suppression: bool = False
-        self.suppressed_rules: Set[str] = set()
-    
+        self.suppressed_rules: set[str] = set()
+
     def add_rule(self, rule: AlertRule):
         """Add alert rule."""
         self.rules[rule.id] = rule
         logger.info(f"Added alert rule: {rule.name}")
-    
+
     def remove_rule(self, rule_id: str):
         """Remove alert rule."""
         if rule_id in self.rules:
             del self.rules[rule_id]
             logger.info(f"Removed alert rule: {rule_id}")
-    
+
     def add_channel(self, channel: BaseAlertChannel):
         """Add notification channel."""
         self.channels[channel.name] = channel
         logger.info(f"Added alert channel: {channel.name}")
-    
+
     def remove_channel(self, channel_name: str):
         """Remove notification channel."""
         if channel_name in self.channels:
             del self.channels[channel_name]
             logger.info(f"Removed alert channel: {channel_name}")
-    
-    def set_channel_routing(self, severity: AlertSeverity, channel_names: List[str]):
+
+    def set_channel_routing(self, severity: AlertSeverity, channel_names: list[str]):
         """Set which channels receive alerts of specific severity."""
         self.channel_routing[severity] = channel_names
         logger.info(f"Set routing for {severity.value}: {channel_names}")
-    
+
     def suppress_global(self, suppress: bool = True):
         """Enable/disable global alert suppression."""
         self.global_suppression = suppress
         logger.info(f"Global suppression: {'enabled' if suppress else 'disabled'}")
-    
+
     def suppress_rule(self, rule_id: str, suppress: bool = True):
         """Suppress specific rule."""
         if suppress:
@@ -400,22 +399,22 @@ class AlertManager:
         else:
             self.suppressed_rules.discard(rule_id)
             logger.info(f"Unsuppressed rule: {rule_id}")
-    
-    async def evaluate_rules(self, context: Dict[str, Any]):
+
+    async def evaluate_rules(self, context: dict[str, Any]):
         """Evaluate all alert rules against current context."""
         current_time = datetime.utcnow()
-        
+
         for rule_id, rule in self.rules.items():
             # Skip suppressed rules
             if self.global_suppression or rule_id in self.suppressed_rules:
                 continue
-            
+
             try:
                 # Check cooldown period
-                if (rule.last_fired and 
+                if (rule.last_fired and
                     current_time - rule.last_fired < rule.cooldown):
                     continue
-                
+
                 # Evaluate condition
                 if rule.condition(context):
                     # Rule fired - create alert
@@ -429,42 +428,42 @@ class AlertManager:
                         labels=rule.labels.copy(),
                         annotations=rule.annotations.copy()
                     )
-                    
+
                     rule.last_fired = current_time
                     await self._fire_alert(alert)
-                
+
                 elif rule.auto_resolve and rule.resolve_condition:
                     # Check if we should resolve existing alert
                     if rule.resolve_condition(context):
                         await self._resolve_alerts_for_rule(rule_id)
                         rule.last_resolved = current_time
-                        
+
             except Exception as e:
                 logger.error(f"Error evaluating rule {rule_id}: {e}")
-    
+
     async def _fire_alert(self, alert: Alert):
         """Fire an alert and send notifications."""
         # Store alert
         self.active_alerts[alert.id] = alert
         self.alert_history.append(alert)
-        
+
         # Keep history manageable
         if len(self.alert_history) > 10000:
             self.alert_history = self.alert_history[-5000:]
-        
+
         logger.info(f"Alert fired: {alert.id} - {alert.title}")
-        
+
         # Send notifications
         await self._send_notifications(alert)
-    
+
     async def _send_notifications(self, alert: Alert):
         """Send alert to appropriate channels."""
         channel_names = self.channel_routing.get(alert.severity, [])
-        
+
         if not channel_names:
             logger.warning(f"No channels configured for severity {alert.severity.value}")
             return
-        
+
         # Send to each channel
         tasks = []
         for channel_name in channel_names:
@@ -476,12 +475,12 @@ class AlertManager:
                     logger.debug(f"Channel {channel_name} is disabled")
             else:
                 logger.warning(f"Channel {channel_name} not found")
-        
+
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             success_count = sum(1 for r in results if r is True)
             logger.info(f"Alert {alert.id} sent to {success_count}/{len(tasks)} channels")
-    
+
     async def acknowledge_alert(self, alert_id: str, acknowledged_by: str) -> bool:
         """Acknowledge an active alert."""
         if alert_id in self.active_alerts:
@@ -492,7 +491,7 @@ class AlertManager:
             logger.info(f"Alert acknowledged: {alert_id} by {acknowledged_by}")
             return True
         return False
-    
+
     async def resolve_alert(self, alert_id: str) -> bool:
         """Resolve an active alert."""
         if alert_id in self.active_alerts:
@@ -503,37 +502,37 @@ class AlertManager:
             logger.info(f"Alert resolved: {alert_id}")
             return True
         return False
-    
+
     async def _resolve_alerts_for_rule(self, rule_id: str):
         """Resolve all active alerts for a specific rule."""
         alerts_to_resolve = [
             alert for alert in self.active_alerts.values()
             if alert.source == rule_id
         ]
-        
+
         for alert in alerts_to_resolve:
             await self.resolve_alert(alert.id)
-    
-    def get_active_alerts(self) -> List[Alert]:
+
+    def get_active_alerts(self) -> list[Alert]:
         """Get all active alerts."""
         return list(self.active_alerts.values())
-    
-    def get_alert_history(self, limit: int = 100) -> List[Alert]:
+
+    def get_alert_history(self, limit: int = 100) -> list[Alert]:
         """Get alert history."""
         return self.alert_history[-limit:]
-    
-    def get_alerts_by_severity(self, severity: AlertSeverity) -> List[Alert]:
+
+    def get_alerts_by_severity(self, severity: AlertSeverity) -> list[Alert]:
         """Get active alerts by severity."""
-        return [alert for alert in self.active_alerts.values() 
+        return [alert for alert in self.active_alerts.values()
                 if alert.severity == severity]
-    
-    def get_alert_summary(self) -> Dict[str, Any]:
+
+    def get_alert_summary(self) -> dict[str, Any]:
         """Get summary of alert system status."""
         active_by_severity = {}
         for severity in AlertSeverity:
             count = len(self.get_alerts_by_severity(severity))
             active_by_severity[severity.value] = count
-        
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "total_active_alerts": len(self.active_alerts),
@@ -579,7 +578,7 @@ def create_etl_failure_rule(job_name: str, failure_threshold: float = 0.1) -> Al
     )
 
 
-def create_system_resource_rule(resource_type: str, threshold: float, 
+def create_system_resource_rule(resource_type: str, threshold: float,
                               severity: AlertSeverity = AlertSeverity.WARNING) -> AlertRule:
     """Create alert rule for system resource usage."""
     return AlertRule(

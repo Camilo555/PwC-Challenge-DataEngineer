@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 class CircuitState(Enum):
     """Circuit breaker states."""
     CLOSED = "closed"
-    OPEN = "open" 
+    OPEN = "open"
     HALF_OPEN = "half_open"
 
 
@@ -28,7 +28,7 @@ class CircuitBreakerError(Exception):
 
 class CircuitBreaker:
     """Circuit breaker for external API calls."""
-    
+
     def __init__(
         self,
         failure_threshold: int = 5,
@@ -45,11 +45,11 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.expected_exception = expected_exception
-        
+
         self.failure_count = 0
         self.last_failure_time: float | None = None
         self.state = CircuitState.CLOSED
-    
+
     def _should_attempt_reset(self) -> bool:
         """Check if circuit should attempt to reset."""
         return (
@@ -57,22 +57,22 @@ class CircuitBreaker:
             and self.last_failure_time is not None
             and time.time() - self.last_failure_time >= self.recovery_timeout
         )
-    
+
     def record_success(self) -> None:
         """Record successful operation."""
         self.failure_count = 0
         self.state = CircuitState.CLOSED
         logger.debug("Circuit breaker: Success recorded, circuit closed")
-    
+
     def record_failure(self) -> None:
         """Record failed operation."""
         self.failure_count += 1
         self.last_failure_time = time.time()
-        
+
         if self.failure_count >= self.failure_threshold:
             self.state = CircuitState.OPEN
             logger.warning(f"Circuit breaker opened after {self.failure_count} failures")
-    
+
     async def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker protection."""
         if self.state == CircuitState.OPEN:
@@ -81,7 +81,7 @@ class CircuitBreaker:
                 logger.info("Circuit breaker attempting recovery (half-open)")
             else:
                 raise CircuitBreakerError("Circuit breaker is open")
-        
+
         try:
             result = await func(*args, **kwargs)
             if self.state == CircuitState.HALF_OPEN:
@@ -120,7 +120,7 @@ class BaseAPIClient(ABC):
         self.rate_limit_delay = 1.0 / rate_limit_per_second
         self._last_request_time = 0.0
         self._session: aiohttp.ClientSession | None = None
-        
+
         # Initialize circuit breaker
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=5,

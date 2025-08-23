@@ -151,13 +151,13 @@ class CurrencyAPIClient(BaseAPIClient):
             if "unit_price" in transaction_data and rates:
                 unit_price = float(transaction_data.get("unit_price", 0))
                 quantity = float(transaction_data.get("quantity", 1))
-                
+
                 for currency_code, rate in rates.items():
                     enriched_data[f"unit_price_{currency_code.lower()}"] = round(unit_price * rate, 2)
                     enriched_data[f"amount_{currency_code.lower()}"] = round(unit_price * quantity * rate, 2)
-            
+
             return enriched_data
-            
+
         except Exception as e:
             logger.error(f"Failed to enrich transaction with currency rates: {e}")
             # Return original data with error flag

@@ -1,6 +1,7 @@
 """Domain entities module."""
 
-from .customer import CustomerEntity as Customer, CustomerSegment, CustomerValueTier, CustomerStatus
+from .customer import CustomerEntity as Customer
+from .customer import CustomerSegment, CustomerStatus, CustomerValueTier
 from .invoice import Invoice, InvoiceStatus, InvoiceType
 from .product import Product, ProductCategory, StockItem
 from .transaction import CancelledTransaction, Transaction, TransactionLine, TransactionStatus

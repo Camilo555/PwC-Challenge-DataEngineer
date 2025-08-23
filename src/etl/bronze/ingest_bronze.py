@@ -32,11 +32,11 @@ def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
         raise FileNotFoundError(
             f"No raw CSV files found under {settings.raw_data_path.resolve()}"
         )
-    
+
     # Read all files at once for better performance
     job_id = str(uuid.uuid4())
     file_paths = [str(f.resolve()) for f in files]
-    
+
     # Use multiline option for better CSV parsing
     df = (
         spark.read.option("header", True)
@@ -45,30 +45,30 @@ def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
         .option("escape", '"')
         .csv(file_paths)
     )
-    
+
     # normalize columns to lower case in batch
     column_mapping = {c: c.lower() for c in df.columns}
     for old_name, new_name in column_mapping.items():
         if old_name != new_name:
             df = df.withColumnRenamed(old_name, new_name)
-    
+
     # Add metadata columns efficiently
     df = df.withColumn("ingestion_timestamp", F.current_timestamp())
     df = df.withColumn("ingestion_job_id", F.lit(job_id))
     df = df.withColumn("schema_version", F.lit("1"))
-    
+
     # Add file-specific metadata using input_file_name
     df = df.withColumn("source_file_path", F.input_file_name())
-    
+
     # Calculate file size and type from path - more efficient than accessing each file
     df = df.withColumn("source_file_type", F.lit("csv"))
-    
+
     # Generate stable row fingerprint for downstream quarantine matching
     fingerprint_columns = [
-        "invoice_no", "stock_code", "description", "quantity", 
+        "invoice_no", "stock_code", "description", "quantity",
         "unit_price", "invoice_timestamp", "customer_id", "country"
     ]
-    
+
     parts = []
     for c in fingerprint_columns:
         if c in df.columns:
@@ -78,12 +78,12 @@ def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
                 parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
         else:
             parts.append(F.lit(""))
-    
+
     df = df.withColumn("row_id", F.sha2(F.concat_ws("||", *parts), 256))
-    
+
     # Cache for better performance during subsequent operations
     df.cache()
-    
+
     return df
 
 
@@ -115,7 +115,7 @@ def ingest_bronze() -> None:
     )
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Use Parquet for Windows compatibility (Delta has native library issues)
     import platform
     if platform.system() == "Windows":

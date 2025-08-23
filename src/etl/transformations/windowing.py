@@ -2,8 +2,8 @@
 Window Functions for ETL Transformations
 Provides engine-agnostic window operations for SCD2 and analytics.
 """
-from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
+from typing import Any
+
 import pandas as pd
 
 try:
@@ -47,42 +47,42 @@ def apply_scd2_window(df: Any, partition_key: str, order_key: str, engine: str =
 def _apply_scd2_window_pandas(df: pd.DataFrame, partition_key: str, order_key: str) -> pd.DataFrame:
     """Apply SCD2 window functions using pandas."""
     df = df.copy()
-    
+
     # Sort by partition key and order key
     df = df.sort_values([partition_key, order_key])
-    
+
     # Create window functions
     df['prev_hash'] = df.groupby(partition_key)['attribute_hash'].shift(1)
     df['next_valid_from'] = df.groupby(partition_key)[order_key].shift(-1)
     df['row_number'] = df.groupby(partition_key).cumcount() + 1
     df['version'] = df['row_number']
-    
+
     # Calculate if this is the current record
     df['is_current'] = df.groupby(partition_key)['row_number'].transform('max') == df['row_number']
-    
+
     # Set valid_to date
     df['valid_to'] = df['next_valid_from']
     df.loc[df['is_current'], 'valid_to'] = None
-    
+
     return df
 
 
-def _apply_scd2_window_polars(df: Union[pl.DataFrame, pl.LazyFrame], 
-                             partition_key: str, order_key: str) -> Union[pl.DataFrame, pl.LazyFrame]:
+def _apply_scd2_window_polars(df: pl.DataFrame | pl.LazyFrame,
+                             partition_key: str, order_key: str) -> pl.DataFrame | pl.LazyFrame:
     """Apply SCD2 window functions using Polars."""
     return df.with_columns([
         # Previous hash for change detection
         pl.col('attribute_hash').shift(1).over(partition_key, order_by=order_key).alias('prev_hash'),
-        
+
         # Next valid_from for setting valid_to
         pl.col(order_key).shift(-1).over(partition_key, order_by=order_key).alias('next_valid_from'),
-        
+
         # Row number and version
         pl.int_range(pl.len()).over(partition_key, order_by=order_key).alias('row_number'),
-        
+
         # Version number
         (pl.int_range(pl.len()) + 1).over(partition_key, order_by=order_key).alias('version'),
-        
+
         # Is current record
         (pl.int_range(pl.len()) == pl.count().over(partition_key) - 1).over(partition_key, order_by=order_key).alias('is_current')
     ]).with_columns([
@@ -95,7 +95,7 @@ def _apply_scd2_window_spark(df: SparkDataFrame, partition_key: str, order_key: 
     """Apply SCD2 window functions using Spark."""
     window_spec = Window.partitionBy(partition_key).orderBy(order_key)
     window_spec_desc = Window.partitionBy(partition_key).orderBy(F.desc(order_key))
-    
+
     return df.withColumns({
         'prev_hash': F.lag('attribute_hash', 1).over(window_spec),
         'next_valid_from': F.lead(order_key, 1).over(window_spec),
@@ -108,7 +108,7 @@ def _apply_scd2_window_spark(df: SparkDataFrame, partition_key: str, order_key: 
     )
 
 
-def calculate_running_totals(df: Any, partition_cols: List[str], order_col: str, 
+def calculate_running_totals(df: Any, partition_cols: list[str], order_col: str,
                            sum_col: str, engine: str = 'pandas') -> Any:
     """
     Calculate running totals within partitions.
@@ -133,7 +133,7 @@ def calculate_running_totals(df: Any, partition_cols: List[str], order_col: str,
         raise ValueError(f"Engine '{engine}' not available or not supported")
 
 
-def _calculate_running_totals_pandas(df: pd.DataFrame, partition_cols: List[str], 
+def _calculate_running_totals_pandas(df: pd.DataFrame, partition_cols: list[str],
                                    order_col: str, sum_col: str) -> pd.DataFrame:
     """Calculate running totals using pandas."""
     df = df.copy()
@@ -142,25 +142,25 @@ def _calculate_running_totals_pandas(df: pd.DataFrame, partition_cols: List[str]
     return df
 
 
-def _calculate_running_totals_polars(df: Union[pl.DataFrame, pl.LazyFrame], 
-                                   partition_cols: List[str], order_col: str, sum_col: str) -> Union[pl.DataFrame, pl.LazyFrame]:
+def _calculate_running_totals_polars(df: pl.DataFrame | pl.LazyFrame,
+                                   partition_cols: list[str], order_col: str, sum_col: str) -> pl.DataFrame | pl.LazyFrame:
     """Calculate running totals using Polars."""
     return df.with_columns([
         pl.col(sum_col).cumsum().over(partition_cols, order_by=order_col).alias(f'{sum_col}_running_total')
     ])
 
 
-def _calculate_running_totals_spark(df: SparkDataFrame, partition_cols: List[str], 
+def _calculate_running_totals_spark(df: SparkDataFrame, partition_cols: list[str],
                                   order_col: str, sum_col: str) -> SparkDataFrame:
     """Calculate running totals using Spark."""
     window_spec = Window.partitionBy(*partition_cols).orderBy(order_col) \
                        .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-    
+
     return df.withColumn(f'{sum_col}_running_total', F.sum(sum_col).over(window_spec))
 
 
-def calculate_lag_lead(df: Any, partition_cols: List[str], order_col: str, 
-                      value_col: str, lag: int = 1, lead: int = 1, 
+def calculate_lag_lead(df: Any, partition_cols: list[str], order_col: str,
+                      value_col: str, lag: int = 1, lead: int = 1,
                       engine: str = 'pandas') -> Any:
     """
     Calculate lag and lead values for time series analysis.
@@ -187,20 +187,20 @@ def calculate_lag_lead(df: Any, partition_cols: List[str], order_col: str,
         raise ValueError(f"Engine '{engine}' not available or not supported")
 
 
-def _calculate_lag_lead_pandas(df: pd.DataFrame, partition_cols: List[str], order_col: str, 
+def _calculate_lag_lead_pandas(df: pd.DataFrame, partition_cols: list[str], order_col: str,
                              value_col: str, lag: int, lead: int) -> pd.DataFrame:
     """Calculate lag and lead using pandas."""
     df = df.copy()
     df = df.sort_values(partition_cols + [order_col])
-    
+
     df[f'{value_col}_lag_{lag}'] = df.groupby(partition_cols)[value_col].shift(lag)
     df[f'{value_col}_lead_{lead}'] = df.groupby(partition_cols)[value_col].shift(-lead)
-    
+
     return df
 
 
-def _calculate_lag_lead_polars(df: Union[pl.DataFrame, pl.LazyFrame], partition_cols: List[str], 
-                             order_col: str, value_col: str, lag: int, lead: int) -> Union[pl.DataFrame, pl.LazyFrame]:
+def _calculate_lag_lead_polars(df: pl.DataFrame | pl.LazyFrame, partition_cols: list[str],
+                             order_col: str, value_col: str, lag: int, lead: int) -> pl.DataFrame | pl.LazyFrame:
     """Calculate lag and lead using Polars."""
     return df.with_columns([
         pl.col(value_col).shift(lag).over(partition_cols, order_by=order_col).alias(f'{value_col}_lag_{lag}'),
@@ -208,18 +208,18 @@ def _calculate_lag_lead_polars(df: Union[pl.DataFrame, pl.LazyFrame], partition_
     ])
 
 
-def _calculate_lag_lead_spark(df: SparkDataFrame, partition_cols: List[str], order_col: str, 
+def _calculate_lag_lead_spark(df: SparkDataFrame, partition_cols: list[str], order_col: str,
                             value_col: str, lag: int, lead: int) -> SparkDataFrame:
     """Calculate lag and lead using Spark."""
     window_spec = Window.partitionBy(*partition_cols).orderBy(order_col)
-    
+
     return df.withColumns({
         f'{value_col}_lag_{lag}': F.lag(value_col, lag).over(window_spec),
         f'{value_col}_lead_{lead}': F.lead(value_col, lead).over(window_spec)
     })
 
 
-def calculate_rank_percentile(df: Any, partition_cols: List[str], order_col: str, 
+def calculate_rank_percentile(df: Any, partition_cols: list[str], order_col: str,
                             engine: str = 'pandas') -> Any:
     """
     Calculate rank and percentile within partitions.
@@ -243,18 +243,18 @@ def calculate_rank_percentile(df: Any, partition_cols: List[str], order_col: str
         raise ValueError(f"Engine '{engine}' not available or not supported")
 
 
-def _calculate_rank_percentile_pandas(df: pd.DataFrame, partition_cols: List[str], order_col: str) -> pd.DataFrame:
+def _calculate_rank_percentile_pandas(df: pd.DataFrame, partition_cols: list[str], order_col: str) -> pd.DataFrame:
     """Calculate rank and percentile using pandas."""
     df = df.copy()
-    
+
     df['rank'] = df.groupby(partition_cols)[order_col].rank(method='dense', ascending=False)
     df['percentile'] = df.groupby(partition_cols)[order_col].rank(pct=True, ascending=False)
-    
+
     return df
 
 
-def _calculate_rank_percentile_polars(df: Union[pl.DataFrame, pl.LazyFrame], 
-                                    partition_cols: List[str], order_col: str) -> Union[pl.DataFrame, pl.LazyFrame]:
+def _calculate_rank_percentile_polars(df: pl.DataFrame | pl.LazyFrame,
+                                    partition_cols: list[str], order_col: str) -> pl.DataFrame | pl.LazyFrame:
     """Calculate rank and percentile using Polars."""
     return df.with_columns([
         pl.col(order_col).rank(method='dense', descending=True).over(partition_cols).alias('rank'),
@@ -262,18 +262,18 @@ def _calculate_rank_percentile_polars(df: Union[pl.DataFrame, pl.LazyFrame],
     ])
 
 
-def _calculate_rank_percentile_spark(df: SparkDataFrame, partition_cols: List[str], order_col: str) -> SparkDataFrame:
+def _calculate_rank_percentile_spark(df: SparkDataFrame, partition_cols: list[str], order_col: str) -> SparkDataFrame:
     """Calculate rank and percentile using Spark."""
     window_spec = Window.partitionBy(*partition_cols).orderBy(F.desc(order_col))
-    
+
     return df.withColumns({
         'rank': F.dense_rank().over(window_spec),
         'percentile': F.percent_rank().over(window_spec)
     })
 
 
-def detect_data_changes(current_df: Any, incoming_df: Any, key_cols: List[str], 
-                       track_cols: List[str], engine: str = 'pandas') -> Any:
+def detect_data_changes(current_df: Any, incoming_df: Any, key_cols: list[str],
+                       track_cols: list[str], engine: str = 'pandas') -> Any:
     """
     Detect changes between current and incoming data for SCD2 processing.
     
@@ -297,20 +297,20 @@ def detect_data_changes(current_df: Any, incoming_df: Any, key_cols: List[str],
         raise ValueError(f"Engine '{engine}' not available or not supported")
 
 
-def _detect_data_changes_pandas(current_df: pd.DataFrame, incoming_df: pd.DataFrame, 
-                               key_cols: List[str], track_cols: List[str]) -> pd.DataFrame:
+def _detect_data_changes_pandas(current_df: pd.DataFrame, incoming_df: pd.DataFrame,
+                               key_cols: list[str], track_cols: list[str]) -> pd.DataFrame:
     """Detect changes using pandas."""
     # Generate hash for tracked columns
     current_df = current_df.copy()
     incoming_df = incoming_df.copy()
-    
+
     current_df['current_hash'] = current_df[track_cols].apply(
         lambda x: hash(tuple(x.astype(str))), axis=1
     )
     incoming_df['incoming_hash'] = incoming_df[track_cols].apply(
         lambda x: hash(tuple(x.astype(str))), axis=1
     )
-    
+
     # Join on business keys
     comparison = incoming_df.merge(
         current_df[key_cols + ['current_hash']],
@@ -318,35 +318,35 @@ def _detect_data_changes_pandas(current_df: pd.DataFrame, incoming_df: pd.DataFr
         how='left',
         suffixes=('', '_current')
     )
-    
+
     # Detect changes
     comparison['has_changed'] = (
         comparison['incoming_hash'] != comparison['current_hash']
     ) | comparison['current_hash'].isna()
-    
+
     comparison['change_type'] = 'no_change'
     comparison.loc[comparison['current_hash'].isna(), 'change_type'] = 'insert'
     comparison.loc[
-        (comparison['current_hash'].notna()) & comparison['has_changed'], 
+        (comparison['current_hash'].notna()) & comparison['has_changed'],
         'change_type'
     ] = 'update'
-    
+
     return comparison
 
 
-def _detect_data_changes_polars(current_df: Union[pl.DataFrame, pl.LazyFrame], 
-                               incoming_df: Union[pl.DataFrame, pl.LazyFrame],
-                               key_cols: List[str], track_cols: List[str]) -> Union[pl.DataFrame, pl.LazyFrame]:
+def _detect_data_changes_polars(current_df: pl.DataFrame | pl.LazyFrame,
+                               incoming_df: pl.DataFrame | pl.LazyFrame,
+                               key_cols: list[str], track_cols: list[str]) -> pl.DataFrame | pl.LazyFrame:
     """Detect changes using Polars."""
     # Generate hash for tracked columns
     current_with_hash = current_df.with_columns([
         pl.concat_str(track_cols, separator='|').hash().alias('current_hash')
     ])
-    
+
     incoming_with_hash = incoming_df.with_columns([
         pl.concat_str(track_cols, separator='|').hash().alias('incoming_hash')
     ])
-    
+
     # Join and detect changes
     comparison = incoming_with_hash.join(
         current_with_hash.select(key_cols + ['current_hash']),
@@ -354,7 +354,7 @@ def _detect_data_changes_polars(current_df: Union[pl.DataFrame, pl.LazyFrame],
         how='left'
     ).with_columns([
         (
-            (pl.col('incoming_hash') != pl.col('current_hash')) | 
+            (pl.col('incoming_hash') != pl.col('current_hash')) |
             pl.col('current_hash').is_null()
         ).alias('has_changed')
     ]).with_columns([
@@ -365,24 +365,24 @@ def _detect_data_changes_polars(current_df: Union[pl.DataFrame, pl.LazyFrame],
         .otherwise(pl.lit('no_change'))
         .alias('change_type')
     ])
-    
+
     return comparison
 
 
 def _detect_data_changes_spark(current_df: SparkDataFrame, incoming_df: SparkDataFrame,
-                              key_cols: List[str], track_cols: List[str]) -> SparkDataFrame:
+                              key_cols: list[str], track_cols: list[str]) -> SparkDataFrame:
     """Detect changes using Spark."""
     # Generate hash for tracked columns
     current_with_hash = current_df.withColumn(
         'current_hash',
         F.hash(*track_cols)
     )
-    
+
     incoming_with_hash = incoming_df.withColumn(
         'incoming_hash',
         F.hash(*track_cols)
     )
-    
+
     # Join and detect changes
     comparison = incoming_with_hash.join(
         current_with_hash.select(key_cols + ['current_hash']),
@@ -397,5 +397,5 @@ def _detect_data_changes_spark(current_df: SparkDataFrame, incoming_df: SparkDat
         .when(F.col('has_changed'), F.lit('update'))
         .otherwise(F.lit('no_change'))
     )
-    
+
     return comparison

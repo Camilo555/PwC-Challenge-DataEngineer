@@ -4,14 +4,18 @@ Builds production-ready star schema with SCD Type 2 dimensions and fact tables.
 Integrates with the engine abstraction layer for cross-engine compatibility.
 """
 
-from typing import Dict, List, Optional, Any, Union
-from datetime import datetime, date
 import hashlib
 from dataclasses import dataclass
-from pathlib import Path
+from datetime import date, datetime
+from typing import Any
 
 # Import the engine abstraction
-from src.etl.framework.engine_strategy import DataFrameOperations, EngineConfig, EngineFactory, EngineType
+from src.etl.framework.engine_strategy import (
+    DataFrameOperations,
+    EngineConfig,
+    EngineFactory,
+    EngineType,
+)
 
 # Import Polars for expression building (when available)
 try:
@@ -25,8 +29,8 @@ except ImportError:
 class DimensionConfig:
     """Configuration for dimension table construction."""
     name: str
-    business_key_cols: List[str]
-    scd2_tracked_cols: List[str]
+    business_key_cols: list[str]
+    scd2_tracked_cols: list[str]
     type: int = 2  # SCD Type (1 or 2)
 
 
@@ -34,9 +38,9 @@ class DimensionConfig:
 class FactConfig:
     """Configuration for fact table construction."""
     name: str
-    grain_cols: List[str]
-    measure_cols: List[str]
-    dimension_keys: Dict[str, str]  # dimension_name: join_key
+    grain_cols: list[str]
+    measure_cols: list[str]
+    dimension_keys: dict[str, str]  # dimension_name: join_key
 
 
 class StarSchemaBuilder:
@@ -44,26 +48,26 @@ class StarSchemaBuilder:
     Enhanced star schema builder with SCD Type 2 support and engine abstraction.
     Builds production-ready dimensional models for analytics.
     """
-    
-    def __init__(self, engine: DataFrameOperations, config: Dict[str, Any]):
+
+    def __init__(self, engine: DataFrameOperations, config: dict[str, Any]):
         """Initialize star schema builder with engine and configuration."""
         self.engine = engine
         self.config = config
         self.gold_path = config.get('gold_path', 'data/gold')
         self.audit_cols = ['etl_created_at', 'etl_updated_at', 'etl_batch_id']
-        
+
         # Dimension configurations
         self.dimensions_config = {
             'date': DimensionConfig('date', ['date'], [], type=0),  # Type 0 - static
-            'product': DimensionConfig('product', ['product_id', 'product_code'], 
+            'product': DimensionConfig('product', ['product_id', 'product_code'],
                                      ['product_name', 'category', 'subcategory', 'price']),
-            'customer': DimensionConfig('customer', ['customer_id', 'email'], 
+            'customer': DimensionConfig('customer', ['customer_id', 'email'],
                                       ['customer_name', 'segment', 'country', 'city']),
-            'store': DimensionConfig('store', ['store_id', 'store_code'], 
+            'store': DimensionConfig('store', ['store_id', 'store_code'],
                                    ['store_name', 'address', 'manager'], type=1)  # Type 1 - overwrite
         }
-    
-    def build_complete_star_schema(self, silver_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def build_complete_star_schema(self, silver_data: dict[str, Any]) -> dict[str, Any]:
         """
         Build complete star schema with all dimensions and fact table.
         
@@ -74,21 +78,21 @@ class StarSchemaBuilder:
             Dictionary containing all star schema tables
         """
         schema_tables = {}
-        
+
         # Build core dimensions
         schema_tables['dim_date'] = self.build_dim_date('2020-01-01', '2030-12-31')
         schema_tables['dim_product'] = self.build_dim_product(silver_data.get('products'))
         schema_tables['dim_customer'] = self.build_dim_customer(silver_data.get('customers'))
         schema_tables['dim_store'] = self.build_dim_store(silver_data.get('stores'))
-        
+
         # Build fact table
         schema_tables['fact_sales'] = self.build_fact_sales(
-            silver_data.get('sales'), 
+            silver_data.get('sales'),
             schema_tables
         )
-        
+
         return schema_tables
-    
+
     def build_dim_date(self, start_date: str, end_date: str) -> Any:
         """
         Create comprehensive date dimension with calendar and fiscal attributes.
@@ -102,7 +106,7 @@ class StarSchemaBuilder:
         """
         if not POLARS_AVAILABLE:
             raise ImportError("Polars is required for date dimension generation")
-        
+
         # Generate date range using Polars
         dates = pl.date_range(
             date.fromisoformat(start_date),
@@ -110,16 +114,16 @@ class StarSchemaBuilder:
             interval='1d',
             eager=True
         )
-        
+
         df = pl.DataFrame({'date': dates})
-        
+
         # Add calendar attributes
         df = df.with_columns([
             # Primary key
-            (pl.col('date').dt.year() * 10000 + 
-             pl.col('date').dt.month() * 100 + 
+            (pl.col('date').dt.year() * 10000 +
+             pl.col('date').dt.month() * 100 +
              pl.col('date').dt.day()).alias('date_key'),
-            
+
             # Calendar hierarchy
             pl.col('date').dt.year().alias('year'),
             pl.col('date').dt.quarter().alias('quarter'),
@@ -127,15 +131,15 @@ class StarSchemaBuilder:
             pl.col('date').dt.day().alias('day'),
             pl.col('date').dt.weekday().alias('weekday'),
             pl.col('date').dt.week().alias('week_of_year'),
-            
+
             # Formatted names
             pl.col('date').dt.strftime('%B').alias('month_name'),
             pl.col('date').dt.strftime('%A').alias('day_name'),
-            
+
             # Business flags
             (pl.col('date').dt.weekday() >= 6).alias('is_weekend'),
             pl.lit(False).alias('is_holiday'),  # Could be enhanced with holiday calendar
-            
+
             # Business quarters (calendar year)
             pl.when(pl.col('date').dt.month().is_in([1, 2, 3]))
             .then(pl.lit('Q1'))
@@ -146,19 +150,19 @@ class StarSchemaBuilder:
             .otherwise(pl.lit('Q4'))
             .alias('quarter_name')
         ])
-        
+
         # Add fiscal attributes (assuming fiscal year starts July 1)
         df = df.with_columns([
             pl.when(pl.col('month') >= 7)
             .then(pl.col('year'))
             .otherwise(pl.col('year') - 1)
             .alias('fiscal_year'),
-            
+
             pl.when(pl.col('month') >= 7)
             .then(pl.col('month') - 6)
             .otherwise(pl.col('month') + 6)
             .alias('fiscal_month'),
-            
+
             pl.when(pl.col('month').is_in([7, 8, 9]))
             .then(1)
             .when(pl.col('month').is_in([10, 11, 12]))
@@ -167,7 +171,7 @@ class StarSchemaBuilder:
             .then(3)
             .otherwise(4)
             .alias('fiscal_quarter'),
-            
+
             # Fiscal quarter names
             pl.when(pl.col('month').is_in([7, 8, 9]))
             .then(pl.lit('FQ1'))
@@ -178,16 +182,16 @@ class StarSchemaBuilder:
             .otherwise(pl.lit('FQ4'))
             .alias('fiscal_quarter_name')
         ])
-        
+
         # Add audit columns
         df = self._add_audit_columns(df)
-        
+
         # Write to gold layer
         output_path = f'{self.gold_path}/dim_date'
         self.engine.write_parquet(df, output_path, mode='overwrite')
-        
+
         return df
-    
+
     def build_dim_product(self, df_product_silver: Any) -> Any:
         """
         Build product dimension with SCD Type 2 tracking.
@@ -200,20 +204,20 @@ class StarSchemaBuilder:
         """
         if df_product_silver is None:
             return self._create_empty_product_dimension()
-        
+
         # Convert to engine format if needed
         if POLARS_AVAILABLE and not hasattr(df_product_silver, 'with_columns'):
             df_product_silver = pl.DataFrame(df_product_silver)
-        
+
         # Generate business key hash and data hash for change detection
         df = self._add_business_keys_and_hash(df_product_silver, {
             'product_bk': ['product_id', 'product_code'],
             'product_hash': ['product_name', 'category', 'subcategory', 'price']
         })
-        
+
         # Apply SCD2 logic
         existing_path = f'{self.gold_path}/dim_product'
-        
+
         try:
             existing_df = self.engine.read_parquet(existing_path)
             df = self._apply_scd2_logic(
@@ -226,15 +230,15 @@ class StarSchemaBuilder:
         except (FileNotFoundError, Exception):
             # First load - add SCD2 columns
             df = self._add_scd2_columns(df, 'product')
-        
+
         # Add audit columns
         df = self._add_audit_columns(df)
-        
+
         # Write to gold layer
         self.engine.write_parquet(df, existing_path, mode='overwrite')
-        
+
         return df
-    
+
     def build_dim_customer(self, df_customer_silver: Any) -> Any:
         """
         Build customer dimension with PII handling and SCD Type 2.
@@ -247,23 +251,23 @@ class StarSchemaBuilder:
         """
         if df_customer_silver is None:
             return self._create_empty_customer_dimension()
-        
+
         # Convert to engine format if needed
         if POLARS_AVAILABLE and not hasattr(df_customer_silver, 'with_columns'):
             df_customer_silver = pl.DataFrame(df_customer_silver)
-        
+
         # Canonicalize customer data for consistent matching
         df = self._canonicalize_customer_data(df_customer_silver)
-        
+
         # Generate business keys and hash
         df = self._add_business_keys_and_hash(df, {
             'customer_bk': ['customer_id', 'email_canonical'],
             'customer_hash': ['customer_name_canonical', 'segment', 'country', 'city']
         })
-        
+
         # Apply SCD2 logic
         existing_path = f'{self.gold_path}/dim_customer'
-        
+
         try:
             existing_df = self.engine.read_parquet(existing_path)
             df = self._apply_scd2_logic(
@@ -275,18 +279,18 @@ class StarSchemaBuilder:
             )
         except (FileNotFoundError, Exception):
             df = self._add_scd2_columns(df, 'customer')
-        
+
         # Mask PII fields for non-current records
         df = self._mask_pii_for_historical_records(df, ['email', 'phone', 'address'])
-        
+
         # Add audit columns
         df = self._add_audit_columns(df)
-        
+
         # Write to gold layer
         self.engine.write_parquet(df, existing_path, mode='overwrite')
-        
+
         return df
-    
+
     def build_dim_store(self, df_store_silver: Any) -> Any:
         """
         Build store/location dimension with geographical hierarchy.
@@ -299,17 +303,17 @@ class StarSchemaBuilder:
         """
         if df_store_silver is None:
             return self._create_empty_store_dimension()
-        
+
         # Convert to engine format if needed
         if POLARS_AVAILABLE and not hasattr(df_store_silver, 'with_columns'):
             df_store_silver = pl.DataFrame(df_store_silver)
-        
+
         # Add business keys and hierarchical attributes
         df = self._add_business_keys_and_hash(df_store_silver, {
             'store_bk': ['store_id', 'store_code'],
             'store_key': ['store_id', 'store_code']
         })
-        
+
         # Add geographical hierarchy and computed fields
         if POLARS_AVAILABLE:
             df = df.with_columns([
@@ -322,23 +326,23 @@ class StarSchemaBuilder:
                     pl.col('country'),
                     pl.col('postal_code')
                 ], separator=', ').alias('full_address'),
-                
+
                 # Store attributes
                 pl.lit(datetime.now().date()).alias('effective_date'),
                 pl.lit(date(9999, 12, 31)).alias('end_date'),
                 pl.lit(True).alias('is_current')
             ])
-        
+
         # Add audit columns
         df = self._add_audit_columns(df)
-        
+
         # Write to gold layer
         output_path = f'{self.gold_path}/dim_store'
         self.engine.write_parquet(df, output_path, mode='overwrite')
-        
+
         return df
-    
-    def build_fact_sales(self, df_sales_silver: Any, dimensions: Dict[str, Any]) -> Any:
+
+    def build_fact_sales(self, df_sales_silver: Any, dimensions: dict[str, Any]) -> Any:
         """
         Build fact table at invoice line grain with foreign keys to dimensions.
         
@@ -351,41 +355,41 @@ class StarSchemaBuilder:
         """
         if df_sales_silver is None:
             return self._create_empty_fact_sales()
-        
+
         # Start with silver sales data
         df = df_sales_silver
-        
+
         # Convert to engine format if needed
         if POLARS_AVAILABLE and not hasattr(df, 'with_columns'):
             df = pl.DataFrame(df)
-        
+
         # Join with date dimension
         if 'dim_date' in dimensions and dimensions['dim_date'] is not None:
             df = self._join_with_date_dimension(df, dimensions['dim_date'])
         else:
             df = self._add_default_date_key(df)
-        
+
         # Join with product dimension (current records only)
         if 'dim_product' in dimensions and dimensions['dim_product'] is not None:
             df = self._join_with_product_dimension(df, dimensions['dim_product'])
         else:
             df = self._add_default_product_key(df)
-        
+
         # Join with customer dimension (current records only)
         if 'dim_customer' in dimensions and dimensions['dim_customer'] is not None:
             df = self._join_with_customer_dimension(df, dimensions['dim_customer'])
         else:
             df = self._add_default_customer_key(df)
-        
+
         # Join with store dimension
         if 'dim_store' in dimensions and dimensions['dim_store'] is not None:
             df = self._join_with_store_dimension(df, dimensions['dim_store'])
         else:
             df = self._add_default_store_key(df)
-        
+
         # Calculate derived measures
         df = self._calculate_fact_measures(df)
-        
+
         # Select final fact table columns
         fact_columns = [
             'invoice_line_id',  # Primary key
@@ -403,13 +407,13 @@ class StarSchemaBuilder:
             'tax_amount',
             'net_amount'
         ]
-        
+
         # Select final columns
         df = self.engine.select(df, fact_columns)
-        
+
         # Add audit columns
         df = self._add_audit_columns(df)
-        
+
         # Write to gold layer with partitioning by date
         output_path = f'{self.gold_path}/fact_sales'
         self.engine.write_parquet(
@@ -418,12 +422,12 @@ class StarSchemaBuilder:
             partition_cols=['date_key'],
             mode='overwrite'
         )
-        
+
         return df
-    
+
     # Helper methods for SCD2 implementation
-    
-    def _apply_scd2_logic(self, existing_df: Any, new_df: Any, business_key: str, 
+
+    def _apply_scd2_logic(self, existing_df: Any, new_df: Any, business_key: str,
                          hash_col: str, dimension_name: str) -> Any:
         """
         Apply SCD Type 2 logic to track historical changes.
@@ -440,21 +444,21 @@ class StarSchemaBuilder:
         """
         # For simplification in this implementation, we'll use a basic approach
         # In production, this would include proper change detection and versioning
-        
+
         # Get current records from existing dimension
         if POLARS_AVAILABLE:
             current_records = existing_df.filter(pl.col('is_current') == True)
-            
+
             # Simple merge strategy - mark all existing as not current and add new as current
             # This is simplified - production would have proper change detection
             closed_records = existing_df.with_columns([
                 pl.lit(datetime.now().date()).alias('end_date'),
                 pl.lit(False).alias('is_current')
             ])
-            
+
             # Add new records with SCD2 attributes
             new_records = self._add_scd2_columns(new_df, dimension_name)
-            
+
             # Combine old (closed) and new records
             if hasattr(pl, 'concat'):
                 return pl.concat([closed_records, new_records])
@@ -463,7 +467,7 @@ class StarSchemaBuilder:
         else:
             # Fallback - just return new records with SCD2 columns
             return self._add_scd2_columns(new_df, dimension_name)
-    
+
     def _add_scd2_columns(self, df: Any, dimension_name: str) -> Any:
         """Add SCD Type 2 columns to a dimension."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
@@ -476,8 +480,8 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
-    def _add_business_keys_and_hash(self, df: Any, key_definitions: Dict[str, List[str]]) -> Any:
+
+    def _add_business_keys_and_hash(self, df: Any, key_definitions: dict[str, list[str]]) -> Any:
         """Add business keys and hash columns to dataframe."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
             expressions = {}
@@ -486,12 +490,12 @@ class StarSchemaBuilder:
                     expressions[key_name] = self._generate_hash_expr(columns)
                 else:
                     expressions[key_name] = self._generate_business_key_expr(columns)
-            
+
             return df.with_columns([expr.alias(name) for name, expr in expressions.items()])
         else:
             return df
-    
-    def _generate_business_key_expr(self, columns: List[str]) -> Any:
+
+    def _generate_business_key_expr(self, columns: list[str]) -> Any:
         """Generate business key hash from columns."""
         if POLARS_AVAILABLE:
             concat_expr = pl.concat_str(columns, separator='|')
@@ -501,8 +505,8 @@ class StarSchemaBuilder:
             )
         else:
             return None
-    
-    def _generate_hash_expr(self, columns: List[str]) -> Any:
+
+    def _generate_hash_expr(self, columns: list[str]) -> Any:
         """Generate hash for change detection."""
         if POLARS_AVAILABLE:
             concat_expr = pl.concat_str(columns, separator='|')
@@ -512,8 +516,8 @@ class StarSchemaBuilder:
             )
         else:
             return None
-    
-    def _generate_surrogate_key_expr(self, columns: List[str]) -> Any:
+
+    def _generate_surrogate_key_expr(self, columns: list[str]) -> Any:
         """Generate deterministic surrogate key."""
         if POLARS_AVAILABLE:
             concat_expr = pl.concat_str(columns, separator='|')
@@ -523,7 +527,7 @@ class StarSchemaBuilder:
             )
         else:
             return None
-    
+
     def _canonicalize_customer_data(self, df: Any) -> Any:
         """Canonicalize customer data for consistent matching."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
@@ -534,8 +538,8 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
-    def _mask_pii_for_historical_records(self, df: Any, pii_columns: List[str]) -> Any:
+
+    def _mask_pii_for_historical_records(self, df: Any, pii_columns: list[str]) -> Any:
         """Mask PII fields for non-current records."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
             expressions = []
@@ -550,7 +554,7 @@ class StarSchemaBuilder:
             if expressions:
                 return df.with_columns(expressions)
         return df
-    
+
     def _add_audit_columns(self, df: Any) -> Any:
         """Add standard audit columns."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
@@ -561,9 +565,9 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     # Dimension join helpers
-    
+
     def _join_with_date_dimension(self, df: Any, dim_date: Any) -> Any:
         """Join fact table with date dimension."""
         # This is a simplified join - production would handle various date formats
@@ -578,7 +582,7 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     def _join_with_product_dimension(self, df: Any, dim_product: Any) -> Any:
         """Join fact table with product dimension (current records only)."""
         if POLARS_AVAILABLE:
@@ -592,7 +596,7 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     def _join_with_customer_dimension(self, df: Any, dim_customer: Any) -> Any:
         """Join fact table with customer dimension (current records only)."""
         if POLARS_AVAILABLE:
@@ -606,7 +610,7 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     def _join_with_store_dimension(self, df: Any, dim_store: Any) -> Any:
         """Join fact table with store dimension."""
         if POLARS_AVAILABLE:
@@ -619,20 +623,20 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     def _calculate_fact_measures(self, df: Any) -> Any:
         """Calculate derived measures for fact table."""
         if POLARS_AVAILABLE and hasattr(df, 'with_columns'):
             return df.with_columns([
                 # Basic line amount
                 (pl.col('quantity') * pl.col('unit_price')).alias('line_amount'),
-                
+
                 # Discount amount (assuming discount_percentage exists)
                 (pl.col('quantity') * pl.col('unit_price') * pl.col('discount_percentage').fill_null(0) / 100).alias('discount_amount'),
-                
+
                 # Tax amount (assuming tax_rate exists)
                 (pl.col('quantity') * pl.col('unit_price') * pl.col('tax_rate').fill_null(0) / 100).alias('tax_amount'),
-                
+
                 # Net amount (final amount)
                 (
                     pl.col('quantity') * pl.col('unit_price') -
@@ -642,35 +646,35 @@ class StarSchemaBuilder:
             ])
         else:
             return df
-    
+
     # Default key helpers for missing dimensions
-    
+
     def _add_default_date_key(self, df: Any) -> Any:
         """Add default date key when date dimension is not available."""
         if POLARS_AVAILABLE:
             return df.with_columns([pl.lit(-1).alias('date_key')])
         return df
-    
+
     def _add_default_product_key(self, df: Any) -> Any:
         """Add default product key when product dimension is not available."""
         if POLARS_AVAILABLE:
             return df.with_columns([pl.lit(-1).alias('product_key')])
         return df
-    
+
     def _add_default_customer_key(self, df: Any) -> Any:
         """Add default customer key when customer dimension is not available."""
         if POLARS_AVAILABLE:
             return df.with_columns([pl.lit(-1).alias('customer_key')])
         return df
-    
+
     def _add_default_store_key(self, df: Any) -> Any:
         """Add default store key when store dimension is not available."""
         if POLARS_AVAILABLE:
             return df.with_columns([pl.lit(-1).alias('store_key')])
         return df
-    
+
     # Empty dimension creators for error handling
-    
+
     def _create_empty_product_dimension(self) -> Any:
         """Create empty product dimension structure."""
         if POLARS_AVAILABLE:
@@ -684,7 +688,7 @@ class StarSchemaBuilder:
                 'end_date': [date(9999, 12, 31)]
             })
         return None
-    
+
     def _create_empty_customer_dimension(self) -> Any:
         """Create empty customer dimension structure."""
         if POLARS_AVAILABLE:
@@ -697,7 +701,7 @@ class StarSchemaBuilder:
                 'end_date': [date(9999, 12, 31)]
             })
         return None
-    
+
     def _create_empty_store_dimension(self) -> Any:
         """Create empty store dimension structure."""
         if POLARS_AVAILABLE:
@@ -708,7 +712,7 @@ class StarSchemaBuilder:
                 'is_current': [True]
             })
         return None
-    
+
     def _create_empty_fact_sales(self) -> Any:
         """Create empty fact sales structure."""
         if POLARS_AVAILABLE:
@@ -726,8 +730,8 @@ class StarSchemaBuilder:
 
 
 # Factory function for creating star schema builders
-def create_star_schema_builder(engine_type: EngineType = EngineType.POLARS, 
-                              config: Optional[Dict[str, Any]] = None) -> StarSchemaBuilder:
+def create_star_schema_builder(engine_type: EngineType = EngineType.POLARS,
+                              config: dict[str, Any] | None = None) -> StarSchemaBuilder:
     """
     Create a star schema builder with the specified engine.
     
@@ -742,7 +746,7 @@ def create_star_schema_builder(engine_type: EngineType = EngineType.POLARS,
         engine_type=engine_type,
         **(config or {})
     )
-    
+
     engine = EngineFactory.create_engine(engine_config)
-    
+
     return StarSchemaBuilder(engine, config or {})

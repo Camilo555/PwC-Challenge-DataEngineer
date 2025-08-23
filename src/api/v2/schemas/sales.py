@@ -2,9 +2,8 @@
 Enhanced Sales Schemas for API V2
 Includes additional fields and improved validation.
 """
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, validator
@@ -15,38 +14,38 @@ class EnhancedSaleItem(BaseModel):
     sale_id: UUID
     invoice_no: str
     stock_code: str
-    description: Optional[str] = None
+    description: str | None = None
     quantity: int
     unit_price: Decimal
     total_amount: Decimal
     discount_amount: Decimal = Field(default=Decimal('0.00'))
     tax_amount: Decimal = Field(default=Decimal('0.00'))
-    profit_amount: Optional[Decimal] = None
-    margin_percentage: Optional[Decimal] = None
-    
+    profit_amount: Decimal | None = None
+    margin_percentage: Decimal | None = None
+
     # Enhanced fields for v2
-    customer_id: Optional[str] = None
-    customer_segment: Optional[str] = None
-    customer_lifetime_value: Optional[Decimal] = None
+    customer_id: str | None = None
+    customer_segment: str | None = None
+    customer_lifetime_value: Decimal | None = None
     country: str
     country_code: str
-    region: Optional[str] = None
-    continent: Optional[str] = None
-    product_category: Optional[str] = None
-    product_brand: Optional[str] = None
-    
+    region: str | None = None
+    continent: str | None = None
+    product_category: str | None = None
+    product_brand: str | None = None
+
     # Temporal fields
     invoice_date: datetime
-    fiscal_year: Optional[int] = None
-    fiscal_quarter: Optional[int] = None
+    fiscal_year: int | None = None
+    fiscal_quarter: int | None = None
     is_weekend: bool = False
     is_holiday: bool = False
-    
+
     # Derived analytics
-    revenue_per_unit: Optional[Decimal] = None
-    profitability_score: Optional[float] = None
-    customer_value_tier: Optional[str] = None
-    
+    revenue_per_unit: Decimal | None = None
+    profitability_score: float | None = None
+    customer_value_tier: str | None = None
+
     class Config:
         json_encoders = {
             Decimal: lambda v: float(v),
@@ -63,9 +62,9 @@ class SalesAggregation(BaseModel):
     transaction_count: int
     unique_customers: int
     avg_order_value: Decimal
-    profit_margin: Optional[Decimal] = None
-    growth_rate: Optional[float] = None  # Compared to previous period
-    
+    profit_margin: Decimal | None = None
+    growth_rate: float | None = None  # Compared to previous period
+
     class Config:
         json_encoders = {Decimal: lambda v: float(v)}
 
@@ -78,9 +77,9 @@ class TimeSeriesPoint(BaseModel):
     transactions: int
     unique_customers: int
     avg_order_value: Decimal
-    cumulative_revenue: Optional[Decimal] = None
-    period_growth: Optional[float] = None
-    
+    cumulative_revenue: Decimal | None = None
+    period_growth: float | None = None
+
     class Config:
         json_encoders = {Decimal: lambda v: float(v)}
 
@@ -88,71 +87,71 @@ class TimeSeriesPoint(BaseModel):
 class EnhancedSalesAnalytics(BaseModel):
     """Comprehensive sales analytics response."""
     summary: dict
-    time_series: List[TimeSeriesPoint]
-    top_products: List[dict]
-    top_customers: List[dict]
-    geographic_breakdown: List[SalesAggregation]
-    category_performance: List[SalesAggregation]
+    time_series: list[TimeSeriesPoint]
+    top_products: list[dict]
+    top_customers: list[dict]
+    geographic_breakdown: list[SalesAggregation]
+    category_performance: list[SalesAggregation]
     seasonal_insights: dict
-    forecasting: Optional[dict] = None
-    
+    forecasting: dict | None = None
+
     class Config:
         json_encoders = {Decimal: lambda v: float(v)}
 
 
 class PaginatedEnhancedSales(BaseModel):
     """Paginated enhanced sales with metadata."""
-    items: List[EnhancedSaleItem]
+    items: list[EnhancedSaleItem]
     total: int
     page: int
     size: int
     pages: int
     has_next: bool
     has_previous: bool
-    
+
     # Enhanced metadata
     aggregations: dict
     filters_applied: dict
     response_time_ms: float
     data_freshness: datetime  # When data was last updated
-    quality_score: Optional[float] = None  # Data quality indicator
+    quality_score: float | None = None  # Data quality indicator
 
 
 class SalesFiltersV2(BaseModel):
     """Enhanced filters with more options."""
     # Date filters
-    date_from: Optional[date] = None
-    date_to: Optional[date] = None
-    fiscal_year: Optional[int] = None
-    fiscal_quarter: Optional[int] = None
-    
+    date_from: date | None = None
+    date_to: date | None = None
+    fiscal_year: int | None = None
+    fiscal_quarter: int | None = None
+
     # Geographic filters
-    countries: Optional[List[str]] = None
-    regions: Optional[List[str]] = None
-    continents: Optional[List[str]] = None
-    
+    countries: list[str] | None = None
+    regions: list[str] | None = None
+    continents: list[str] | None = None
+
     # Product filters
-    categories: Optional[List[str]] = None
-    brands: Optional[List[str]] = None
-    stock_codes: Optional[List[str]] = None
-    
+    categories: list[str] | None = None
+    brands: list[str] | None = None
+    stock_codes: list[str] | None = None
+
     # Customer filters
-    customer_segments: Optional[List[str]] = None
-    customer_value_tiers: Optional[List[str]] = None
-    min_customer_ltv: Optional[Decimal] = None
-    
+    customer_segments: list[str] | None = None
+    customer_value_tiers: list[str] | None = None
+    min_customer_ltv: Decimal | None = None
+
     # Financial filters
-    min_amount: Optional[Decimal] = None
-    max_amount: Optional[Decimal] = None
-    min_margin: Optional[Decimal] = None
-    has_profit_data: Optional[bool] = None
-    
+    min_amount: Decimal | None = None
+    max_amount: Decimal | None = None
+    min_margin: Decimal | None = None
+    has_profit_data: bool | None = None
+
     # Business context filters
     exclude_cancelled: bool = True
     exclude_refunds: bool = True
-    include_weekends: Optional[bool] = None
-    include_holidays: Optional[bool] = None
-    
+    include_weekends: bool | None = None
+    include_holidays: bool | None = None
+
     @validator('date_from', 'date_to')
     def validate_dates(cls, v, values):
         if 'date_from' in values and v and values['date_from']:
@@ -164,12 +163,12 @@ class SalesFiltersV2(BaseModel):
 class SalesExportRequest(BaseModel):
     """Request for exporting sales data."""
     format: str = Field(..., regex="^(csv|excel|parquet|json)$")
-    filters: Optional[SalesFiltersV2] = None
+    filters: SalesFiltersV2 | None = None
     include_analytics: bool = False
     include_forecasting: bool = False
-    compression: Optional[str] = Field(None, regex="^(gzip|zip|none)$")
+    compression: str | None = Field(None, regex="^(gzip|zip|none)$")
     email_notification: bool = False
-    notification_email: Optional[str] = None
+    notification_email: str | None = None
 
 
 class SalesExportResponse(BaseModel):
@@ -177,9 +176,9 @@ class SalesExportResponse(BaseModel):
     export_id: UUID
     status: str
     estimated_completion: datetime
-    download_url: Optional[str] = None
-    file_size_mb: Optional[float] = None
-    record_count: Optional[int] = None
-    
+    download_url: str | None = None
+    file_size_mb: float | None = None
+    record_count: int | None = None
+
     class Config:
         json_encoders = {UUID: lambda v: str(v)}

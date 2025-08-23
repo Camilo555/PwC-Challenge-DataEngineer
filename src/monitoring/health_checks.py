@@ -4,19 +4,19 @@ Provides comprehensive health monitoring for all system components
 """
 from __future__ import annotations
 
-import requests
-import sqlite3
-import psutil
-import time
 import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, asdict
+import sqlite3
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-import threading
-import subprocess
-import socket
+from typing import Any
+
+import psutil
+import requests
 
 from core.config import settings
 from core.logging import get_logger
@@ -40,13 +40,13 @@ class HealthCheck:
     message: str
     response_time_ms: float
     timestamp: datetime
-    details: Dict[str, Any]
-    error: Optional[str] = None
+    details: dict[str, Any]
+    error: str | None = None
 
 
 class HealthChecker:
     """Performs health checks on system components."""
-    
+
     def __init__(self):
         self.checks = {}
         self.check_results = {}
@@ -54,42 +54,42 @@ class HealthChecker:
         self.is_monitoring = False
         self.monitor_thread = None
         self.check_interval = 60  # seconds
-        
+
         # Setup default health checks
         self._setup_default_checks()
-        
+
     def _setup_default_checks(self):
         """Setup default health checks."""
         # System health checks
         self.register_check("system_cpu", self._check_system_cpu)
         self.register_check("system_memory", self._check_system_memory)
         self.register_check("system_disk", self._check_system_disk)
-        
+
         # Database health checks
         self.register_check("database_connection", self._check_database_connection)
         self.register_check("database_performance", self._check_database_performance)
-        
+
         # API health checks
         self.register_check("api_health", self._check_api_health)
-        
+
         # File system health checks
         self.register_check("data_directories", self._check_data_directories)
         self.register_check("log_files", self._check_log_files)
-        
+
         # ETL process health checks
         self.register_check("etl_processes", self._check_etl_processes)
-        
+
     def register_check(self, name: str, check_func: Callable[[], HealthCheck]):
         """Register a health check function."""
         self.checks[name] = check_func
         logger.info(f"Registered health check: {name}")
-        
+
     def remove_check(self, name: str):
         """Remove a health check."""
         if name in self.checks:
             del self.checks[name]
             logger.info(f"Removed health check: {name}")
-            
+
     def run_check(self, name: str) -> HealthCheck:
         """Run a specific health check."""
         if name not in self.checks:
@@ -102,27 +102,27 @@ class HealthChecker:
                 details={},
                 error="Check not found"
             )
-            
+
         start_time = time.time()
-        
+
         try:
             result = self.checks[name]()
             result.response_time_ms = (time.time() - start_time) * 1000
             result.timestamp = datetime.now()
-            
+
             # Store result
             self.check_results[name] = result
-            
+
             # Update history
             if name not in self.check_history:
                 self.check_history[name] = []
             self.check_history[name].append(result)
-            
+
             # Keep only last 100 results
             self.check_history[name] = self.check_history[name][-100:]
-            
+
             return result
-            
+
         except Exception as e:
             error_result = HealthCheck(
                 name=name,
@@ -133,37 +133,37 @@ class HealthChecker:
                 details={},
                 error=str(e)
             )
-            
+
             self.check_results[name] = error_result
             return error_result
-            
-    def run_all_checks(self) -> Dict[str, HealthCheck]:
+
+    def run_all_checks(self) -> dict[str, HealthCheck]:
         """Run all registered health checks."""
         results = {}
-        
+
         for check_name in self.checks:
             results[check_name] = self.run_check(check_name)
-            
+
         return results
-        
+
     def start_monitoring(self):
         """Start continuous health monitoring."""
         if self.is_monitoring:
             logger.warning("Health monitoring already running")
             return
-            
+
         self.is_monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
         self.monitor_thread.start()
         logger.info("Health monitoring started")
-        
+
     def stop_monitoring(self):
         """Stop health monitoring."""
         self.is_monitoring = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5)
         logger.info("Health monitoring stopped")
-        
+
     def _monitoring_loop(self):
         """Background monitoring loop."""
         while self.is_monitoring:
@@ -173,24 +173,24 @@ class HealthChecker:
             except Exception as e:
                 logger.error(f"Error in health monitoring loop: {e}")
                 time.sleep(10)
-                
-    def get_system_health(self) -> Dict[str, Any]:
+
+    def get_system_health(self) -> dict[str, Any]:
         """Get overall system health summary."""
         if not self.check_results:
             self.run_all_checks()
-            
+
         status_counts = {status.value: 0 for status in HealthStatus}
         critical_issues = []
         warning_issues = []
-        
+
         for check_name, result in self.check_results.items():
             status_counts[result.status.value] += 1
-            
+
             if result.status == HealthStatus.CRITICAL:
                 critical_issues.append(f"{check_name}: {result.message}")
             elif result.status == HealthStatus.WARNING:
                 warning_issues.append(f"{check_name}: {result.message}")
-                
+
         # Determine overall status
         if critical_issues:
             overall_status = HealthStatus.CRITICAL
@@ -198,7 +198,7 @@ class HealthChecker:
             overall_status = HealthStatus.WARNING
         else:
             overall_status = HealthStatus.HEALTHY
-            
+
         return {
             'overall_status': overall_status.value,
             'total_checks': len(self.check_results),
@@ -208,12 +208,12 @@ class HealthChecker:
             'last_updated': datetime.now().isoformat(),
             'checks': {name: asdict(result) for name, result in self.check_results.items()}
         }
-        
+
     # Individual health check implementations
     def _check_system_cpu(self) -> HealthCheck:
         """Check system CPU usage."""
         cpu_percent = psutil.cpu_percent(interval=1)
-        
+
         if cpu_percent > 95:
             status = HealthStatus.CRITICAL
             message = f"CPU usage critical: {cpu_percent:.1f}%"
@@ -223,7 +223,7 @@ class HealthChecker:
         else:
             status = HealthStatus.HEALTHY
             message = f"CPU usage normal: {cpu_percent:.1f}%"
-            
+
         return HealthCheck(
             name="system_cpu",
             status=status,
@@ -236,11 +236,11 @@ class HealthChecker:
                 'load_avg': psutil.getloadavg() if hasattr(psutil, 'getloadavg') else None
             }
         )
-        
+
     def _check_system_memory(self) -> HealthCheck:
         """Check system memory usage."""
         memory = psutil.virtual_memory()
-        
+
         if memory.percent > 95:
             status = HealthStatus.CRITICAL
             message = f"Memory usage critical: {memory.percent:.1f}%"
@@ -250,7 +250,7 @@ class HealthChecker:
         else:
             status = HealthStatus.HEALTHY
             message = f"Memory usage normal: {memory.percent:.1f}%"
-            
+
         return HealthCheck(
             name="system_memory",
             status=status,
@@ -264,17 +264,17 @@ class HealthChecker:
                 'used_gb': round(memory.used / (1024**3), 2)
             }
         )
-        
+
     def _check_system_disk(self) -> HealthCheck:
         """Check system disk usage."""
         data_path = Path("./data")
-        
+
         if data_path.exists():
             disk_usage = psutil.disk_usage(str(data_path))
             disk_percent = (disk_usage.used / disk_usage.total) * 100
         else:
             disk_percent = 0
-            
+
         if disk_percent > 95:
             status = HealthStatus.CRITICAL
             message = f"Disk usage critical: {disk_percent:.1f}%"
@@ -284,7 +284,7 @@ class HealthChecker:
         else:
             status = HealthStatus.HEALTHY
             message = f"Disk usage normal: {disk_percent:.1f}%"
-            
+
         details = {'disk_percent': disk_percent}
         if data_path.exists():
             details.update({
@@ -292,7 +292,7 @@ class HealthChecker:
                 'free_gb': round(disk_usage.free / (1024**3), 2),
                 'used_gb': round(disk_usage.used / (1024**3), 2)
             })
-            
+
         return HealthCheck(
             name="system_disk",
             status=status,
@@ -301,17 +301,17 @@ class HealthChecker:
             timestamp=datetime.now(),
             details=details
         )
-        
+
     def _check_database_connection(self) -> HealthCheck:
         """Check database connection."""
         try:
             db_url = settings.get_database_url()
-            
+
             if db_url.startswith('sqlite'):
                 # SQLite check
                 db_path = db_url.replace('sqlite:///', './').replace('sqlite://', './')
                 path = Path(db_path)
-                
+
                 if not path.exists():
                     return HealthCheck(
                         name="database_connection",
@@ -321,12 +321,12 @@ class HealthChecker:
                         timestamp=datetime.now(),
                         details={'db_path': str(path)}
                     )
-                    
+
                 # Try to connect
                 with sqlite3.connect(path) as conn:
                     cursor = conn.execute("SELECT 1")
                     cursor.fetchone()
-                    
+
                 return HealthCheck(
                     name="database_connection",
                     status=HealthStatus.HEALTHY,
@@ -335,7 +335,7 @@ class HealthChecker:
                     timestamp=datetime.now(),
                     details={'db_type': 'sqlite', 'db_path': str(path)}
                 )
-                
+
             else:
                 # PostgreSQL or other database
                 return HealthCheck(
@@ -346,7 +346,7 @@ class HealthChecker:
                     timestamp=datetime.now(),
                     details={'db_type': 'other', 'db_url': db_url}
                 )
-                
+
         except Exception as e:
             return HealthCheck(
                 name="database_connection",
@@ -357,18 +357,18 @@ class HealthChecker:
                 details={},
                 error=str(e)
             )
-            
+
     def _check_database_performance(self) -> HealthCheck:
         """Check database performance."""
         try:
             db_url = settings.get_database_url()
-            
+
             if db_url.startswith('sqlite'):
                 db_path = db_url.replace('sqlite:///', './').replace('sqlite://', './')
                 path = Path(db_path)
-                
+
                 start_time = time.time()
-                
+
                 with sqlite3.connect(path) as conn:
                     # Simple performance test
                     cursor = conn.execute("""
@@ -377,16 +377,16 @@ class HealthChecker:
                         ORDER BY name
                     """)
                     tables = cursor.fetchall()
-                    
+
                 query_time = (time.time() - start_time) * 1000
-                
+
                 if query_time > 1000:  # > 1 second
                     status = HealthStatus.WARNING
                     message = f"Database query slow: {query_time:.1f}ms"
                 else:
                     status = HealthStatus.HEALTHY
                     message = f"Database performance good: {query_time:.1f}ms"
-                    
+
                 return HealthCheck(
                     name="database_performance",
                     status=status,
@@ -399,7 +399,7 @@ class HealthChecker:
                         'tables': [table[0] for table in tables]
                     }
                 )
-                
+
         except Exception as e:
             return HealthCheck(
                 name="database_performance",
@@ -410,24 +410,24 @@ class HealthChecker:
                 details={},
                 error=str(e)
             )
-            
+
     def _check_api_health(self) -> HealthCheck:
         """Check API health."""
         try:
             api_port = getattr(settings, 'api_port', 8000)
             health_url = f"http://localhost:{api_port}/api/v1/health"
-            
+
             start_time = time.time()
             response = requests.get(health_url, timeout=5)
             response_time = (time.time() - start_time) * 1000
-            
+
             if response.status_code == 200:
                 status = HealthStatus.HEALTHY
                 message = f"API responding normally: {response.status_code}"
             else:
                 status = HealthStatus.WARNING
                 message = f"API returned status: {response.status_code}"
-                
+
             return HealthCheck(
                 name="api_health",
                 status=status,
@@ -440,7 +440,7 @@ class HealthChecker:
                     'url': health_url
                 }
             )
-            
+
         except requests.exceptions.ConnectionError:
             return HealthCheck(
                 name="api_health",
@@ -461,7 +461,7 @@ class HealthChecker:
                 details={},
                 error=str(e)
             )
-            
+
     def _check_data_directories(self) -> HealthCheck:
         """Check data directories exist and are writable."""
         directories = [
@@ -473,16 +473,16 @@ class HealthChecker:
             Path("./data/warehouse"),
             Path("./logs")
         ]
-        
+
         missing_dirs = []
         unwritable_dirs = []
-        
+
         for directory in directories:
             if not directory.exists():
                 missing_dirs.append(str(directory))
             elif not os.access(directory, os.W_OK):
                 unwritable_dirs.append(str(directory))
-                
+
         if missing_dirs:
             status = HealthStatus.CRITICAL
             message = f"Missing directories: {', '.join(missing_dirs)}"
@@ -492,7 +492,7 @@ class HealthChecker:
         else:
             status = HealthStatus.HEALTHY
             message = "All data directories accessible"
-            
+
         return HealthCheck(
             name="data_directories",
             status=status,
@@ -505,11 +505,11 @@ class HealthChecker:
                 'unwritable_dirs': unwritable_dirs
             }
         )
-        
+
     def _check_log_files(self) -> HealthCheck:
         """Check log files and disk space."""
         log_dir = Path("./logs")
-        
+
         if not log_dir.exists():
             return HealthCheck(
                 name="log_files",
@@ -519,18 +519,18 @@ class HealthChecker:
                 timestamp=datetime.now(),
                 details={'log_dir': str(log_dir)}
             )
-            
+
         # Check log file sizes
         log_files = list(log_dir.glob("*.log"))
         total_size_mb = sum(f.stat().st_size for f in log_files) / (1024 * 1024)
-        
+
         if total_size_mb > 1000:  # > 1GB
             status = HealthStatus.WARNING
             message = f"Log files large: {total_size_mb:.1f}MB"
         else:
             status = HealthStatus.HEALTHY
             message = f"Log files normal: {total_size_mb:.1f}MB"
-            
+
         return HealthCheck(
             name="log_files",
             status=status,
@@ -543,7 +543,7 @@ class HealthChecker:
                 'log_files': [str(f) for f in log_files]
             }
         )
-        
+
     def _check_etl_processes(self) -> HealthCheck:
         """Check ETL process health."""
         # This is a basic check - in a real system you might check:
@@ -551,7 +551,7 @@ class HealthChecker:
         # - Recent ETL run status
         # - Process memory usage
         # - Lock files, etc.
-        
+
         try:
             # Check for any Python ETL processes
             etl_processes = []
@@ -566,7 +566,7 @@ class HealthChecker:
                             })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
-                    
+
             return HealthCheck(
                 name="etl_processes",
                 status=HealthStatus.HEALTHY,
@@ -578,7 +578,7 @@ class HealthChecker:
                     'processes': etl_processes
                 }
             )
-            
+
         except Exception as e:
             return HealthCheck(
                 name="etl_processes",
@@ -603,7 +603,7 @@ def get_health_checker() -> HealthChecker:
     return _health_checker
 
 
-def check_system_health() -> Dict[str, Any]:
+def check_system_health() -> dict[str, Any]:
     """Quick function to check overall system health."""
     checker = get_health_checker()
     return checker.get_system_health()

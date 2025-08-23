@@ -1,8 +1,7 @@
-from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBasicCredentials, HTTPBasic
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 
 from api.v1.services.authentication_service import AuthenticationService
@@ -37,10 +36,10 @@ async def login(login_request: LoginRequest) -> TokenResponse:
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     permissions = ["read", "write", "admin"] if login_request.username == "admin" else ["read"]
     access_token = auth_service.create_user_token(login_request.username, permissions)
-    
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
@@ -59,10 +58,10 @@ async def create_token_basic_auth(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Basic"},
         )
-    
+
     permissions = ["read", "write", "admin"] if credentials.username == "admin" else ["read"]
     access_token = auth_service.create_user_token(credentials.username, permissions)
-    
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
@@ -80,9 +79,9 @@ async def refresh_token(refresh_request: RefreshTokenRequest) -> TokenResponse:
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     new_token = auth_service.create_user_token(token_data.username, token_data.permissions)
-    
+
     return TokenResponse(
         access_token=new_token,
         token_type="bearer",
@@ -99,7 +98,7 @@ async def validate_token(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
-    
+
     return {
         "valid": True,
         "username": token_data.username,

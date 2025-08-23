@@ -1,0 +1,451 @@
+version: '3.8'
+
+# =============================================================================
+# BASE DOCKER COMPOSE CONFIGURATION
+# Use with environment-specific overrides:
+# - docker-compose -f docker-compose.base.yml -f docker-compose.test.yml up
+# - docker-compose -f docker-compose.base.yml -f docker-compose.dev.yml up  
+# - docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml up
+# =============================================================================
+
+x-common-environment: &common-environment
+  PYTHONPATH: /app/src
+  PROCESSING_ENGINE: ${PROCESSING_ENGINE:-pandas}
+  DATABASE_TYPE: ${DATABASE_TYPE:-postgresql}
+
+x-common-healthcheck: &api-healthcheck
+  test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-db-healthcheck: &db-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+services:
+  # =============================================================================
+  # DATABASE SERVICES
+  # =============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-postgres-${ENVIRONMENT:-dev}
+    hostname: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-retail_dw}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck: *db-healthcheck
+    networks:
+      - backend-network
+      - database-network
+
+  # =============================================================================
+  # MESSAGE QUEUE & STREAMING SERVICES
+  # =============================================================================
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-rabbitmq-${ENVIRONMENT:-dev}
+    hostname: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-rabbitmq-cookie}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./docker/rabbitmq:/etc/rabbitmq:ro
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-zookeeper-${ENVIRONMENT:-dev}
+    hostname: zookeeper
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-kafka-${ENVIRONMENT:-dev}
+    hostname: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_JMX_PORT:-9101}:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${KAFKA_PORT:-9092}
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      KAFKA_LOG_RETENTION_HOURS: ${KAFKA_LOG_RETENTION_HOURS:-168}
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # =============================================================================
+  # SPARK CLUSTER (DELTA LAKE)
+  # =============================================================================
+  spark-master:
+    image: bitnami/spark:3.5.3
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-spark-master-${ENVIRONMENT:-dev}
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_USER=spark
+      - SPARK_MASTER_OPTS=-Dspark.deploy.recoveryMode=FILESYSTEM -Dspark.deploy.recoveryDirectory=/spark-recovery
+    ports:
+      - "${SPARK_MASTER_WEB_UI_PORT:-8080}:8080"
+      - "${SPARK_MASTER_PORT:-7077}:7077"
+    volumes:
+      - ./data:/app/data
+      - spark_recovery:/spark-recovery
+      - spark_warehouse:/opt/spark/spark-warehouse
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  spark-worker:
+    image: bitnami/spark:3.5.3
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-spark-worker-${ENVIRONMENT:-dev}
+    hostname: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY:-2G}
+      - SPARK_WORKER_CORES=${SPARK_WORKER_CORES:-2}
+      - SPARK_USER=spark
+    volumes:
+      - ./data:/app/data
+      - spark_warehouse:/opt/spark/spark-warehouse
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  # =============================================================================
+  # VECTOR DATABASE
+  # =============================================================================
+  typesense:
+    image: typesense/typesense:0.25.1
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-typesense-${ENVIRONMENT:-dev}
+    hostname: typesense
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-typesense-api-key}
+      TYPESENSE_ENABLE_CORS: true
+    ports:
+      - "${TYPESENSE_PORT:-8108}:8108"
+    volumes:
+      - typesense_data:/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # MONITORING SERVICES
+  # =============================================================================
+  datadog-agent:
+    image: datadog/agent:7
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-datadog-${ENVIRONMENT:-dev}
+    hostname: datadog-agent
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_HOSTNAME: pwc-${ENVIRONMENT:-dev}
+      DD_ENV: ${ENVIRONMENT:-dev}
+      DD_SERVICE: pwc-retail-platform
+      DD_VERSION: ${APP_VERSION:-1.0.0}
+      DD_APM_ENABLED: true
+      DD_APM_NON_LOCAL_TRAFFIC: true
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: true
+      DD_LOGS_ENABLED: true
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: true
+      DD_PROCESS_AGENT_ENABLED: true
+      DD_DOCKER_LABELS_AS_TAGS: '{"com.docker.compose.service":"service","com.docker.compose.project":"project"}'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./logs:/app/logs:ro
+    networks:
+      - monitoring-network
+      - backend-network
+    profiles: ["monitoring"]
+
+  # =============================================================================
+  # APPLICATION SERVICES
+  # =============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-api-${ENVIRONMENT:-dev}
+    hostname: api
+    environment:
+      <<: *common-environment
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-retail_dw}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: 8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-typesense-api-key}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      DD_AGENT_HOST: datadog-agent
+      DD_TRACE_AGENT_PORT: 8126
+      SECRET_KEY: ${SECRET_KEY}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    healthcheck: *api-healthcheck
+    networks:
+      - frontend-network
+      - backend-network
+
+  # =============================================================================
+  # ETL SERVICES
+  # =============================================================================
+  etl-bronze:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-etl-bronze-${ENVIRONMENT:-dev}
+    environment:
+      <<: *common-environment
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-retail_dw}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: ${PROCESSING_ENGINE:-spark}
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: ["python", "scripts/run_bronze.py"]
+    depends_on:
+      - api
+      - spark-master
+    profiles: ["etl"]
+    networks:
+      - backend-network
+
+  etl-silver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-etl-silver-${ENVIRONMENT:-dev}
+    environment:
+      <<: *common-environment
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-retail_dw}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: ${PROCESSING_ENGINE:-spark}
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: ["python", "scripts/run_silver.py"]
+    depends_on:
+      - etl-bronze
+    profiles: ["etl"]
+    networks:
+      - backend-network
+
+  etl-gold:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.etl
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-etl-gold-${ENVIRONMENT:-dev}
+    environment:
+      <<: *common-environment
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-retail_dw}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: ${PROCESSING_ENGINE:-spark}
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: ["python", "scripts/run_gold.py"]
+    depends_on:
+      - etl-silver
+    profiles: ["etl"]
+    networks:
+      - backend-network
+
+  # =============================================================================
+  # ORCHESTRATION SERVICES
+  # =============================================================================
+  dagster:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dagster
+    container_name: ${COMPOSE_PROJECT_NAME:-pwc}-dagster-${ENVIRONMENT:-dev}
+    environment:
+      <<: *common-environment
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DAGSTER_POSTGRES_DB: ${POSTGRES_DB:-retail_dw}
+      DAGSTER_POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      DAGSTER_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DAGSTER_POSTGRES_HOST: postgres
+      DAGSTER_POSTGRES_PORT: 5432
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - dagster_home:/app/dagster_home
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["orchestration", "dagster"]
+    networks:
+      - frontend-network
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/server_info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  # Database volumes
+  postgres_data:
+    driver: local
+    
+  # Message queue volumes
+  rabbitmq_data:
+    driver: local
+    
+  # Streaming volumes
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+    
+  # Spark volumes
+  spark_recovery:
+    driver: local
+  spark_warehouse:
+    driver: local
+    
+  # Vector database volumes
+  typesense_data:
+    driver: local
+    
+  # Orchestration volumes
+  dagster_home:
+    driver: local
+
+networks:
+  # Frontend network for public-facing services
+  frontend-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+        
+  # Backend network for internal services
+  backend-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+        
+  # Database network for data services
+  database-network:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+        
+  # Monitoring network for observability
+  monitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.23.0.0/24

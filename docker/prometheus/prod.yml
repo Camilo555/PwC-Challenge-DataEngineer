@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 30s  # Production-appropriate interval
+  evaluation_interval: 30s
+  external_labels:
+    environment: 'production'
+    cluster: 'pwc-retail-prod'
+
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+scrape_configs:
+  # Production API cluster
+  - job_name: 'pwc-api-prod'
+    static_configs:
+      - targets: 
+        - 'api:8000'
+    metrics_path: /metrics
+    scrape_interval: 30s
+    honor_labels: true
+    
+  # Production Dagster
+  - job_name: 'dagster-prod'
+    static_configs:
+      - targets: ['dagster:3000']
+    metrics_path: /metrics
+    scrape_interval: 60s
+    
+  # Production infrastructure
+  - job_name: 'infrastructure-prod'
+    static_configs:
+      - targets:
+        - 'rabbitmq:15692'
+        - 'postgres:5432'
+        - 'typesense:8108'
+    scrape_interval: 30s
+    
+  # Production Kafka cluster
+  - job_name: 'kafka-cluster-prod'
+    static_configs:
+      - targets:
+        - 'kafka:9101'
+        - 'kafka-2:9101'
+        - 'kafka-3:9101'
+    scrape_interval: 30s
+    
+  # Production Spark cluster
+  - job_name: 'spark-cluster-prod'
+    static_configs:
+      - targets:
+        - 'spark-master:8080'
+        - 'spark-worker-1:8081'
+        - 'spark-worker-2:8081'
+    metrics_path: /metrics/json/
+    scrape_interval: 60s
+    
+  # Nginx load balancer
+  - job_name: 'nginx-prod'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: /nginx_status
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093

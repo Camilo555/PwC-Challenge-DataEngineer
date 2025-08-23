@@ -1,0 +1,42 @@
+FROM python:3.10-slim
+
+LABEL maintainer="PwC Retail Analytics Team"
+LABEL description="dbt container for data transformations"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV DBT_PROFILES_DIR=/app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Install dbt and dependencies
+RUN pip install --no-cache-dir \
+    dbt-postgres==1.7.4 \
+    dbt-spark[PyHive]==1.7.4 \
+    sqlfluff==2.3.5
+
+# Copy dbt project files
+COPY dbt_project.yml .
+COPY profiles.yml .
+COPY dbt/ ./dbt/
+
+# Create dbt directories if they don't exist
+RUN mkdir -p dbt/logs dbt/target
+
+# Set proper permissions
+RUN chmod -R 755 /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD dbt debug --profiles-dir /app || exit 1
+
+# Default command
+CMD ["dbt", "run", "--profiles-dir", "/app"]

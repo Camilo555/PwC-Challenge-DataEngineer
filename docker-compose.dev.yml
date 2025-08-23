@@ -1,0 +1,545 @@
+version: '3.8'
+
+# =============================================================================
+# DEVELOPMENT ENVIRONMENT CONFIGURATION
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.dev.yml up
+# =============================================================================
+
+services:
+  # =============================================================================
+  # DATABASE SERVICES - DEV CONFIGURATION
+  # =============================================================================
+  postgres:
+    container_name: pwc-postgres-dev
+    environment:
+      POSTGRES_DB: retail_dw_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5434:5432"  # Different port for dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./docker/init-db-dev.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # MESSAGE QUEUE & STREAMING - DEV CONFIGURATION
+  # =============================================================================
+  rabbitmq:
+    container_name: pwc-rabbitmq-dev
+    environment:
+      RABBITMQ_DEFAULT_USER: dev_admin
+      RABBITMQ_DEFAULT_PASS: dev_password
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+    volumes:
+      - rabbitmq_dev_data:/var/lib/rabbitmq
+      - ./docker/rabbitmq/dev:/etc/rabbitmq:ro
+    restart: unless-stopped
+
+  # =============================================================================
+  # DBT TRANSFORMATION SERVICE - DEV CONFIGURATION
+  # =============================================================================
+  dbt:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dbt
+    container_name: pwc-dbt-dev
+    environment:
+      DBT_TARGET: dev
+      DBT_DB_HOST: postgres
+      DBT_DB_USER: dev_user
+      DBT_DB_PASSWORD: dev_password
+      DBT_DB_NAME: retail_dw_dev
+      DBT_DB_PORT: 5432
+      DBT_SCHEMA: dbt_dev
+      DBT_THREADS: 4
+    volumes:
+      - ./dbt:/app/dbt
+      - ./dbt_project.yml:/app/dbt_project.yml
+      - ./profiles.yml:/app/profiles.yml
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    profiles:
+      - dbt
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  zookeeper:
+    container_name: pwc-zookeeper-dev
+    ports:
+      - "2183:2181"
+    volumes:
+      - zookeeper_dev_data:/var/lib/zookeeper/data
+      - zookeeper_dev_logs:/var/lib/zookeeper/log
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  kafka:
+    container_name: pwc-kafka-dev
+    ports:
+      - "9094:9092"
+      - "9103:9101"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LOG_RETENTION_HOURS: 72  # 3 days retention for dev
+      KAFKA_NUM_PARTITIONS: 3
+    volumes:
+      - kafka_dev_data:/var/lib/kafka/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+  # =============================================================================
+  # SPARK CLUSTER - DEV CONFIGURATION
+  # =============================================================================
+  spark-master:
+    container_name: pwc-spark-master-dev
+    ports:
+      - "8082:8080"  # Different port for dev
+      - "7079:7077"
+    volumes:
+      - ./data/dev:/app/data
+      - spark_dev_recovery:/spark-recovery
+      - spark_dev_warehouse:/opt/spark/spark-warehouse
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  spark-worker:
+    container_name: pwc-spark-worker-dev
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    volumes:
+      - ./data/dev:/app/data
+      - spark_dev_warehouse:/opt/spark/spark-warehouse
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Additional spark worker for dev testing
+  spark-worker-2:
+    image: bitnami/spark:3.5.3
+    container_name: pwc-spark-worker-2-dev
+    hostname: spark-worker-2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+      - SPARK_USER=spark
+    volumes:
+      - ./data/dev:/app/data
+      - spark_dev_warehouse:/opt/spark/spark-warehouse
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    networks:
+      - backend-network
+
+  # =============================================================================
+  # VECTOR DATABASE - DEV CONFIGURATION
+  # =============================================================================
+  typesense:
+    container_name: pwc-typesense-dev
+    environment:
+      TYPESENSE_API_KEY: dev-typesense-key
+    ports:
+      - "8110:8108"
+    volumes:
+      - typesense_dev_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  # =============================================================================
+  # MONITORING - DEV CONFIGURATION
+  # =============================================================================
+  datadog-agent:
+    container_name: pwc-datadog-dev
+    environment:
+      DD_HOSTNAME: pwc-dev
+      DD_ENV: development
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: true
+      DD_PROCESS_AGENT_ENABLED: true
+    profiles: ["monitoring", "dev-monitoring"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Additional monitoring for dev
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pwc-prometheus-dev
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./docker/prometheus/dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_dev_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=72h'
+      - '--web.enable-lifecycle'
+    profiles: ["monitoring", "dev-monitoring"]
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+      - backend-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pwc-grafana-dev
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana_dev_data:/var/lib/grafana
+      - ./docker/grafana/dev:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=dev_admin
+      - GF_USERS_ALLOW_SIGN_UP=true
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    profiles: ["monitoring", "dev-monitoring"]
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+      - frontend-network
+
+  # =============================================================================
+  # APPLICATION SERVICES - DEV CONFIGURATION
+  # =============================================================================
+  api:
+    container_name: pwc-api-dev
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: dev_admin
+      RABBITMQ_PASSWORD: dev_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TYPESENSE_HOST: typesense
+      TYPESENSE_API_KEY: dev-typesense-key
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SECRET_KEY: dev-secret-key-change-in-production
+      BASIC_AUTH_PASSWORD: dev123
+      # Dev-specific settings
+      LOG_LEVEL: DEBUG
+      DEBUG: true
+      RELOAD: true  # Auto-reload for development
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8080"
+    volumes:
+      - ./:/app  # Live code reload
+      - ./data/dev:/app/data
+      - ./logs/dev:/app/logs
+    ports:
+      - "8002:8000"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+
+  # =============================================================================
+  # ETL SERVICES - DEV CONFIGURATION
+  # =============================================================================
+  etl-bronze:
+    container_name: pwc-etl-bronze-dev
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: spark  # Use Spark for dev to test real behavior
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/dev:/app/data
+      - ./logs/dev:/app/logs
+    restart: "no"
+
+  etl-silver:
+    container_name: pwc-etl-silver-dev
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: spark
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/dev:/app/data
+      - ./logs/dev:/app/logs
+    restart: "no"
+
+  etl-gold:
+    container_name: pwc-etl-gold-dev
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: spark
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/dev:/app/data
+      - ./logs/dev:/app/logs
+    restart: "no"
+
+  # =============================================================================
+  # ORCHESTRATION - DEV CONFIGURATION
+  # =============================================================================
+  dagster:
+    container_name: pwc-dagster-dev
+    environment:
+      ENVIRONMENT: development
+      DAGSTER_POSTGRES_DB: retail_dw_dev
+      DAGSTER_POSTGRES_USER: dev_user
+      DAGSTER_POSTGRES_PASSWORD: dev_password
+      LOG_LEVEL: DEBUG
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./:/app  # Live code reload
+      - ./data/dev:/app/data
+      - ./logs/dev:/app/logs
+      - dagster_dev_home:/app/dagster_home
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+
+  # Airflow for dev (optional)
+  airflow-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
+    container_name: pwc-airflow-init-dev
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://dev_user:dev_password@postgres:5432/retail_dw_dev
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
+      AIRFLOW__CELERY__RESULT_BACKEND: redis://redis:6379/1
+      AIRFLOW__CORE__FERNET_KEY: dev_fernet_key_32_chars_long!
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: false
+      AIRFLOW__CORE__LOAD_EXAMPLES: false
+      AIRFLOW__WEBSERVER__SECRET_KEY: dev_secret_key
+      PYTHONPATH: /app/src
+    volumes:
+      - ./src/airflow_dags:/app/airflow_home/dags
+      - ./logs/dev:/app/logs
+      - airflow_dev_home:/app/airflow_home
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["orchestration", "airflow", "dev-airflow"]
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username dev_admin --firstname Dev --lastname Admin --role Admin --email dev@example.com --password dev123
+      "
+    networks:
+      - backend-network
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
+    container_name: pwc-airflow-webserver-dev
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://dev_user:dev_password@postgres:5432/retail_dw_dev
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
+      AIRFLOW__CELERY__RESULT_BACKEND: redis://redis:6379/1
+      AIRFLOW__CORE__FERNET_KEY: dev_fernet_key_32_chars_long!
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: false
+      AIRFLOW__CORE__LOAD_EXAMPLES: false
+      AIRFLOW__WEBSERVER__SECRET_KEY: dev_secret_key
+      PYTHONPATH: /app/src
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./src/airflow_dags:/app/airflow_home/dags
+      - ./logs/dev:/app/logs
+      - airflow_dev_home:/app/airflow_home
+    depends_on:
+      - airflow-init
+    profiles: ["orchestration", "airflow", "dev-airflow"]
+    restart: unless-stopped
+    networks:
+      - frontend-network
+      - backend-network
+
+  # Redis for Airflow (dev)
+  redis:
+    image: redis:7-alpine
+    container_name: pwc-redis-dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles: ["orchestration", "airflow", "dev-airflow"]
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+  # =============================================================================
+  # DEV-SPECIFIC SERVICES
+  # =============================================================================
+  # Code hot-reload service
+  code-sync:
+    image: node:18-alpine
+    container_name: pwc-code-sync-dev
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: sh -c "while true; do sleep 30; done"  # Keep alive for manual sync
+    profiles: ["dev-tools"]
+
+  # Database admin interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pwc-pgadmin-dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@example.com
+      PGADMIN_DEFAULT_PASSWORD: dev123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_dev_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    profiles: ["dev-tools", "admin"]
+    restart: unless-stopped
+    networks:
+      - frontend-network
+      - database-network
+
+  # Development notebook server
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jupyter
+    container_name: pwc-jupyter-dev
+    environment:
+      JUPYTER_ENABLE_LAB: yes
+      JUPYTER_TOKEN: dev123
+      DATABASE_URL: postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
+      SPARK_MASTER_URL: spark://spark-master:7077
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/app
+      - ./notebooks:/app/notebooks
+      - ./data/dev:/app/data
+      - jupyter_dev_data:/home/jovyan
+    depends_on:
+      - postgres
+      - spark-master
+    profiles: ["dev-tools", "jupyter"]
+    restart: unless-stopped
+    networks:
+      - frontend-network
+      - backend-network
+
+volumes:
+  # Dev-specific volumes
+  postgres_dev_data:
+    driver: local
+  rabbitmq_dev_data:
+    driver: local
+  zookeeper_dev_data:
+    driver: local
+  zookeeper_dev_logs:
+    driver: local
+  kafka_dev_data:
+    driver: local
+  spark_dev_recovery:
+    driver: local
+  spark_dev_warehouse:
+    driver: local
+  typesense_dev_data:
+    driver: local
+  dagster_dev_home:
+    driver: local
+  airflow_dev_home:
+    driver: local
+  redis_dev_data:
+    driver: local
+  prometheus_dev_data:
+    driver: local
+  grafana_dev_data:
+    driver: local
+  pgadmin_dev_data:
+    driver: local
+  jupyter_dev_data:
+    driver: local
+
+networks:
+  # Dev networks can extend base networks
+  frontend-network:
+    external: false
+  backend-network:
+    external: false
+  database-network:
+    external: false
+  monitoring-network:
+    external: false

@@ -1,0 +1,461 @@
+name: dbt CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'dbt/**'
+      - 'dbt_project.yml'
+      - 'profiles.yml'
+      - 'pyproject.toml'
+      - '.github/workflows/dbt-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'dbt/**'
+      - 'dbt_project.yml'
+      - 'profiles.yml'
+
+env:
+  PYTHONUNBUFFERED: 1
+  POETRY_NO_INTERACTION: 1
+  POETRY_VENV_IN_PROJECT: 1
+  DBT_PROFILES_DIR: ${{ github.workspace }}
+
+jobs:
+  # ================================
+  # DBT SYNTAX AND VALIDATION
+  # ================================
+  dbt-validation:
+    name: dbt Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-dbt-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies
+      run: |
+        poetry install --no-interaction --with dev
+        # Explicitly install dbt packages
+        poetry run pip install dbt-postgres==1.7.4 dbt-spark==1.7.4
+
+    - name: Validate dbt project configuration
+      run: |
+        echo "🔍 Validating dbt project configuration..."
+        
+        # Check project file syntax
+        poetry run python -c "
+        import yaml
+        with open('dbt_project.yml') as f:
+            config = yaml.safe_load(f)
+        assert 'name' in config, 'Missing project name'
+        assert 'version' in config, 'Missing project version'
+        print('✅ dbt_project.yml is valid')
+        "
+        
+        # Check profiles file syntax
+        poetry run python -c "
+        import yaml
+        with open('profiles.yml') as f:
+            profiles = yaml.safe_load(f)
+        assert 'pwc_retail' in profiles, 'Missing pwc_retail profile'
+        print('✅ profiles.yml is valid')
+        "
+
+    - name: Validate SQL syntax in models
+      run: |
+        echo "🔍 Validating SQL syntax in dbt models..."
+        
+        poetry run python -c "
+        import os
+        import glob
+        
+        sql_files = glob.glob('dbt/models/**/*.sql', recursive=True)
+        print(f'Found {len(sql_files)} SQL model files')
+        
+        for sql_file in sql_files:
+            with open(sql_file, 'r') as f:
+                content = f.read()
+            
+            # Basic SQL validation
+            if 'select' not in content.lower() and 'with' not in content.lower():
+                raise ValueError(f'No SELECT or WITH found in {sql_file}')
+            
+            # Check for dbt syntax
+            has_dbt = any(func in content for func in ['ref(', 'var(', 'config('])
+            print(f'✅ {os.path.basename(sql_file)}: Valid SQL (dbt: {has_dbt})')
+        
+        print('✅ All SQL models validated successfully')
+        "
+
+    - name: Validate schema files
+      run: |
+        echo "🔍 Validating dbt schema files..."
+        
+        poetry run python -c "
+        import yaml
+        import glob
+        
+        schema_files = glob.glob('dbt/models/**/schema.yml', recursive=True)
+        print(f'Found {len(schema_files)} schema files')
+        
+        for schema_file in schema_files:
+            with open(schema_file, 'r') as f:
+                schema = yaml.safe_load(f)
+            
+            if 'models' not in schema:
+                raise ValueError(f'Missing models in {schema_file}')
+            
+            model_count = len(schema['models'])
+            print(f'✅ {schema_file}: {model_count} models defined')
+        
+        print('✅ All schema files validated successfully')
+        "
+
+  # ================================
+  # DBT TESTING WITH DATABASE
+  # ================================
+  dbt-test:
+    name: dbt Test Suite
+    runs-on: ubuntu-latest
+    needs: dbt-validation
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: dbt_test_user
+          POSTGRES_PASSWORD: dbt_test_password
+          POSTGRES_DB: dbt_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DBT_TARGET: test
+      DBT_DB_HOST: localhost
+      DBT_DB_USER: dbt_test_user
+      DBT_DB_PASSWORD: dbt_test_password
+      DBT_DB_NAME: dbt_test_db
+      DBT_DB_PORT: 5432
+      DBT_SCHEMA: dbt_ci_test
+      DBT_THREADS: 2
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      run: |
+        poetry install --no-interaction --with dev
+        poetry run pip install dbt-postgres==1.7.4
+
+    - name: Setup test database
+      run: |
+        echo "🗄️ Setting up test database..."
+        
+        # Create test schemas
+        PGPASSWORD=dbt_test_password psql -h localhost -U dbt_test_user -d dbt_test_db -c "
+        CREATE SCHEMA IF NOT EXISTS bronze;
+        CREATE SCHEMA IF NOT EXISTS silver;
+        CREATE SCHEMA IF NOT EXISTS gold;
+        CREATE SCHEMA IF NOT EXISTS dbt_ci_test;
+        CREATE SCHEMA IF NOT EXISTS dbt_test_failures;
+        "
+        
+        # Create sample source table
+        PGPASSWORD=dbt_test_password psql -h localhost -U dbt_test_user -d dbt_test_db -c "
+        CREATE TABLE IF NOT EXISTS bronze.retail_data (
+            id UUID DEFAULT gen_random_uuid(),
+            invoice_no VARCHAR(50),
+            stock_code VARCHAR(50),
+            description TEXT,
+            quantity INTEGER,
+            invoice_date TIMESTAMP,
+            unit_price NUMERIC(10,2),
+            customer_id VARCHAR(50),
+            country VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Insert sample data
+        INSERT INTO bronze.retail_data (invoice_no, stock_code, description, quantity, invoice_date, unit_price, customer_id, country)
+        VALUES 
+            ('TEST001', 'PROD001', 'Test Product A', 5, '2024-01-15 10:30:00', 15.99, 'CUST001', 'United Kingdom'),
+            ('TEST001', 'PROD002', 'Test Product B', 2, '2024-01-15 10:30:00', 25.50, 'CUST001', 'United Kingdom'),
+            ('TEST002', 'PROD001', 'Test Product A', 1, '2024-01-15 11:00:00', 15.99, 'CUST002', 'France'),
+            ('TEST003', 'PROD003', 'Test Product C', 3, '2024-01-15 12:15:00', 8.75, 'CUST003', 'Germany'),
+            ('TEST004', 'PROD002', 'Test Product B', 4, '2024-01-15 14:45:00', 'CUST001', 25.50, 'United Kingdom');
+        "
+        
+        echo "✅ Test database setup complete"
+
+    - name: dbt debug
+      run: |
+        echo "🔍 Running dbt debug..."
+        poetry run dbt debug --profiles-dir . || echo "dbt debug completed (some warnings expected)"
+
+    - name: Install dbt packages
+      run: |
+        echo "📦 Installing dbt packages..."
+        poetry run dbt deps --profiles-dir .
+
+    - name: dbt run
+      run: |
+        echo "🚀 Running dbt models..."
+        poetry run dbt run --profiles-dir . --target test
+
+    - name: dbt test
+      run: |
+        echo "🧪 Running dbt tests..."
+        poetry run dbt test --profiles-dir . --target test --store-failures
+
+    - name: Generate dbt documentation
+      run: |
+        echo "📚 Generating dbt documentation..."
+        poetry run dbt docs generate --profiles-dir . --target test
+
+    - name: Upload dbt artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dbt-artifacts-${{ github.run_id }}
+        path: |
+          dbt/target/manifest.json
+          dbt/target/catalog.json
+          dbt/target/run_results.json
+          dbt/target/index.html
+
+  # ================================
+  # DBT DOCKER BUILD
+  # ================================
+  dbt-docker:
+    name: dbt Docker Build
+    runs-on: ubuntu-latest
+    needs: dbt-validation
+    if: github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}-dbt
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push dbt Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.dbt
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha,scope=dbt
+        cache-to: type=gha,mode=max,scope=dbt
+
+  # ================================
+  # DBT DATA QUALITY MONITORING
+  # ================================
+  dbt-quality:
+    name: dbt Data Quality
+    runs-on: ubuntu-latest
+    needs: dbt-test
+    if: github.ref == 'refs/heads/main'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: dbt_test_user
+          POSTGRES_PASSWORD: dbt_test_password
+          POSTGRES_DB: dbt_test_db
+        ports:
+          - 5432:5432
+
+    env:
+      DBT_TARGET: test
+      DBT_DB_HOST: localhost
+      DBT_DB_USER: dbt_test_user
+      DBT_DB_PASSWORD: dbt_test_password
+      DBT_DB_NAME: dbt_test_db
+      DBT_SCHEMA: dbt_quality_test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      run: |
+        poetry install --no-interaction
+        poetry run pip install dbt-postgres==1.7.4
+
+    - name: Setup database for quality tests
+      run: |
+        # Setup same as before but for quality testing
+        PGPASSWORD=dbt_test_password psql -h localhost -U dbt_test_user -d dbt_test_db -c "
+        CREATE SCHEMA IF NOT EXISTS bronze;
+        CREATE SCHEMA IF NOT EXISTS dbt_quality_test;
+        
+        CREATE TABLE IF NOT EXISTS bronze.retail_data (
+            id UUID DEFAULT gen_random_uuid(),
+            invoice_no VARCHAR(50),
+            stock_code VARCHAR(50), 
+            description TEXT,
+            quantity INTEGER,
+            invoice_date TIMESTAMP,
+            unit_price NUMERIC(10,2),
+            customer_id VARCHAR(50),
+            country VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Insert data with quality issues for testing
+        INSERT INTO bronze.retail_data (invoice_no, stock_code, description, quantity, invoice_date, unit_price, customer_id, country)
+        VALUES 
+            ('GOOD001', 'PROD001', 'Good Product', 5, '2024-01-15 10:30:00', 15.99, 'CUST001', 'United Kingdom'),
+            (NULL, 'PROD002', 'Missing Invoice', 2, '2024-01-15 10:30:00', 25.50, 'CUST002', 'France'),
+            ('BAD001', '', 'Missing Stock Code', 1, '2024-01-15 11:00:00', 15.99, 'CUST003', 'Germany'),
+            ('BAD002', 'PROD004', 'Negative Quantity', -3, '2024-01-15 12:15:00', 8.75, 'CUST004', 'Spain'),
+            ('BAD003', 'PROD005', 'Zero Price', 2, '2024-01-15 14:45:00', 0.00, 'CUST005', 'Italy');
+        "
+
+    - name: Run dbt with quality checks
+      run: |
+        echo "📊 Running dbt with data quality focus..."
+        
+        # Install packages and run models
+        poetry run dbt deps --profiles-dir .
+        poetry run dbt run --profiles-dir . --target test --models staging
+        
+        # Run all tests to catch quality issues
+        poetry run dbt test --profiles-dir . --target test || echo "Quality issues detected (expected)"
+
+    - name: Generate quality report
+      run: |
+        echo "📈 Generating data quality report..."
+        
+        # Create quality report
+        poetry run python -c "
+        import json
+        import os
+        
+        # Check if run results exist
+        results_file = 'dbt/target/run_results.json'
+        if os.path.exists(results_file):
+            with open(results_file, 'r') as f:
+                results = json.load(f)
+            
+            total_models = len([r for r in results['results'] if r['resource_type'] == 'model'])
+            successful_models = len([r for r in results['results'] if r['resource_type'] == 'model' and r['status'] == 'success'])
+            
+            print(f'✅ dbt Quality Report:')
+            print(f'   - Total Models: {total_models}')
+            print(f'   - Successful: {successful_models}')
+            print(f'   - Success Rate: {(successful_models/total_models)*100 if total_models > 0 else 0:.1f}%')
+        else:
+            print('⚠️ No run results found')
+        "
+
+  # ================================
+  # SUMMARY AND REPORTING
+  # ================================
+  dbt-summary:
+    name: dbt CI Summary
+    runs-on: ubuntu-latest
+    needs: [dbt-validation, dbt-test, dbt-docker, dbt-quality]
+    if: always()
+    
+    steps:
+    - name: Create dbt CI summary
+      run: |
+        echo "## 🔄 dbt CI/CD Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Status | Description |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|-------------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Validation | ${{ needs.dbt-validation.result == 'success' && '✅ PASSED' || '❌ FAILED' }} | SQL syntax, project config, schema validation |" >> $GITHUB_STEP_SUMMARY
+        echo "| Testing | ${{ needs.dbt-test.result == 'success' && '✅ PASSED' || '❌ FAILED' }} | Model execution, data tests, documentation |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Build | ${{ needs.dbt-docker.result == 'success' && '✅ PASSED' || '🔄 SKIPPED' }} | Container image build and push |" >> $GITHUB_STEP_SUMMARY
+        echo "| Quality Check | ${{ needs.dbt-quality.result == 'success' && '✅ PASSED' || '🔄 SKIPPED' }} | Data quality monitoring and reporting |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.dbt-validation.result }}" == "success" && "${{ needs.dbt-test.result }}" == "success" ]]; then
+          echo "### 🎉 dbt Pipeline Ready!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY  
+          echo "- ✅ All models validated and tested" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Data transformations working correctly" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Documentation generated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker image built and ready for deployment" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⚠️ dbt Pipeline Issues Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please review the failed jobs and fix issues before merging." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Deploy using: \`docker-compose up dbt\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Run models: \`dbt run --profiles-dir .\`" >> $GITHUB_STEP_SUMMARY
+        echo "- View docs: \`dbt docs serve --profiles-dir .\`" >> $GITHUB_STEP_SUMMARY

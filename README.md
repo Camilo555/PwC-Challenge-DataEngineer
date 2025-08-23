@@ -19,6 +19,7 @@
 ⚡ **Advanced Processing**: Multi-engine support (Spark + Delta Lake + Polars) with intelligent auto-scaling  
 🛡️ **Security Hardened**: OAuth2/JWT, encryption, audit logs, role-based access control  
 🔄 **Modern Orchestration**: Dagster assets + Airflow DAGs with real-time monitoring  
+🔄 **dbt Transformations**: Modern SQL-first data transformations with full testing and documentation  
 🧠 **Advanced Analytics**: 67+ ML features, RFM analysis, customer segmentation, anomaly detection  
 📊 **Data Quality**: Automated profiling, validation, remediation with 100-point scoring  
 🌐 **Data Enrichment**: External APIs, geographic data, product categorization, weather context  
@@ -35,7 +36,31 @@
 🚀 **Production Ready**: Load balancing, auto-scaling, disaster recovery, and rollback capabilities  
 🔄 **Real-time Streaming**: Kafka-based event streaming with RabbitMQ task orchestration  
 🏛️ **Delta Lake Architecture**: Medallion architecture with ACID transactions and time travel  
-📈 **Enterprise Monitoring**: Datadog APM with custom metrics, alerts, and performance tracking
+📈 **Enterprise Monitoring**: Datadog APM with custom metrics, alerts, and performance tracking  
+🔄 **CI/CD Automation**: Comprehensive GitHub Actions workflows with dbt testing and deployment
+
+## 🔄 CI/CD & Automation
+
+### **GitHub Actions Workflows**
+- **🔍 dbt CI/CD Pipeline** (`dbt-ci.yml`): Complete dbt testing with validation, database testing, Docker builds, and quality monitoring
+- **🚀 Main CI/CD** (`main-cicd.yml`): Multi-component builds (API, ETL, Dagster, Airflow, dbt) with security scanning
+- **🧪 Integration Tests** (`integration-tests.yml`): End-to-end testing across all services  
+- **🐳 Docker Build** (`docker.yml`): Multi-service container builds with security scanning
+- **📊 Monitoring** (`monitoring.yml`): Health checks and performance monitoring
+
+### **dbt Automation Features**
+- **SQL Validation**: Automated syntax checking and schema validation
+- **Database Testing**: PostgreSQL integration with sample data and quality checks
+- **Documentation**: Auto-generated dbt docs with artifact management
+- **Quality Gates**: Data quality monitoring with failure detection
+- **Container Deployment**: Docker image builds and registry publishing
+
+### **Enterprise CI/CD Capabilities**
+- **Multi-Environment**: Automated dev/staging/production deployments
+- **Security Integration**: Vulnerability scanning with Trivy and Bandit
+- **Quality Assurance**: Code quality checks with Ruff, MyPy, and coverage reporting
+- **Performance Testing**: Automated benchmarking and regression detection
+- **Monitoring Integration**: Health checks and metrics collection
 
 ## 🏛️ Advanced Architecture
 
@@ -440,7 +465,7 @@ flowchart TD
 |--------------|------------------|-------------|
 | **Languages** | Python 3.10+, SQL, YAML | Development & Configuration |
 | **Processing** | PySpark 3.5+, Polars 1.18+, Pandas 2.0+, NumPy | High-Performance Data Processing |
-| **Orchestration** | Dagster 1.8+, Apache Airflow 2.10+ | Modern + Traditional ETL |
+| **Orchestration** | Dagster 1.8+, Apache Airflow 2.10+, dbt 1.7+ | Modern + Traditional ETL |
 | **Storage** | Delta Lake, PostgreSQL 15+, Parquet | Data Lakehouse Architecture |
 | **API** | FastAPI 0.116+, Pydantic 2.0+, OpenAPI 3.0 | REST API & Documentation |
 | **GraphQL** | Strawberry GraphQL 0.254+ | Flexible Query Interface |
@@ -469,7 +494,7 @@ cd PwC-Challenge-DataEngineer
 # Install Poetry (if not installed)
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Install dependencies
+# Install dependencies (includes dbt)
 poetry install
 
 # Setup environment
@@ -518,10 +543,28 @@ docker compose -f docker-compose.production.yml --profile airflow up -d
 docker compose -f docker-compose.production.yml --profile monitoring up -d
 ```
 
-### 4️⃣ Access Services
+### 4️⃣ Run dbt Transformations
+```bash
+# Run all dbt models
+poetry run dbt run --profiles-dir .
+
+# Run tests  
+poetry run dbt test --profiles-dir .
+
+# Generate documentation
+poetry run dbt docs generate --profiles-dir .
+poetry run dbt docs serve --profiles-dir .
+
+# Or using Docker
+docker exec pwc-dbt-dev dbt run
+docker exec pwc-dbt-dev dbt test
+```
+
+### 5️⃣ Access Services
 - **🌐 API Documentation**: http://localhost:8000/docs
 - **📊 Dagster UI**: http://localhost:3000
 - **🔄 Airflow UI**: http://localhost:8081 (admin/admin)
+- **📊 dbt Docs**: http://localhost:8080 (when serving docs)
 - **⚡ Spark Master**: http://localhost:8080
 - **📈 Grafana**: http://localhost:3001 (admin/admin)
 - **🔍 Prometheus**: http://localhost:9090
@@ -546,6 +589,15 @@ PwC-Challenge-DataEngineer/
 │   │   │   ├── resolvers.py                 # GraphQL resolvers
 │   │   │   └── router.py                    # GraphQL FastAPI integration
 │   │   └── middleware/                      # Security & CORS middleware
+├── 📂 dbt/                                  # 🆕 dbt Data Transformations
+│   ├── 📂 models/                           # SQL data models
+│   │   ├── staging/                         # Bronze → Clean data
+│   │   ├── intermediate/                    # Business logic & calculations
+│   │   └── marts/                           # Production analytics
+│   ├── 📂 tests/                            # Data quality tests
+│   ├── 📂 macros/                           # Reusable SQL macros  
+│   ├── 📂 seeds/                            # Reference data
+│   └── 📂 snapshots/                        # SCD Type 2 tracking
 │   ├── 📂 core/                             # Infrastructure & configuration
 │   │   ├── 📂 config/                       # 🆕 Unified configuration system
 │   │   │   ├── __init__.py                  # Configuration exports

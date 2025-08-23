@@ -1,522 +1,312 @@
-# Deployment Guide
+# 🚀 PWC Retail Data Platform - Multi-Environment Deployment Guide
 
-This guide provides comprehensive instructions for deploying the PwC Retail ETL Pipeline to various environments using Docker and CI/CD pipelines.
+## 📋 Overview
 
-## Table of Contents
+This guide covers deploying the PWC Retail Data Platform across TEST, DEV, and PROD environments using Docker Compose with environment-specific configurations.
 
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Environment Configuration](#environment-configuration)
-- [Deployment Methods](#deployment-methods)
-- [CI/CD Pipeline](#cicd-pipeline)
-- [Monitoring and Validation](#monitoring-and-validation)
-- [Troubleshooting](#troubleshooting)
+## 🏗️ Architecture Overview
 
-## Overview
-
-The deployment infrastructure supports:
-
-- **Containerized deployment** with Docker and Docker Compose
-- **Multi-environment support** (development, staging, production)
-- **CI/CD automation** with GitHub Actions
-- **Comprehensive monitoring** with Prometheus, Grafana, and custom health checks
-- **Security best practices** with secrets management and authentication
-- **Scalable architecture** with Spark clusters and orchestration tools
-
-## Prerequisites
-
-### System Requirements
-
-- **Docker** 20.10+ with Docker Compose
-- **Git** for version control
-- **Bash** shell for deployment scripts
-- **curl** for health checks
-- **Minimum Resources:**
-  - 8GB RAM
-  - 50GB disk space
-  - 4 CPU cores
-
-### Required Software
-
-```bash
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# Verify installation
-docker --version
-docker-compose --version
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Multi-Environment Setup                     │
+├─────────────────┬─────────────────┬─────────────────────────────┤
+│   TEST ENV      │    DEV ENV      │       PROD ENV              │
+│   Port: 8001    │   Port: 8002    │      Port: 8000             │
+│   Lightweight   │   Full Stack    │   Enterprise Grade          │
+│   Fast Testing  │   Development   │   High Availability         │
+└─────────────────┴─────────────────┴─────────────────────────────┘
 ```
 
-## Environment Configuration
+## 🗂️ File Structure
 
-### 1. Copy Environment Template
-
-```bash
-cp .env.example .env.staging    # For staging
-cp .env.example .env.production # For production
+```
+PWC-Challenge-DataEngineer/
+├── docker-compose.base.yml      # Base configuration (shared)
+├── docker-compose.test.yml      # TEST environment overrides
+├── docker-compose.dev.yml       # DEV environment overrides  
+├── docker-compose.prod.yml      # PROD environment overrides
+├── .env.test                    # TEST environment variables
+├── .env.dev                     # DEV environment variables
+├── .env.prod                    # PROD environment variables
+├── scripts/
+│   ├── deploy.sh               # Unix deployment script
+│   └── deploy.bat              # Windows deployment script
+└── docker/
+    ├── rabbitmq/
+    ├── prometheus/
+    ├── grafana/
+    └── nginx/
 ```
 
-### 2. Configure Environment Variables
+## 🌍 Environment Configurations
 
-Edit the environment files with your specific values:
+### 🧪 TEST Environment
+- **Purpose**: Automated testing, CI/CD, integration tests
+- **Resources**: Minimal (512MB-1GB per service)
+- **Features**: 
+  - Lightweight components
+  - Single partition Kafka
+  - Pandas processing engine
+  - In-memory configurations
+  - Test databases with mock data
 
-#### Critical Settings
+### 🛠️ DEV Environment  
+- **Purpose**: Development, debugging, feature testing
+- **Resources**: Moderate (1-3GB per service)
+- **Features**:
+  - Full Spark cluster
+  - Development tools (Jupyter, PgAdmin)
+  - Live code reload
+  - Monitoring stack
+  - Debug logging
 
-```bash
-# Database
-POSTGRES_PASSWORD=your_secure_password_here
-DATABASE_URL=postgresql://postgres:password@postgres:5432/retail_db
+### 🏭 PROD Environment
+- **Purpose**: Production workloads, high availability
+- **Resources**: High (2-6GB per service)
+- **Features**:
+  - Multi-node Kafka cluster
+  - Multiple Spark workers
+  - Load balancers
+  - SSL/TLS encryption
+  - Backup services
+  - Enterprise monitoring
 
-# Security
-SECRET_KEY=your_32_character_secret_key_here
-BASIC_AUTH_PASSWORD=secure_api_password
+## 🚀 Quick Start
 
-# External Services
-TYPESENSE_API_KEY=your_typesense_api_key
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+### Prerequisites
 
-# Monitoring
-GRAFANA_PASSWORD=secure_grafana_password
-```
+1. **Docker & Docker Compose**
+   ```bash
+   # Verify installation
+   docker --version
+   docker-compose --version
+   ```
 
-#### Generate Secure Keys
+2. **System Requirements**
+   - **TEST**: 4GB RAM, 2 CPU cores
+   - **DEV**: 8GB RAM, 4 CPU cores  
+   - **PROD**: 16GB+ RAM, 8+ CPU cores
 
-```bash
-# Generate SECRET_KEY
-openssl rand -hex 32
+3. **Network Ports** (ensure these are available):
+   ```
+   TEST:  8001 (API), 5433 (DB), 9093 (Kafka), 8109 (Typesense)
+   DEV:   8002 (API), 5434 (DB), 9094 (Kafka), 8110 (Typesense)
+   PROD:  8000 (API), 5432 (DB), 9092 (Kafka), 8108 (Typesense)
+   ```
 
-# Generate TYPESENSE_API_KEY
-openssl rand -hex 16
-
-# Generate Fernet key for Airflow
-openssl rand -base64 32
-```
-
-## Deployment Methods
-
-### Method 1: Manual Deployment
-
-#### Staging Deployment
-
-```bash
-# Deploy to staging
-./scripts/deploy_staging.sh
-
-# Validate deployment
-./scripts/validate_deployment.sh
-```
-
-#### Production Deployment
-
-```bash
-# Set required environment variables
-export POSTGRES_PASSWORD="your_production_password"
-export SECRET_KEY="your_production_secret"
-export BASIC_AUTH_PASSWORD="your_production_api_password"
-export TYPESENSE_API_KEY="your_production_typesense_key"
-
-# Deploy to production
-./scripts/deploy_production.sh
-
-# Validate deployment
-./scripts/validate_deployment.sh
-```
-
-### Method 2: Docker Compose Profiles
-
-#### Start Core Services
+### 🎯 Deploy TEST Environment
 
 ```bash
-docker-compose -f docker-compose.production.yml up -d postgres redis typesense api
+# Unix/Linux/Mac
+./scripts/deploy.sh test
+
+# Windows
+scripts\deploy.bat test
 ```
 
-#### Start with Monitoring
+### 🛠️ Deploy DEV Environment
 
 ```bash
-docker-compose -f docker-compose.production.yml --profile monitoring up -d
+# Unix/Linux/Mac
+./scripts/deploy.sh dev --profiles api,etl,orchestration,dev-tools
+
+# Windows  
+scripts\deploy.bat dev /p api,etl,orchestration,dev-tools
 ```
 
-#### Start with Orchestration
+### 🏭 Deploy PROD Environment
 
 ```bash
-# Dagster
-docker-compose -f docker-compose.production.yml --profile dagster up -d
+# First, configure production secrets in .env.prod
 
-# Airflow
-docker-compose -f docker-compose.production.yml --profile airflow up -d
+# Unix/Linux/Mac
+./scripts/deploy.sh prod --profiles api,etl,orchestration,monitoring
+
+# Windows
+scripts\deploy.bat prod /p api,etl,orchestration,monitoring
 ```
 
-#### Start Full Stack
+## 📝 Detailed Deployment Instructions
 
+### 1. Environment Setup
+
+#### TEST Environment
 ```bash
-docker-compose -f docker-compose.production.yml --profile monitoring --profile dagster up -d
+# 1. Deploy with minimal profile
+./scripts/deploy.sh test --detach
+
+# 2. Run integration tests
+./scripts/deploy.sh test --profiles ci,integration-test
+
+# 3. Check status
+./scripts/deploy.sh test --status
 ```
 
-### Method 3: Individual Services
-
+#### DEV Environment
 ```bash
-# API only
-docker-compose -f docker-compose.production.yml up -d postgres redis api
+# 1. Deploy with development tools
+./scripts/deploy.sh dev --profiles api,etl,orchestration,dev-tools,dev-monitoring --build
 
-# ETL processing
-docker-compose -f docker-compose.production.yml --profile etl run etl-spark
-
-# Vector search indexing
-docker-compose -f docker-compose.production.yml run indexer
+# 2. Access development services
+echo "API: http://localhost:8002"
+echo "Dagster: http://localhost:3003" 
+echo "PgAdmin: http://localhost:5050"
+echo "Jupyter: http://localhost:8888"
+echo "Grafana: http://localhost:3002"
 ```
 
-## CI/CD Pipeline
-
-### GitHub Actions Workflow
-
-The repository includes three main workflows:
-
-1. **Continuous Integration** (`.github/workflows/ci.yml`)
-   - Runs tests and linting
-   - Validates code quality
-   - Security scanning
-
-2. **Docker Build** (`.github/workflows/docker.yml`)
-   - Builds and pushes Docker images
-   - Multi-architecture support
-   - Vulnerability scanning
-
-3. **Deployment** (`.github/workflows/deploy.yml`)
-   - Automated staging deployment
-   - Manual production deployment
-   - Rollback capabilities
-
-### Setting Up GitHub Actions
-
-1. **Configure Secrets** in your GitHub repository:
-
+#### PROD Environment
 ```bash
-# Required secrets
-POSTGRES_PASSWORD
-SECRET_KEY
-BASIC_AUTH_PASSWORD
-TYPESENSE_API_KEY
-GRAFANA_PASSWORD
-SLACK_WEBHOOK_URL
+# 1. Configure production secrets in .env.prod
+# Set strong passwords for:
+# - POSTGRES_PASSWORD
+# - RABBITMQ_PASSWORD  
+# - SECRET_KEY
+# - GRAFANA_ADMIN_PASSWORD
 
-# Optional secrets
-STAGING_DATABASE_URL
-PRODUCTION_DATABASE_URL
+# 2. Create data directories
+sudo mkdir -p /opt/pwc-data/{postgres,rabbitmq,kafka,spark,typesense}
+sudo chown -R $(whoami) /opt/pwc-data
+
+# 3. Deploy production stack
+./scripts/deploy.sh prod --profiles api,etl,orchestration,monitoring,kafka-cluster
+
+# 4. Verify deployment
+./scripts/deploy.sh prod --status
 ```
 
-2. **Enable GitHub Container Registry:**
+### 2. Service Profiles
 
+Use `--profiles` to deploy specific service groups:
+
+| Profile | Services | Description |
+|---------|----------|-------------|
+| `api` | API, Database, Message Queue | Core API services |
+| `etl` | ETL Bronze/Silver/Gold | Data processing pipeline |
+| `orchestration` | Dagster | Workflow orchestration |
+| `dagster` | Dagster only | Asset-based orchestration |  
+| `airflow` | Airflow stack | Traditional workflow management |
+| `monitoring` | Datadog, Prometheus, Grafana | Observability stack |
+| `dev-tools` | PgAdmin, Jupyter | Development utilities |
+| `kafka-cluster` | Multi-broker Kafka | High-availability streaming |
+| `backup` | Backup services | Automated backups (prod only) |
+
+### 3. Common Operations
+
+#### View Logs
 ```bash
-# Login to GitHub Container Registry
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# All services
+./scripts/deploy.sh dev --logs
+
+# Specific service
+./scripts/deploy.sh prod --logs api
 ```
 
-3. **Trigger Deployment:**
-
+#### Stop Environment
 ```bash
-# Push to main branch for staging
-git push origin main
-
-# Create release for production
-git tag -a v1.0.0 -m "Production release v1.0.0"
-git push origin v1.0.0
+# Stop and remove containers
+./scripts/deploy.sh dev --down
 ```
 
-## Monitoring and Validation
-
-### Access Points
-
-After successful deployment, access the services at:
-
-- **API:** http://localhost:8000
-- **API Documentation:** http://localhost:8000/docs
-- **Health Check:** http://localhost:8000/api/v1/health
-- **Dagster:** http://localhost:3000
-- **Prometheus:** http://localhost:9090
-- **Grafana:** http://localhost:3001
-- **Typesense:** http://localhost:8108
-
-### Health Checks
-
+#### Update Services
 ```bash
-# Automated validation
-./scripts/validate_deployment.sh
-
-# Manual health checks
-curl http://localhost:8000/api/v1/health
-curl http://localhost:8108/health
-curl http://localhost:9090/-/healthy
+# Rebuild and update
+./scripts/deploy.sh prod --build --profiles api
 ```
 
-### Log Monitoring
+## 🔧 Configuration
 
-```bash
-# View all logs
-docker-compose -f docker-compose.production.yml logs -f
+### Environment Variables
 
-# Specific service logs
-docker-compose -f docker-compose.production.yml logs -f api
-docker-compose -f docker-compose.production.yml logs -f etl-spark
+Each environment has its own `.env` file with appropriate configurations for TEST, DEV, and PROD deployments.
 
-# Follow logs with timestamps
-docker-compose -f docker-compose.production.yml logs -f -t
-```
+### Resource Limits
 
-### Performance Monitoring
+| Environment | Memory/Service | CPU/Service | Total RAM |
+|-------------|----------------|-------------|-----------|
+| TEST | 256MB - 1GB | 0.25 - 1.0 | ~4GB |
+| DEV | 512MB - 3GB | 0.5 - 2.0 | ~8GB |
+| PROD | 1GB - 6GB | 1.0 - 4.0 | 16GB+ |
 
-- **Grafana Dashboards:** Pre-configured dashboards for system metrics
-- **Prometheus Metrics:** Custom application metrics
-- **Health Check Endpoints:** Automated monitoring integration
+## 🔒 Security
 
-## Advanced Configuration
+### Production Security Checklist
 
-### Scaling Services
+- [ ] **Strong Passwords**: All default passwords changed
+- [ ] **SSL/TLS**: HTTPS enabled with valid certificates  
+- [ ] **Network Isolation**: Internal networks configured
+- [ ] **Secret Management**: No secrets in environment files
+- [ ] **Container Security**: Non-root users, no new privileges
+- [ ] **Firewall**: Only required ports exposed
+- [ ] **Monitoring**: Security monitoring enabled
+- [ ] **Backups**: Automated backup strategy implemented
 
-```bash
-# Scale API instances
-docker-compose -f docker-compose.production.yml up -d --scale api=3
+## 📊 Monitoring & Observability
 
-# Scale Spark workers
-docker-compose -f docker-compose.production.yml up -d --scale spark-worker=4
-```
+### Monitoring Endpoints
 
-### Custom Spark Configuration
+| Environment | Grafana | Prometheus | Dagster | API Health |
+|-------------|---------|------------|---------|------------|
+| TEST | :3001 | :9091 | :3001 | :8001/health |
+| DEV | :3002 | :9091 | :3003 | :8002/health |
+| PROD | :3001 | :9090 | :3000 | :8000/health |
 
-```bash
-# Override Spark settings
-export SPARK_DRIVER_MEMORY=4g
-export SPARK_EXECUTOR_MEMORY=4g
-export SPARK_EXECUTOR_CORES=2
-
-docker-compose -f docker-compose.production.yml up -d spark-master spark-worker
-```
-
-### SSL/TLS Configuration
-
-1. **Generate SSL Certificates:**
-
-```bash
-mkdir -p docker/nginx/ssl
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout docker/nginx/ssl/nginx.key \
-  -out docker/nginx/ssl/nginx.crt
-```
-
-2. **Configure Nginx:** Update `docker/nginx/default.conf` with SSL settings
-
-### External Database Configuration
-
-For managed database services:
-
-```bash
-# Set external database URL
-export DATABASE_URL="postgresql://user:pass@external-db.com:5432/retail_db"
-
-# Disable local PostgreSQL
-docker-compose -f docker-compose.production.yml up -d --scale postgres=0
-```
-
-## Backup and Recovery
-
-### Database Backup
-
-```bash
-# Create backup
-docker-compose -f docker-compose.production.yml exec postgres pg_dump -U postgres retail_db > backup-$(date +%Y%m%d).sql
-
-# Restore backup
-docker-compose -f docker-compose.production.yml exec -T postgres psql -U postgres retail_db < backup-20240101.sql
-```
-
-### Application Data Backup
-
-```bash
-# Backup data volumes
-docker run --rm -v pwc-retail-etl_postgres_data:/source -v $(pwd):/backup alpine tar -czf /backup/postgres-backup.tar.gz -C /source .
-
-# Restore data volumes
-docker run --rm -v pwc-retail-etl_postgres_data:/target -v $(pwd):/backup alpine tar -xzf /backup/postgres-backup.tar.gz -C /target
-```
-
-## Troubleshooting
+## 🛠️ Troubleshooting
 
 ### Common Issues
 
 #### Port Conflicts
-
 ```bash
-# Check port usage
-netstat -tlnp | grep :8000
+# Find processes using ports
+netstat -tulpn | grep :8000
 
-# Use different ports
-export API_PORT=8001
-docker-compose -f docker-compose.production.yml up -d
+# Kill process
+sudo kill -9 <PID>
 ```
 
 #### Memory Issues
-
 ```bash
-# Check memory usage
+# Check container memory usage
 docker stats
 
-# Adjust memory limits in docker-compose.yml
-deploy:
-  resources:
-    limits:
-      memory: 2G
+# Clean up unused resources
+docker system prune -f
 ```
 
-#### Permission Issues
-
+#### Service Won't Start
 ```bash
-# Fix data directory permissions
-sudo chown -R $(id -u):$(id -g) data/ logs/
+# Check service logs
+./scripts/deploy.sh env --logs service-name
 
-# Fix Docker socket permissions
-sudo usermod -aG docker $USER
+# Restart specific service
+docker-compose restart service-name
 ```
 
-### Service-Specific Troubleshooting
+## 🎯 Usage Examples
 
-#### API Service Issues
-
+### Example 1: Deploy DEV environment with full monitoring
 ```bash
-# Check API logs
-docker-compose logs -f api
-
-# Test API connectivity
-curl -v http://localhost:8000/api/v1/health
-
-# Check database connectivity from API
-docker-compose exec api python -c "from data_access.db import get_database_url; print('DB OK')"
+./scripts/deploy.sh dev --profiles api,etl,orchestration,dev-tools,dev-monitoring --build --detach
 ```
 
-#### Database Issues
-
+### Example 2: Deploy PROD with high availability
 ```bash
-# Check PostgreSQL logs
-docker-compose logs -f postgres
-
-# Test database connection
-docker-compose exec postgres pg_isready -U postgres
-
-# Reset database
-docker-compose down -v
-docker-compose up -d postgres
+./scripts/deploy.sh prod --profiles api,etl,orchestration,monitoring,kafka-cluster,backup
 ```
 
-#### Spark Issues
-
+### Example 3: Run integration tests in TEST
 ```bash
-# Check Spark master logs
-docker-compose logs -f spark-master
-
-# Access Spark UI
-open http://localhost:8080
-
-# Test Spark job
-docker-compose run --rm etl-spark python -c "from pyspark.sql import SparkSession; spark = SparkSession.builder.getOrCreate(); print('Spark OK')"
+./scripts/deploy.sh test --profiles ci,integration-test --build
 ```
 
-### Performance Optimization
-
-#### Database Performance
-
+### Example 4: Scale production API
 ```bash
-# Analyze database performance
-docker-compose exec postgres psql -U postgres -c "SELECT * FROM pg_stat_activity;"
-
-# Update database statistics
-docker-compose exec postgres psql -U postgres -c "ANALYZE;"
+# Scale API to 3 instances
+docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml --env-file .env.prod up -d --scale api=3
 ```
-
-#### API Performance
-
-```bash
-# Monitor API performance
-curl -w "@curl-format.txt" -o /dev/null -s http://localhost:8000/api/v1/health
-
-# Scale API instances
-docker-compose up -d --scale api=3
-```
-
-### Recovery Procedures
-
-#### Complete System Recovery
-
-```bash
-# Stop all services
-docker-compose -f docker-compose.production.yml down
-
-# Remove all containers and volumes (DESTRUCTIVE)
-docker-compose -f docker-compose.production.yml down -v
-
-# Restore from backup
-# ... restore database and data volumes ...
-
-# Restart services
-docker-compose -f docker-compose.production.yml up -d
-```
-
-#### Rollback Deployment
-
-```bash
-# Automatic rollback (from deployment script)
-./scripts/deploy_production.sh # Will rollback on failure
-
-# Manual rollback
-git checkout previous-tag
-docker-compose -f docker-compose.production.yml up -d
-```
-
-## Security Considerations
-
-### Production Security Checklist
-
-- [ ] Change all default passwords
-- [ ] Use strong, unique API keys
-- [ ] Enable SSL/TLS certificates
-- [ ] Configure firewall rules
-- [ ] Enable audit logging
-- [ ] Regular security updates
-- [ ] Backup encryption
-- [ ] Network segmentation
-
-### Secrets Management
-
-```bash
-# Use environment files with restricted permissions
-chmod 600 .env.production
-
-# Consider using external secrets management
-# - HashiCorp Vault
-# - AWS Secrets Manager
-# - Azure Key Vault
-# - Google Secret Manager
-```
-
-## Support and Maintenance
-
-### Regular Maintenance Tasks
-
-1. **Update Dependencies:** Monthly security updates
-2. **Database Maintenance:** Weekly VACUUM and ANALYZE
-3. **Log Rotation:** Configure logrotate for container logs
-4. **Backup Verification:** Weekly backup restore tests
-5. **Performance Review:** Monthly performance analysis
-
-### Getting Help
-
-- **GitHub Issues:** Report bugs and feature requests
-- **Documentation:** Check inline code documentation
-- **Logs:** Always include relevant logs when seeking help
-- **Monitoring:** Use Grafana dashboards for system insights
 
 ---
 
-For additional help or questions, please refer to the main README.md or create an issue in the repository.
+**Enterprise Data Platform** | **Multi-Environment Ready** | **Production Tested**
+
+For more information, see the main [README.md](./README.md) or open an issue for support.

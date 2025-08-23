@@ -1,0 +1,352 @@
+version: '3.8'
+
+# =============================================================================
+# TEST ENVIRONMENT CONFIGURATION
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.test.yml up
+# =============================================================================
+
+services:
+  # =============================================================================
+  # DATABASE SERVICES - TEST CONFIGURATION
+  # =============================================================================
+  postgres:
+    container_name: pwc-postgres-test
+    environment:
+      POSTGRES_DB: retail_dw_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./docker/init-db-test.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    restart: "no"  # Don't restart automatically in test environment
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # MESSAGE QUEUE & STREAMING - TEST CONFIGURATION
+  # =============================================================================
+  rabbitmq:
+    container_name: pwc-rabbitmq-test
+    environment:
+      RABBITMQ_DEFAULT_USER: test_admin
+      RABBITMQ_DEFAULT_PASS: test_password
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - rabbitmq_test_data:/var/lib/rabbitmq
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+  zookeeper:
+    container_name: pwc-zookeeper-test
+    ports:
+      - "2182:2181"
+    volumes:
+      - zookeeper_test_data:/var/lib/zookeeper/data
+      - zookeeper_test_logs:/var/lib/zookeeper/log
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  kafka:
+    container_name: pwc-kafka-test
+    ports:
+      - "9093:9092"
+      - "9102:9101"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LOG_RETENTION_HOURS: 24  # Shorter retention for test
+      KAFKA_NUM_PARTITIONS: 1        # Single partition for test
+    volumes:
+      - kafka_test_data:/var/lib/kafka/data
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # SPARK CLUSTER - TEST CONFIGURATION
+  # =============================================================================
+  spark-master:
+    container_name: pwc-spark-master-test
+    ports:
+      - "8081:8080"  # Different port for test
+      - "7078:7077"
+    volumes:
+      - ./data/test:/app/data
+      - spark_test_recovery:/spark-recovery
+      - spark_test_warehouse:/opt/spark/spark-warehouse
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  spark-worker:
+    container_name: pwc-spark-worker-test
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 1G
+      SPARK_WORKER_CORES: 1
+    volumes:
+      - ./data/test:/app/data
+      - spark_test_warehouse:/opt/spark/spark-warehouse
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: '1'
+
+  # =============================================================================
+  # VECTOR DATABASE - TEST CONFIGURATION
+  # =============================================================================
+  typesense:
+    container_name: pwc-typesense-test
+    environment:
+      TYPESENSE_API_KEY: test-typesense-key
+    ports:
+      - "8109:8108"
+    volumes:
+      - typesense_test_data:/data
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # MONITORING - TEST CONFIGURATION (LIGHTWEIGHT)
+  # =============================================================================
+  datadog-agent:
+    container_name: pwc-datadog-test
+    environment:
+      DD_HOSTNAME: pwc-test
+      DD_ENV: test
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: false  # Reduce log collection
+      DD_PROCESS_AGENT_ENABLED: false               # Disable process agent
+    profiles: ["monitoring", "test-monitoring"]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # =============================================================================
+  # APPLICATION SERVICES - TEST CONFIGURATION
+  # =============================================================================
+  api:
+    container_name: pwc-api-test
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test_admin
+      RABBITMQ_PASSWORD: test_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TYPESENSE_HOST: typesense
+      TYPESENSE_API_KEY: test-typesense-key
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SECRET_KEY: test-secret-key-not-for-production
+      BASIC_AUTH_PASSWORD: test123
+      # Test-specific settings
+      LOG_LEVEL: DEBUG
+      TESTING: true
+      SKIP_AUTH: true  # For integration tests
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+    ports:
+      - "8001:8000"
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  # =============================================================================
+  # ETL SERVICES - TEST CONFIGURATION
+  # =============================================================================
+  etl-bronze:
+    container_name: pwc-etl-bronze-test
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: pandas  # Use pandas for faster test execution
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+    restart: "no"
+
+  etl-silver:
+    container_name: pwc-etl-silver-test
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: pandas
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+    restart: "no"
+
+  etl-gold:
+    container_name: pwc-etl-gold-test
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PROCESSING_ENGINE: pandas
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+    restart: "no"
+
+  # =============================================================================
+  # ORCHESTRATION - TEST CONFIGURATION
+  # =============================================================================
+  dagster:
+    container_name: pwc-dagster-test
+    environment:
+      ENVIRONMENT: test
+      DAGSTER_POSTGRES_DB: retail_dw_test
+      DAGSTER_POSTGRES_USER: test_user
+      DAGSTER_POSTGRES_PASSWORD: test_password
+      LOG_LEVEL: DEBUG
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+      - dagster_test_home:/app/dagster_home
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  # =============================================================================
+  # TEST-SPECIFIC SERVICES
+  # =============================================================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    container_name: pwc-test-runner
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test_admin
+      RABBITMQ_PASSWORD: test_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TYPESENSE_HOST: typesense
+      TYPESENSE_API_KEY: test-typesense-key
+      SPARK_MASTER_URL: spark://spark-master:7077
+      PYTHONPATH: /app/src
+      PYTEST_ARGS: ${PYTEST_ARGS:--v --tb=short}
+    volumes:
+      - ./:/app
+      - ./data/test:/app/data
+      - ./logs/test:/app/logs
+      - ./test-results:/app/test-results
+    command: ["pytest", "tests/", "--junit-xml=/app/test-results/junit.xml", "--cov=src", "--cov-report=html:/app/test-results/coverage"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    profiles: ["test", "ci"]
+    networks:
+      - backend-network
+
+  # Integration test service
+  integration-tester:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    container_name: pwc-integration-tester
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/retail_dw_test
+      API_BASE_URL: http://api:8000
+      TESTING: true
+    volumes:
+      - ./:/app
+      - ./test-results:/app/test-results
+    command: ["python", "scripts/run_integration_tests.py"]
+    depends_on:
+      - api
+      - etl-bronze
+      - etl-silver
+      - etl-gold
+    profiles: ["integration-test"]
+    networks:
+      - backend-network
+
+volumes:
+  # Test-specific volumes (isolated from other environments)
+  postgres_test_data:
+    driver: local
+  rabbitmq_test_data:
+    driver: local
+  zookeeper_test_data:
+    driver: local
+  zookeeper_test_logs:
+    driver: local
+  kafka_test_data:
+    driver: local
+  spark_test_recovery:
+    driver: local
+  spark_test_warehouse:
+    driver: local
+  typesense_test_data:
+    driver: local
+  dagster_test_home:
+    driver: local
+
+networks:
+  # Test networks inherit from base but can be overridden if needed
+  frontend-network:
+    external: false
+  backend-network:
+    external: false
+  database-network:
+    external: false
+  monitoring-network:
+    external: false

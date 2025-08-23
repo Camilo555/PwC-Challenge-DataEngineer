@@ -1,0 +1,99 @@
+# dbt Project Configuration for PwC Retail Data Platform
+name: 'pwc_retail_analytics'
+version: '1.0.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'pwc_retail'
+
+# These configurations specify where dbt should look for different types of files.
+model-paths: ["dbt/models"]
+analysis-paths: ["dbt/analyses"]
+test-paths: ["dbt/tests"]
+seed-paths: ["dbt/seeds"]
+macro-paths: ["dbt/macros"]
+snapshot-paths: ["dbt/snapshots"]
+
+target-path: "dbt/target"
+clean-targets:
+  - "dbt/target"
+  - "dbt/dbt_packages"
+
+# Configuring models
+models:
+  pwc_retail_analytics:
+    # Config indicated by + and applies to all files under models/example/
+    +materialized: table
+    staging:
+      +materialized: view
+    marts:
+      core:
+        +materialized: table
+        +tags: ["core", "production"]
+      finance:
+        +materialized: table  
+        +tags: ["finance", "production"]
+      marketing:
+        +materialized: table
+        +tags: ["marketing", "production"]
+    intermediate:
+      +materialized: view
+      +tags: ["intermediate"]
+
+# Global variables
+vars:
+  # Database schemas
+  bronze_schema: bronze
+  silver_schema: silver  
+  gold_schema: gold
+  metrics_schema: metrics
+  audit_schema: audit
+  
+  # Date ranges for incremental models
+  start_date: '2020-01-01'
+  end_date: '2025-12-31'
+  
+  # Business logic constants
+  high_value_customer_threshold: 1000
+  rfm_recency_days: 365
+  min_orders_for_segmentation: 3
+
+# Testing
+tests:
+  +store_failures: true
+  +schema: dbt_test_failures
+
+# Documentation
+docs-paths: ["dbt/docs"]
+
+# Packages
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.0
+  - package: calogica/dbt_expectations
+    version: 0.10.4
+  - package: dbt-labs/audit_helper
+    version: 0.12.0
+
+# Seeds configuration
+seeds:
+  pwc_retail_analytics:
+    +schema: seeds
+    +quote_columns: false
+    country_mappings:
+      +column_types:
+        country_code: varchar(3)
+        country_name: varchar(100)
+        region: varchar(50)
+
+# Snapshots configuration  
+snapshots:
+  pwc_retail_analytics:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+# Macros
+dispatch:
+  - macro_namespace: dbt_utils
+    search_order: ['pwc_retail_analytics', 'dbt_utils']

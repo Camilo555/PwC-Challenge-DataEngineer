@@ -1,0 +1,47 @@
+FROM python:3.10-slim
+
+ENV POETRY_VERSION=1.8.3 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    AIRFLOW_HOME=/app/airflow_home
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
+
+# Install Airflow separately to avoid dependency conflicts
+RUN pip install --no-cache-dir apache-airflow==2.10.4 --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.10.txt"
+
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock* ./
+
+# Install project dependencies (excluding airflow)
+RUN poetry config virtualenvs.create false \
+    && poetry install --only main --no-interaction --no-ansi
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/airflow_home/dags /app/airflow_home/logs /app/airflow_home/plugins /app/data /app/logs
+
+# Copy DAGs
+COPY src/airflow_dags/* /app/airflow_home/dags/
+
+EXPOSE 8080
+
+# Initialize Airflow database
+RUN airflow db init
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["airflow", "webserver", "--port", "8080"]

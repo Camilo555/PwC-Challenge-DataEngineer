@@ -1,0 +1,40 @@
+# dbt profiles configuration for PwC Retail Data Platform
+pwc_retail:
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_DB_HOST', 'localhost') }}"
+      user: "{{ env_var('DBT_DB_USER', 'dev_user') }}"
+      password: "{{ env_var('DBT_DB_PASSWORD', 'dev_password') }}"
+      port: "{{ env_var('DBT_DB_PORT', 5432) | int }}"
+      dbname: "{{ env_var('DBT_DB_NAME', 'retail_dev') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'dbt_dev') }}"
+      threads: "{{ env_var('DBT_THREADS', 4) | int }}"
+      keepalives_idle: 0
+      search_path: "bronze,silver,gold,dbt_dev,public"
+      
+    test:
+      type: postgres
+      host: "{{ env_var('DBT_DB_HOST', 'localhost') }}"
+      user: "{{ env_var('DBT_DB_USER', 'test_user') }}"
+      password: "{{ env_var('DBT_DB_PASSWORD', 'test_password') }}"
+      port: "{{ env_var('DBT_DB_PORT', 5433) | int }}"
+      dbname: "{{ env_var('DBT_DB_NAME', 'retail_test') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'dbt_test') }}"
+      threads: "{{ env_var('DBT_THREADS', 2) | int }}"
+      keepalives_idle: 0
+      search_path: "bronze,silver,gold,dbt_test,public"
+      
+    prod:
+      type: postgres
+      host: "{{ env_var('DBT_DB_HOST') }}"
+      user: "{{ env_var('DBT_DB_USER') }}"
+      password: "{{ env_var('DBT_DB_PASSWORD') }}"
+      port: "{{ env_var('DBT_DB_PORT', 5432) | int }}"
+      dbname: "{{ env_var('DBT_DB_NAME') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'dbt_prod') }}"
+      threads: "{{ env_var('DBT_THREADS', 8) | int }}"
+      keepalives_idle: 0
+      search_path: "bronze,silver,gold,dbt_prod,public"
+      
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"

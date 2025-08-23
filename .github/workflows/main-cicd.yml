@@ -142,6 +142,32 @@ jobs:
         print('✅ ETL components loaded successfully')
         "
 
+    - name: Test dbt configuration
+      env:
+        PYTHONPATH: src
+      run: |
+        # Test dbt project and profiles configuration
+        poetry run python -c "
+        import yaml
+        import os
+        
+        # Test dbt_project.yml
+        if os.path.exists('dbt_project.yml'):
+            with open('dbt_project.yml') as f:
+                config = yaml.safe_load(f)
+            assert 'name' in config, 'Missing project name in dbt_project.yml'
+            print('✅ dbt_project.yml configuration valid')
+        
+        # Test profiles.yml
+        if os.path.exists('profiles.yml'):
+            with open('profiles.yml') as f:
+                profiles = yaml.safe_load(f)
+            assert 'pwc_retail' in profiles, 'Missing pwc_retail profile'
+            print('✅ profiles.yml configuration valid')
+        
+        print('✅ dbt configuration validated successfully')
+        "
+
     - name: Test monitoring components
       env:
         PYTHONPATH: src
@@ -282,7 +308,7 @@ jobs:
 
     strategy:
       matrix:
-        component: [api, etl, dagster, airflow]
+        component: [api, etl, dagster, airflow, dbt]
 
     steps:
     - name: Checkout code

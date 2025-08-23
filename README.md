@@ -25,7 +25,8 @@
 🌐 **Data Enrichment**: External APIs, geographic data, product categorization, weather context  
 🔍 **Comprehensive Monitoring**: Datadog integration with System/ETL/Business metrics and intelligent alerting  
 ⚡ **Batch Operations**: High-performance bulk CRUD operations with error handling and metrics  
-🔍 **Vector Search**: Advanced Typesense integration with multiple filter types and faceted search  
+🔍 **Advanced Search**: Dual search engines with Typesense vector search and Elasticsearch analytics  
+⚡ **Search Analytics**: Advanced Elasticsearch aggregations and real-time search insights  
 📊 **Distributed Tracing**: OpenTelemetry integration with correlation IDs and cross-service tracing  
 💾 **Enterprise Backup & DR**: Comprehensive backup/disaster recovery with automated scheduling, multi-tier storage, and SLA compliance  
 🎯 **Performance Benchmarking**: Automated performance regression detection with ML-powered optimization  
@@ -568,6 +569,9 @@ docker exec pwc-dbt-dev dbt test
 - **⚡ Spark Master**: http://localhost:8080
 - **📈 Grafana**: http://localhost:3001 (admin/admin)
 - **🔍 Prometheus**: http://localhost:9090
+- **🔍 Elasticsearch**: http://localhost:9200
+- **📊 Kibana**: http://localhost:5601
+- **🚀 Typesense**: http://localhost:8108
 
 ## 📁 Enhanced Project Structure
 
@@ -1611,17 +1615,31 @@ POST /api/v1/batch/upsert
 - ✅ Real-time status tracking
 - ✅ Performance metrics and optimization
 
-### 🔍 **Advanced Search API**
-Comprehensive vector search with multiple filtering options:
+### 🔍 **Dual Search Engine Architecture**
 
+The platform features **two complementary search engines** for different use cases:
+
+#### 🚀 **Typesense** - Vector Search & Real-time Queries
+- **Use Case**: Fast, typo-tolerant search with vector similarity
+- **Strengths**: Sub-millisecond queries, faceted search, geo-search
+- **Best For**: User-facing search interfaces, autocomplete, filters
+
+#### 📊 **Elasticsearch** - Analytics & Complex Aggregations  
+- **Use Case**: Business intelligence, advanced analytics, reporting
+- **Strengths**: Complex aggregations, ML features, scalable analytics
+- **Best For**: Dashboards, trend analysis, business insights
+
+### 🔍 **Advanced Search API Examples**
+
+#### **Typesense Vector Search**
 ```bash
-# Basic Vector Search
+# Basic Vector Search with Filters
 GET /api/v1/search/typesense?q=electronics&country=UK&price_min=10
 
-# Enhanced Search with Filters
+# Enhanced Search with Multiple Filters
 GET /api/v1/search/enhanced?q=laptop&category=Electronics&price_min=500&date_from=2024-01-01
 
-# Faceted Search for Filter Discovery
+# Faceted Search for Dynamic Filtering
 GET /api/v1/search/faceted?q=*&facet_fields=category,country,customer_segment
 
 # Geographic Search
@@ -1636,6 +1654,77 @@ POST /api/v1/search/advanced
     "date_range": {"from": "2024-01-01", "to": "2024-12-31"}
   }
 }
+```
+
+#### **Elasticsearch Advanced Search**
+```bash
+# Elasticsearch Health Check
+GET /api/v1/search/elasticsearch/health
+
+# Complex Query with Highlighting
+POST /api/v1/search/elasticsearch/query
+{
+  "query": "premium customer electronics",
+  "size": 20,
+  "filters": {
+    "country": "United Kingdom", 
+    "customer_segment": "Premium",
+    "quantity_price": {"range": {"gte": 100}}
+  },
+  "sort": [{"order_date": "desc"}],
+  "highlight": true
+}
+
+# Transaction Search with Date Filters
+GET /api/v1/search/elasticsearch/transactions?q=laptop&country=UK&min_price=500&start_date=2024-01-01&end_date=2024-12-31
+
+# Customer Analytics Search
+GET /api/v1/search/elasticsearch/customers?q=premium&segment=VIP&min_orders=10&min_spent=1000&is_active=true
+
+# Advanced Analytics & Aggregations
+GET /api/v1/search/elasticsearch/analytics?index=retail-transactions&start_date=2024-01-01&end_date=2024-12-31
+```
+
+#### **Search Engine Comparison**
+```bash
+# Compare Results Between Both Engines
+GET /api/v1/search/comparison?q=electronics&country=UK&category=Computing
+
+# Response includes performance metrics and result comparison:
+{
+  "query": "electronics",
+  "engines": {
+    "typesense": {
+      "status": "success",
+      "found": 1247,
+      "search_time_ms": 12,
+      "results": [...] 
+    },
+    "elasticsearch": {
+      "status": "success", 
+      "found": 1251,
+      "search_time_ms": 45,
+      "results": [...]
+    }
+  }
+}
+```
+
+### 📊 **Search Analytics Features**
+
+#### **Elasticsearch Advanced Aggregations**
+- **Revenue Analytics**: Total revenue, average order value, sales trends
+- **Product Performance**: Top products, category analysis, brand insights  
+- **Customer Segmentation**: RFM analysis, behavioral patterns, CLV prediction
+- **Geographic Analysis**: Sales by country/region, shipping patterns
+- **Time-based Analysis**: Daily/monthly trends, seasonality patterns
+- **Advanced Metrics**: Conversion rates, cart abandonment, repeat customers
+
+#### **Real-time Search Insights**  
+- **Search Performance**: Query latency, throughput, error rates
+- **Popular Queries**: Most searched terms, zero-result queries
+- **Filter Usage**: Most used filters, filter combinations
+- **User Behavior**: Search patterns, click-through rates
 ```
 
 **Search Features**:

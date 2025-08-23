@@ -1,11 +1,25 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from core.logging import get_logger
 from vector_search.typesense_client import EnhancedTypesenseClient, get_typesense_client
+
+# Elasticsearch imports (conditional import to avoid breaking existing functionality)
+try:
+    from ....core.search import (
+        SearchQuery,
+        SearchResult,
+        get_elasticsearch_client,
+        get_indexing_service
+    )
+    ELASTICSEARCH_AVAILABLE = True
+except ImportError:
+    ELASTICSEARCH_AVAILABLE = False
 
 router = APIRouter(prefix="/search", tags=["search"])
 logger = get_logger(__name__)
@@ -342,3 +356,388 @@ def get_available_filters() -> dict[str, Any]:
             "filter_info": "/api/v1/search/filters/available"
         }
     }
+
+
+# ============================================================================
+# ELASTICSEARCH ENDPOINTS
+# ============================================================================
+
+if ELASTICSEARCH_AVAILABLE:
+    # Pydantic models for Elasticsearch endpoints
+    class ESSearchRequest(BaseModel):
+        """Elasticsearch search request model"""
+        query: str = Field(..., description="Search query string")
+        size: int = Field(default=10, ge=1, le=100, description="Number of results to return")
+        from_: int = Field(default=0, ge=0, alias="from", description="Offset for pagination")
+        filters: Optional[Dict[str, Any]] = Field(default=None, description="Search filters")
+        sort: Optional[List[Dict[str, str]]] = Field(default=None, description="Sort configuration")
+        highlight: bool = Field(default=True, description="Enable result highlighting")
+        index: str = Field(default="retail-transactions", description="Index to search")
+
+
+    class ESIndexingStatus(BaseModel):
+        """Elasticsearch indexing status response"""
+        status: str
+        total: int
+        indexed: int
+        errors: int
+        error_details: Optional[List[Dict[str, Any]]] = None
+        started_at: Optional[str] = None
+        completed_at: Optional[str] = None
+
+
+    class ESHealthCheck(BaseModel):
+        """Elasticsearch health check response"""
+        status: str
+        cluster_status: Optional[str] = None
+        number_of_nodes: Optional[int] = None
+        active_shards: Optional[int] = None
+        timestamp: str
+
+
+    @router.get("/elasticsearch/health", response_model=ESHealthCheck)
+    async def elasticsearch_health():
+        """Check Elasticsearch cluster health"""
+        try:
+            client = get_elasticsearch_client()
+            health = await client.health_check()
+            return ESHealthCheck(**health)
+        except Exception as e:
+            logger.error(f"Elasticsearch health check failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Elasticsearch service unavailable"
+            )
+
+
+    @router.post("/elasticsearch/query", response_model=SearchResult)
+    async def elasticsearch_search(request: ESSearchRequest):
+        """
+        Advanced Elasticsearch search across retail data with filters, sorting, and highlighting
+        
+        - **query**: Search query string with support for complex queries
+        - **size**: Number of results (1-100)
+        - **from**: Offset for pagination
+        - **filters**: Additional filters to apply
+        - **sort**: Sort configuration
+        - **highlight**: Enable text highlighting
+        - **index**: Index to search (retail-transactions, retail-customers, retail-products)
+        """
+        try:
+            client = get_elasticsearch_client()
+            
+            # Convert request to SearchQuery
+            search_query = SearchQuery(
+                query=request.query,
+                size=request.size,
+                from_=request.from_,
+                filters=request.filters,
+                sort=request.sort,
+                highlight=request.highlight
+            )
+            
+            # Execute search
+            result = await client.search(request.index, search_query)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch search failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Search failed: {str(e)}"
+            )
+
+
+    @router.get("/elasticsearch/transactions", response_model=SearchResult)
+    async def elasticsearch_search_transactions(
+        q: str = Query(..., description="Search query"),
+        size: int = Query(default=10, ge=1, le=100),
+        from_: int = Query(default=0, ge=0, alias="from"),
+        country: Optional[str] = Query(default=None, description="Filter by country"),
+        category: Optional[str] = Query(default=None, description="Filter by category"),
+        customer_segment: Optional[str] = Query(default=None, description="Filter by customer segment"),
+        min_price: Optional[float] = Query(default=None, description="Minimum price filter"),
+        max_price: Optional[float] = Query(default=None, description="Maximum price filter"),
+        start_date: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
+        end_date: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)")
+    ):
+        """
+        Search retail transactions with Elasticsearch advanced filters
+        
+        Supports full-text search across product names, descriptions, and customer data
+        with comprehensive filtering options using Elasticsearch's powerful query DSL.
+        """
+        try:
+            client = get_elasticsearch_client()
+            
+            # Build filters
+            filters = {}
+            if country:
+                filters["country"] = country
+            if category:
+                filters["category"] = category
+            if customer_segment:
+                filters["customer_segment"] = customer_segment
+            if min_price is not None or max_price is not None:
+                price_range = {}
+                if min_price is not None:
+                    price_range["gte"] = min_price
+                if max_price is not None:
+                    price_range["lte"] = max_price
+                filters["quantity_price"] = {"range": price_range}
+            if start_date or end_date:
+                date_range = {}
+                if start_date:
+                    date_range["gte"] = start_date
+                if end_date:
+                    date_range["lte"] = end_date
+                filters["order_date"] = {"range": date_range}
+            
+            # Create search query
+            search_query = SearchQuery(
+                query=q,
+                size=size,
+                from_=from_,
+                filters=filters if filters else None,
+                sort=[{"order_date": "desc"}],
+                highlight=True
+            )
+            
+            result = await client.search("retail-transactions", search_query)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch transaction search failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Transaction search failed: {str(e)}"
+            )
+
+
+    @router.get("/elasticsearch/customers", response_model=SearchResult)
+    async def elasticsearch_search_customers(
+        q: str = Query(..., description="Search query"),
+        size: int = Query(default=10, ge=1, le=100),
+        from_: int = Query(default=0, ge=0, alias="from"),
+        country: Optional[str] = Query(default=None, description="Filter by country"),
+        segment: Optional[str] = Query(default=None, description="Filter by customer segment"),
+        min_orders: Optional[int] = Query(default=None, description="Minimum number of orders"),
+        min_spent: Optional[float] = Query(default=None, description="Minimum total spent"),
+        is_active: Optional[bool] = Query(default=None, description="Filter by active status")
+    ):
+        """
+        Search customers with Elasticsearch segmentation and behavioral filters
+        
+        Find customers based on name, purchasing behavior, and demographics using
+        advanced Elasticsearch queries with RFM scoring and customer analytics.
+        """
+        try:
+            client = get_elasticsearch_client()
+            
+            # Build filters
+            filters = {}
+            if country:
+                filters["country"] = country
+            if segment:
+                filters["customer_segment"] = segment
+            if min_orders is not None:
+                filters["total_orders"] = {"range": {"gte": min_orders}}
+            if min_spent is not None:
+                filters["total_spent"] = {"range": {"gte": min_spent}}
+            if is_active is not None:
+                filters["is_active"] = is_active
+            
+            # Create search query
+            search_query = SearchQuery(
+                query=q,
+                size=size,
+                from_=from_,
+                filters=filters if filters else None,
+                sort=[{"total_spent": "desc"}],
+                highlight=True
+            )
+            
+            result = await client.search("retail-customers", search_query)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch customer search failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Customer search failed: {str(e)}"
+            )
+
+
+    @router.get("/elasticsearch/analytics", response_model=Dict[str, Any])
+    async def elasticsearch_analytics(
+        index: str = Query(default="retail-transactions", description="Index for analytics"),
+        start_date: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
+        end_date: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)")
+    ):
+        """
+        Get comprehensive Elasticsearch analytics and aggregations for retail data
+        
+        Returns advanced analytics including sales trends, top products, customer segments,
+        revenue analytics, and custom aggregations using Elasticsearch's aggregation framework.
+        """
+        try:
+            client = get_elasticsearch_client()
+            
+            # Build date range if provided
+            date_range = None
+            if start_date or end_date:
+                date_range = {}
+                if start_date:
+                    date_range["start"] = start_date
+                if end_date:
+                    date_range["end"] = end_date
+            
+            analytics = await client.get_analytics(index, date_range)
+            return {
+                "index": index,
+                "date_range": date_range,
+                "analytics": analytics,
+                "generated_at": datetime.utcnow().isoformat(),
+                "engine": "elasticsearch"
+            }
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch analytics failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Analytics failed: {str(e)}"
+            )
+
+
+    @router.post("/elasticsearch/index/setup", response_model=Dict[str, bool])
+    async def setup_elasticsearch_indexes():
+        """
+        Setup Elasticsearch indexes with proper mappings and analyzers
+        
+        Creates all required indexes for retail data with optimized configurations,
+        custom analyzers for product search, and proper field mappings.
+        """
+        try:
+            service = get_indexing_service()
+            results = await service.setup_indexes()
+            return results
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch index setup failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Index setup failed: {str(e)}"
+            )
+
+
+    @router.post("/elasticsearch/index/reindex-all", response_model=Dict[str, Any])
+    async def reindex_all_elasticsearch_data():
+        """
+        Complete reindexing of all retail data in Elasticsearch
+        
+        Recreates all indexes and reprocesses all data with enhanced analytics fields.
+        Use carefully as this is resource intensive.
+        """
+        try:
+            service = get_indexing_service()
+            result = await service.reindex_all()
+            return result
+            
+        except Exception as e:
+            logger.error(f"Elasticsearch complete reindexing failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Complete reindexing failed: {str(e)}"
+            )
+
+
+    @router.get("/comparison")
+    async def search_comparison(
+        q: str = Query(..., description="Search query to test both engines"),
+        size: int = Query(default=10, ge=1, le=50),
+        country: Optional[str] = Query(default=None, description="Filter by country"),
+        category: Optional[str] = Query(default=None, description="Filter by category")
+    ):
+        """
+        Compare search results between Typesense and Elasticsearch
+        
+        Returns results from both search engines for performance and relevance comparison.
+        """
+        results = {
+            "query": q,
+            "size": size,
+            "filters": {"country": country, "category": category},
+            "engines": {}
+        }
+        
+        # Typesense search
+        try:
+            enhanced_client = EnhancedTypesenseClient()
+            typesense_results = enhanced_client.search_with_filters(
+                query=q,
+                category_filter=category,
+                country_filter=country,
+                per_page=size,
+                page=1
+            )
+            results["engines"]["typesense"] = {
+                "status": "success",
+                "found": typesense_results.get("found", 0),
+                "search_time_ms": typesense_results.get("search_time_ms", 0),
+                "results": typesense_results.get("hits", [])[:5]  # Sample results
+            }
+        except Exception as e:
+            results["engines"]["typesense"] = {
+                "status": "error",
+                "error": str(e)
+            }
+        
+        # Elasticsearch search
+        try:
+            client = get_elasticsearch_client()
+            filters = {}
+            if country:
+                filters["country"] = country
+            if category:
+                filters["category"] = category
+            
+            search_query = SearchQuery(
+                query=q,
+                size=size,
+                filters=filters if filters else None,
+                highlight=True
+            )
+            
+            es_results = await client.search("retail-transactions", search_query)
+            results["engines"]["elasticsearch"] = {
+                "status": "success",
+                "found": es_results.total,
+                "search_time_ms": es_results.took,
+                "results": es_results.hits[:5]  # Sample results
+            }
+        except Exception as e:
+            results["engines"]["elasticsearch"] = {
+                "status": "error", 
+                "error": str(e)
+            }
+        
+        return results
+
+
+else:
+    # Elasticsearch not available - provide stub endpoints
+    @router.get("/elasticsearch/health")
+    async def elasticsearch_not_available():
+        """Elasticsearch is not configured or available"""
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Elasticsearch is not configured. Please check your environment configuration."
+        )
+    
+    @router.post("/elasticsearch/query")
+    async def elasticsearch_search_not_available():
+        """Elasticsearch search is not configured or available"""
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Elasticsearch is not configured. Please check your environment configuration."
+        )

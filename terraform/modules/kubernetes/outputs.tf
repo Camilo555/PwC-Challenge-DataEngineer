@@ -143,3 +143,24 @@ output "limit_range_name" {
   description = "Name of the limit range"
   value       = kubernetes_limit_range.main.metadata[0].name
 }
+
+# Elasticsearch
+output "elasticsearch_service_name" {
+  description = "Name of the Elasticsearch service"
+  value       = kubernetes_service.elasticsearch.metadata[0].name
+}
+
+output "elasticsearch_deployment_name" {
+  description = "Name of the Elasticsearch deployment"
+  value       = kubernetes_deployment.elasticsearch.metadata[0].name
+}
+
+output "elasticsearch_pvc_name" {
+  description = "Name of the Elasticsearch PVC"
+  value       = kubernetes_persistent_volume_claim.elasticsearch_storage.metadata[0].name
+}
+
+output "elasticsearch_internal_endpoint" {
+  description = "Internal cluster endpoint for Elasticsearch service"
+  value       = "http://${kubernetes_service.elasticsearch.metadata[0].name}.${kubernetes_namespace.main.metadata[0].name}.svc.cluster.local:9200"
+}

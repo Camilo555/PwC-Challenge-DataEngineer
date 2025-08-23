@@ -132,3 +132,10 @@ variable "service_annotations" {
     "service.beta.kubernetes.io/aws-load-balancer-type" = "nlb"
   }
 }
+
+# Elasticsearch Configuration
+variable "enable_kibana" {
+  description = "Enable Kibana deployment"
+  type        = bool
+  default     = false
+}

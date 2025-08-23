@@ -964,3 +964,203 @@ resource "kubernetes_limit_range" "main" {
     }
   }
 }
+
+# ============================================================================
+# ELASTICSEARCH SERVICE
+# ============================================================================
+
+# Elasticsearch Deployment
+resource "kubernetes_deployment" "elasticsearch" {
+  metadata {
+    name      = "${var.project_name}-elasticsearch"
+    namespace = kubernetes_namespace.main.metadata[0].name
+    labels = merge(var.labels, {
+      component = "elasticsearch"
+      version   = "v1"
+    })
+  }
+  
+  spec {
+    replicas = 1  # Single node for development/staging
+    
+    selector {
+      match_labels = {
+        app       = "${var.project_name}-elasticsearch"
+        component = "elasticsearch"
+      }
+    }
+    
+    template {
+      metadata {
+        labels = merge(var.labels, {
+          app       = "${var.project_name}-elasticsearch"
+          component = "elasticsearch"
+          version   = "v1"
+        })
+      }
+      
+      spec {
+        service_account_name = kubernetes_service_account.app.metadata[0].name
+        
+        security_context {
+          run_as_non_root = true
+          run_as_user     = 1000
+          fs_group        = 1000
+        }
+        
+        container {
+          name  = "elasticsearch"
+          image = "docker.elastic.co/elasticsearch/elasticsearch:8.11.0"
+          
+          port {
+            name           = "http"
+            container_port = 9200
+            protocol       = "TCP"
+          }
+          
+          port {
+            name           = "transport"
+            container_port = 9300
+            protocol       = "TCP"
+          }
+          
+          env {
+            name  = "discovery.type"
+            value = "single-node"
+          }
+          
+          env {
+            name  = "xpack.security.enabled"
+            value = "false"
+          }
+          
+          env {
+            name  = "xpack.security.enrollment.enabled"
+            value = "false"
+          }
+          
+          env {
+            name  = "bootstrap.memory_lock"
+            value = "true"
+          }
+          
+          env {
+            name  = "ES_JAVA_OPTS"
+            value = var.environment == "prod" ? "-Xms2g -Xmx2g" : "-Xms1g -Xmx1g"
+          }
+          
+          env {
+            name  = "cluster.name"
+            value = "${var.project_name}-cluster"
+          }
+          
+          env {
+            name  = "node.name"
+            value = "${var.project_name}-node"
+          }
+          
+          resources {
+            requests = {
+              cpu    = var.environment == "prod" ? "1000m" : "500m"
+              memory = var.environment == "prod" ? "2Gi" : "1Gi"
+            }
+            limits = {
+              cpu    = var.environment == "prod" ? "2000m" : "1000m"
+              memory = var.environment == "prod" ? "4Gi" : "2Gi"
+            }
+          }
+          
+          liveness_probe {
+            http_get {
+              path = "/_cluster/health"
+              port = 9200
+            }
+            initial_delay_seconds = 90
+            period_seconds        = 30
+            timeout_seconds       = 10
+            failure_threshold     = 3
+          }
+          
+          readiness_probe {
+            http_get {
+              path = "/_cluster/health"
+              port = 9200
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
+          
+          volume_mount {
+            name       = "elasticsearch-data"
+            mount_path = "/usr/share/elasticsearch/data"
+          }
+        }
+        
+        volume {
+          name = "elasticsearch-data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.elasticsearch_storage.metadata[0].name
+          }
+        }
+        
+        restart_policy = "Always"
+      }
+    }
+  }
+}
+
+# Elasticsearch PVC
+resource "kubernetes_persistent_volume_claim" "elasticsearch_storage" {
+  metadata {
+    name      = "${var.project_name}-elasticsearch-pvc"
+    namespace = kubernetes_namespace.main.metadata[0].name
+    labels    = var.labels
+  }
+  
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = kubernetes_storage_class.fast_ssd.metadata[0].name
+    
+    resources {
+      requests = {
+        storage = var.environment == "prod" ? "50Gi" : "20Gi"
+      }
+    }
+  }
+}
+
+# Elasticsearch Service
+resource "kubernetes_service" "elasticsearch" {
+  metadata {
+    name      = "${var.project_name}-elasticsearch-service"
+    namespace = kubernetes_namespace.main.metadata[0].name
+    labels = merge(var.labels, {
+      component = "elasticsearch"
+    })
+  }
+  
+  spec {
+    selector = {
+      app       = "${var.project_name}-elasticsearch"
+      component = "elasticsearch"
+    }
+    
+    port {
+      name        = "http"
+      port        = 9200
+      target_port = 9200
+      protocol    = "TCP"
+    }
+    
+    port {
+      name        = "transport"
+      port        = 9300
+      target_port = 9300
+      protocol    = "TCP"
+    }
+    
+    type = "ClusterIP"
+  }
+}

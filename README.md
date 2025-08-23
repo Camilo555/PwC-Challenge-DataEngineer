@@ -1794,48 +1794,247 @@ spec:
           periodSeconds: 5
 ```
 
-### 🌥️ **Multi-Cloud Deployment**
+#### 🛡️ **Enterprise Kubernetes Security**
+
+The platform includes comprehensive Kubernetes security hardening with enterprise-grade policies and configurations:
+
+**🔒 Security Features:**
+- **Security Contexts**: Non-root containers (UID 65534), read-only root filesystems
+- **Network Policies**: Micro-segmentation with pod-to-pod traffic restrictions  
+- **Resource Quotas**: Environment-specific CPU/memory limits and pod count restrictions
+- **RBAC**: Service accounts with least-privilege access patterns
+- **Secret Management**: Kubernetes secrets with base64 encoding for sensitive data
+
+**📋 Pod Security Standards:**
+```yaml
+# Security context applied to all containers
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  capabilities:
+    drop: ["ALL"]
+
+# Pod security context
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+```
+
+**🌐 Network Security:**
+```yaml
+# Network policies for API pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+spec:
+  podSelector:
+    matchLabels:
+      component: api
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          component: dagster
+  egress:
+  - ports:
+    - port: 5432  # Database access only
+    - port: 53    # DNS resolution only
+```
+
+**📊 Resource Management:**
+```yaml
+# Resource quotas per environment
+apiVersion: v1
+kind: ResourceQuota
+spec:
+  hard:
+    requests.cpu: "8"        # Production: 8 CPU, Dev: 4 CPU
+    requests.memory: "16Gi"  # Production: 16GB, Dev: 8GB
+    limits.cpu: "16"         # Max CPU limits
+    limits.memory: "32Gi"    # Max memory limits
+    pods: "20"               # Max pod count
+```
+
+**⚡ Auto-scaling Configuration:**
+- **Horizontal Pod Autoscaler**: CPU (70%) and memory (80%) based scaling
+- **Environment-aware scaling**: Prod (2-10 replicas), Dev (1-5 replicas)
+- **Stabilization windows**: Scale-up (60s), Scale-down (300s) for stability
+
+**🔍 Multi-Cloud Storage:**
+- **AWS**: EBS GP3 volumes with encryption
+- **Azure**: Premium SSD with zone redundancy  
+- **GCP**: SSD persistent disks with regional replication
+
+### 🌥️ **Multi-Cloud Infrastructure as Code**
+
+The platform includes comprehensive Terraform infrastructure for enterprise-grade multi-cloud deployments across AWS, Azure, and GCP with full automation, security hardening, and monitoring capabilities.
+
+#### 🏗️ **Infrastructure Architecture**
+
+**Enterprise Features:**
+- 🔒 **Security**: KMS encryption, VPC isolation, IAM roles, audit logging
+- 📈 **Auto-scaling**: HPA with CPU/memory metrics, cluster auto-scaling
+- 💾 **High Availability**: Multi-AZ deployment, automated backups, disaster recovery
+- 📊 **Monitoring**: Integrated Prometheus, Grafana, CloudWatch/Monitor/Operations
+- 🔄 **CI/CD Ready**: Environment-specific configurations, automated deployments
+
+#### **Quick Deployment**
+
+```bash
+# Navigate to terraform directory
+cd terraform
+
+# Development Environment
+make plan ENV=dev
+make apply ENV=dev
+
+# Staging Environment  
+make plan ENV=staging
+make apply ENV=staging
+
+# Production Environment
+make plan ENV=prod
+make apply ENV=prod
+
+# Alternative: Use deployment scripts
+./scripts/deploy.sh -e prod -c aws -a  # Auto-approve
+./scripts/deploy.ps1 -Environment prod -CloudProvider aws -AutoApprove  # Windows
+```
 
 #### **AWS Deployment**
 ```bash
-# AWS EKS with RDS and ElastiCache
-terraform init
-terraform plan -var="environment=production" -var="cloud_provider=aws"
+# Complete AWS infrastructure with EKS, RDS, S3, ECR
+cd terraform
+
+# Setup Terraform backend (one-time)
+./scripts/setup-backend.sh -e prod -r us-west-2
+
+# Deploy infrastructure
+terraform init -backend-config=environments/prod/backend.hcl
+terraform plan -var-file=environments/prod/terraform.tfvars
 terraform apply
 
-# Services:
-# - EKS cluster for container orchestration
-# - RDS PostgreSQL for data warehouse
-# - ElastiCache Redis for caching
-# - S3 for data lake storage
-# - CloudWatch for monitoring
+# Configure kubectl
+aws eks update-kubeconfig --region us-west-2 --name pwc-retail-data-platform-prod
+
+# Deployed Services:
+# ✅ EKS cluster (1.28) with managed node groups
+# ✅ RDS PostgreSQL (r5.large) with automated backups
+# ✅ S3 data lake with versioning and encryption
+# ✅ ECR repositories for container images
+# ✅ VPC with public/private subnets across 3 AZs
+# ✅ Application Load Balancer with SSL termination
+# ✅ KMS keys for encryption at rest
+# ✅ IAM roles with least-privilege access
+# ✅ CloudWatch monitoring and alerting
 ```
 
 #### **Azure Deployment**
 ```bash
-# Azure AKS with Azure Database
-terraform plan -var="environment=production" -var="cloud_provider=azure"
+# Azure AKS with comprehensive services
+make plan ENV=prod CLOUD_PROVIDER=azure
+make apply ENV=prod CLOUD_PROVIDER=azure
 
-# Services:
-# - AKS cluster for orchestration
-# - Azure Database for PostgreSQL
-# - Azure Cache for Redis
-# - Azure Blob Storage for data lake
-# - Azure Monitor for observability
+# Or manually
+terraform plan -var-file=environments/prod/terraform.tfvars -var="cloud_provider=azure"
+terraform apply
+
+# Configure kubectl  
+az aks get-credentials --resource-group pwc-retail-data-platform-prod --name pwc-retail-data-platform-prod
+
+# Deployed Services:
+# ✅ AKS cluster with system/user node pools
+# ✅ Azure Database for PostgreSQL Flexible Server
+# ✅ Azure Cache for Redis Premium
+# ✅ Azure Blob Storage with hierarchical namespace
+# ✅ Azure Container Registry with geo-replication
+# ✅ Virtual Network with subnet delegation
+# ✅ Application Gateway with WAF protection
+# ✅ Key Vault for secrets management
+# ✅ Azure Monitor with Log Analytics workspace
 ```
 
 #### **Google Cloud Deployment**
 ```bash
-# GKE with Cloud SQL and Memorystore
-terraform plan -var="environment=production" -var="cloud_provider=gcp"
+# GCP GKE with Cloud SQL and comprehensive services  
+make plan ENV=prod CLOUD_PROVIDER=gcp
+make apply ENV=prod CLOUD_PROVIDER=gcp
 
-# Services:
-# - GKE cluster for containers
-# - Cloud SQL for PostgreSQL
-# - Memorystore for Redis
-# - Cloud Storage for data lake
-# - Cloud Monitoring & Logging
+# Configure kubectl
+gcloud container clusters get-credentials pwc-retail-data-platform-prod \
+  --region us-west1 --project your-project-id
+
+# Deployed Services:
+# ✅ GKE autopilot cluster with Workload Identity
+# ✅ Cloud SQL for PostgreSQL with high availability
+# ✅ Memorystore for Redis with auth enabled  
+# ✅ Cloud Storage multi-regional buckets
+# ✅ Artifact Registry for container images
+# ✅ VPC with private Google access
+# ✅ Cloud Load Balancing with SSL certificates
+# ✅ Cloud KMS for encryption key management
+# ✅ Cloud Operations Suite (monitoring/logging)
 ```
+
+#### 📋 **Environment Configuration**
+
+Each environment has optimized resource allocation:
+
+**Development** (`environments/dev/terraform.tfvars`):
+- **Compute**: t3.medium nodes, 2-4 replicas
+- **Database**: db.t3.micro, 20GB storage
+- **Features**: Basic monitoring, 3-day backups
+
+**Staging** (`environments/staging/terraform.tfvars`):
+- **Compute**: t3.large nodes, 3-6 replicas  
+- **Database**: db.t3.small, 50GB storage
+- **Features**: Full monitoring, 7-day backups
+
+**Production** (`environments/prod/terraform.tfvars`):
+- **Compute**: m5.large+ nodes, 5-20 replicas
+- **Database**: db.r5.large, 200GB storage
+- **Features**: Enterprise monitoring, 30-day backups, audit logs
+
+#### 🛠️ **Infrastructure Management**
+
+```bash
+# Environment management
+make plan ENV=staging              # Plan changes
+make apply ENV=prod               # Apply changes  
+make destroy ENV=dev              # Destroy environment
+make output ENV=prod              # Show outputs
+make clean                        # Clean temporary files
+
+# Advanced operations
+make state-list ENV=prod          # List resources
+make refresh ENV=staging          # Refresh state
+make graph ENV=dev                # Generate dependency graph
+make cost-estimate ENV=prod       # Cost estimation (requires Infracost)
+make security-scan               # Security scan (Checkov/tfsec)
+
+# Backup and disaster recovery
+terraform output -raw kubectl_config_command  # Get kubectl config
+terraform output database_connection_string   # Get DB connection
+```
+
+#### 🔒 **Security & Compliance**
+
+**Encryption & Security:**
+- 🔐 KMS encryption for all storage (EBS, RDS, S3/Blob/GCS)  
+- 🔒 VPC/VNet isolation with private subnets
+- 🛡️ Security groups with least-privilege access
+- 📝 Audit logging enabled for all services
+- 🔑 IAM roles with service-specific permissions
+
+**Compliance Features:**
+- 📊 Resource tagging for cost allocation
+- 📋 Backup retention policies (3/7/30 days)
+- 🚨 Monitoring and alerting on security events  
+- 🔄 Automated security patching for managed services
 
 ## 🧪 Comprehensive Testing & Validation
 

@@ -35,7 +35,8 @@
       "Bash(git pull:*)",
       "Bash(set ENVIRONMENT=testing)",
       "Bash(set)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(del test_self_healing_simple.py)"
     ],
     "defaultMode": "acceptEdits"
   }

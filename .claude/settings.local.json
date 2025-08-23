@@ -33,7 +33,9 @@
       "Bash(mkdir:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",
-      "Bash(set ENVIRONMENT=testing)"
+      "Bash(set ENVIRONMENT=testing)",
+      "Bash(set)",
+      "Bash(git reset:*)"
     ],
     "defaultMode": "acceptEdits"
   }

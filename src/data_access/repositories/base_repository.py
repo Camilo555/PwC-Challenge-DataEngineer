@@ -195,6 +195,13 @@ class SyncSQLModelRepository(IRepository[T]):
 
     async def add(self, entity: T) -> T:
         """Add entity to database."""
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_add, entity
+        )
+
+    def _sync_add(self, entity: T) -> T:
+        """Synchronous add operation."""
         self.session.add(entity)
         self.session.flush()
         self.session.refresh(entity)
@@ -202,16 +209,33 @@ class SyncSQLModelRepository(IRepository[T]):
 
     async def get(self, id: UUID) -> T | None:
         """Get entity by primary key."""
-        return self.session.get(self.model_class, id)
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self.session.get(self.model_class, id)
+        )
 
     async def update(self, entity: T) -> T:
         """Update entity."""
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_update, entity
+        )
+
+    def _sync_update(self, entity: T) -> T:
+        """Synchronous update operation."""
         self.session.flush()
         self.session.refresh(entity)
         return entity
 
     async def delete(self, id: UUID) -> bool:
         """Delete entity by ID."""
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_delete, id
+        )
+
+    def _sync_delete(self, id: UUID) -> bool:
+        """Synchronous delete operation."""
         entity = self.session.get(self.model_class, id)
         if entity:
             self.session.delete(entity)
@@ -222,6 +246,14 @@ class SyncSQLModelRepository(IRepository[T]):
     async def list(self, specification: ISpecification | None = None,
                   skip: int = 0, limit: int = 100) -> list[T]:
         """List entities with filtering."""
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_list, specification, skip, limit
+        )
+
+    def _sync_list(self, specification: ISpecification | None = None,
+                  skip: int = 0, limit: int = 100) -> list[T]:
+        """Synchronous list operation."""
         stmt = select(self.model_class)
 
         if specification:
@@ -233,6 +265,13 @@ class SyncSQLModelRepository(IRepository[T]):
 
     async def count(self, specification: ISpecification | None = None) -> int:
         """Count entities."""
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_count, specification
+        )
+
+    def _sync_count(self, specification: ISpecification | None = None) -> int:
+        """Synchronous count operation."""
         stmt = select(func.count(self.model_class.id))
 
         if specification:
@@ -243,7 +282,10 @@ class SyncSQLModelRepository(IRepository[T]):
 
     async def exists(self, id: UUID) -> bool:
         """Check if entity exists."""
-        return self.session.get(self.model_class, id) is not None
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self.session.get(self.model_class, id) is not None
+        )
 
 
 class RepositoryFactory:

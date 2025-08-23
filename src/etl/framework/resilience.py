@@ -3,11 +3,12 @@ Enhanced Error Handling and Retry Mechanisms for ETL Processors
 Provides comprehensive retry logic, circuit breakers, and fault tolerance.
 """
 
+import asyncio
 import random
 import threading
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -113,6 +114,26 @@ class CircuitBreaker:
 
         try:
             result = func(*args, **kwargs)
+            self._on_success()
+            return result
+
+        except self.config.expected_exception:
+            self._on_failure()
+            raise
+
+    async def call_async(self, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
+        """Call an async function through the circuit breaker"""
+
+        with self.lock:
+            if self.state == CircuitBreakerState.OPEN:
+                if self._should_attempt_reset():
+                    self.state = CircuitBreakerState.HALF_OPEN
+                    self.logger.info("Circuit breaker transitioning to HALF_OPEN")
+                else:
+                    raise Exception("Circuit breaker is OPEN. Service unavailable.")
+
+        try:
+            result = await func(*args, **kwargs)
             self._on_success()
             return result
 
@@ -267,6 +288,32 @@ class RetryHandler:
 
         return False
 
+    async def execute_with_retry(
+        self,
+        func: Callable[..., Awaitable[T]],
+        *args,
+        **kwargs
+    ) -> T:
+        """Execute async function with retry logic"""
+        last_exception = None
+
+        for attempt in range(1, self.config.max_attempts + 1):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+
+                if attempt < self.config.max_attempts and self.should_retry(e, attempt):
+                    delay = self.calculate_delay(attempt)
+                    self.logger.warning(f"Attempt {attempt} failed: {e}. Retrying in {delay:.2f}s")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    self.logger.error(f"All retry attempts exhausted. Final error: {e}")
+                    break
+
+        raise last_exception
+
 
 class ErrorTracker:
     """Tracks and analyzes error patterns"""
@@ -388,6 +435,70 @@ class ResilientExecutor:
                 else:
                     self.logger.error(
                         f"All retry attempts exhausted. Final error: {e} "
+                        f"(category: {category.value}, severity: {severity.value})"
+                    )
+                    break
+
+        # All retries exhausted
+        raise last_exception
+
+    async def execute_async(
+        self,
+        func: Callable[..., Awaitable[T]],
+        *args,
+        context: dict[str, Any] | None = None,
+        **kwargs
+    ) -> T:
+        """Execute an async function with full resilience mechanisms"""
+
+        context = context or {}
+        last_exception = None
+
+        for attempt in range(1, self.retry_config.max_attempts + 1):
+            try:
+                # Use circuit breaker if configured
+                if self.circuit_breaker:
+                    result = await self.circuit_breaker.call_async(func, *args, **kwargs)
+                else:
+                    result = await func(*args, **kwargs)
+
+                if attempt > 1:
+                    self.logger.info(f"Async function succeeded on attempt {attempt}")
+
+                return result
+
+            except Exception as e:
+                last_exception = e
+
+                # Classify and record error
+                category = self.error_classifier.classify_error(e)
+                severity = self.error_classifier.get_severity(category)
+
+                error_record = ErrorRecord(
+                    timestamp=datetime.now(),
+                    exception=e,
+                    category=category,
+                    severity=severity,
+                    context=context,
+                    retry_attempt=attempt
+                )
+
+                self.error_tracker.record_error(error_record)
+
+                # Check if we should retry
+                if attempt < self.retry_config.max_attempts and self.retry_handler.should_retry(e, attempt):
+                    delay = self.retry_handler.calculate_delay(attempt)
+
+                    self.logger.warning(
+                        f"Async attempt {attempt} failed: {e}. "
+                        f"Retrying in {delay:.2f}s (category: {category.value}, severity: {severity.value})"
+                    )
+
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    self.logger.error(
+                        f"All async retry attempts exhausted. Final error: {e} "
                         f"(category: {category.value}, severity: {severity.value})"
                     )
                     break

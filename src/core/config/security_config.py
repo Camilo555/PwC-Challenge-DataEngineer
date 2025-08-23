@@ -24,10 +24,10 @@ class SecurityConfig(BaseSettings):
     # Authentication - NO DEFAULT PASSWORDS IN PRODUCTION
     auth_enabled: bool = Field(default=True)
     auth_type: str = Field(default="jwt")  # basic, oauth2, jwt
-    basic_auth_username: str = Field(default="")  # Must be set via environment
-    basic_auth_password: str = Field(default="")  # Must be set via environment - NEVER USE DEFAULTS
-    admin_username: str = Field(default="")  # Must be set via environment
-    hashed_password: str = Field(default="")  # Must be generated with strong password
+    basic_auth_username: str | None = Field(default=None)  # Must be set via environment
+    basic_auth_password: str | None = Field(default=None)  # Must be set via environment - NEVER USE DEFAULTS
+    admin_username: str | None = Field(default=None)  # Must be set via environment
+    hashed_password: str | None = Field(default=None)  # Must be generated with strong password
 
     # JWT Configuration
     jwt_auth_enabled: bool = Field(default=True)
@@ -135,17 +135,21 @@ class SecurityConfig(BaseSettings):
 
     @field_validator("basic_auth_password")
     @classmethod
-    def validate_password_strength(cls, v: str) -> str:
+    def validate_password_strength(cls, v: str | None) -> str | None:
         """Validate password strength."""
         import os
 
-        # Skip validation in development/testing environments or when auth is disabled
-        env = os.getenv("ENVIRONMENT", "development").lower()
-        if env in ["development", "testing"] or not v:
-            return v or "test_password_123!"
+        if v is None:
+            return None
 
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
+        # Skip validation in development/testing environments
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env in ["development", "testing"]:
+            return v
+
+        # Production password requirements
+        if len(v) < 12:  # Increased minimum length
+            raise ValueError("Production password must be at least 12 characters long")
 
         has_upper = any(c.isupper() for c in v)
         has_lower = any(c.islower() for c in v)
@@ -154,10 +158,50 @@ class SecurityConfig(BaseSettings):
 
         if not (has_upper and has_lower and has_digit and has_special):
             raise ValueError(
-                "Password must contain uppercase, lowercase, number, and special character"
+                "Production password must contain uppercase, lowercase, number, and special character"
             )
 
+        # Check for common patterns
+        common_patterns = ["password", "123456", "admin", "user", "test"]
+        if any(pattern in v.lower() for pattern in common_patterns):
+            raise ValueError("Password cannot contain common patterns")
+
         return v
+
+    def validate_production_security(self) -> None:
+        """Validate security configuration for production deployment."""
+        import os
+        
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env != "production":
+            return
+        
+        errors = []
+        
+        # Validate authentication credentials are set
+        if self.auth_enabled and self.auth_type == "basic":
+            if not self.basic_auth_username:
+                errors.append("BASIC_AUTH_USERNAME must be set in production environment")
+            if not self.basic_auth_password:
+                errors.append("BASIC_AUTH_PASSWORD must be set in production environment")
+        
+        # Validate HTTPS is enabled in production
+        if not self.https_enabled:
+            errors.append("HTTPS must be enabled in production environment")
+        
+        # Validate secrets are properly configured
+        if not self.secret_key or len(self.secret_key) < 32:
+            errors.append("SECRET_KEY must be at least 32 characters in production")
+        
+        if not self.jwt_secret_key or len(self.jwt_secret_key) < 32:
+            errors.append("JWT_SECRET_KEY must be at least 32 characters in production")
+        
+        # Validate CORS is properly configured
+        if "*" in self.cors_allowed_origins:
+            errors.append("CORS wildcard (*) origins not allowed in production")
+        
+        if errors:
+            raise ValueError(f"Production security validation failed: {'; '.join(errors)}")
 
     def get_environment_overrides(self, environment: Environment) -> dict[str, Any]:
         """Get environment-specific security overrides."""

@@ -53,7 +53,7 @@ dagster-webserver = "^1.8.13"
 # Alternative: Apache Airflow (install separately due to dependency conflicts)
 # apache-airflow = {version = "^2.10.4", optional = true}
 # dbt
-dbt-postgres = "^1.7.4"
+dbt-postgres = "^1.9.0"
 dbt-spark = {extras = ["PyHive"], version = "^1.7.4"}
 # External APIs
 aiohttp = "^3.10.11"

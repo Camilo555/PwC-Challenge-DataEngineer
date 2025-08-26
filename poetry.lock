@@ -1560,14 +1560,14 @@ gmpy2 = ["gmpy2"]
 
 [[package]]
 name = "elastic-transport"
-version = "8.17.1"
+version = "9.1.0"
 description = "Transport classes and utilities shared among Python Elastic client libraries"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "elastic_transport-8.17.1-py3-none-any.whl", hash = "sha256:192718f498f1d10c5e9aa8b9cf32aed405e469a7f0e9d6a8923431dbb2c59fb8"},
-    {file = "elastic_transport-8.17.1.tar.gz", hash = "sha256:5edef32ac864dca8e2f0a613ef63491ee8d6b8cfb52881fa7313ba9290cac6d2"},
+    {file = "elastic_transport-9.1.0-py3-none-any.whl", hash = "sha256:369fa56874c74daae4ea10cbf40636d139f38f42bec0e006b9cd45a168ee7fce"},
+    {file = "elastic_transport-9.1.0.tar.gz", hash = "sha256:1590e44a25b0fe208107d5e8d7dea15c070525f3ac9baafbe4cb659cd14f073d"},
 ]
 
 [package.dependencies]
@@ -1575,22 +1575,22 @@ certifi = "*"
 urllib3 = ">=1.26.2,<3"
 
 [package.extras]
-develop = ["aiohttp", "furo", "httpx", "opentelemetry-api", "opentelemetry-sdk", "orjson", "pytest", "pytest-asyncio", "pytest-cov", "pytest-httpserver", "pytest-mock", "requests", "respx", "sphinx (>2)", "sphinx-autodoc-typehints", "trustme"]
+develop = ["aiohttp", "furo", "httpx", "opentelemetry-api", "opentelemetry-sdk", "orjson", "pytest", "pytest-asyncio", "pytest-cov", "pytest-httpbin", "pytest-httpserver", "pytest-mock", "requests", "respx", "sphinx (>2)", "sphinx-autodoc-typehints", "trustme"]
 
 [[package]]
 name = "elasticsearch"
-version = "8.19.0"
+version = "9.1.0"
 description = "Python client for Elasticsearch"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "elasticsearch-8.19.0-py3-none-any.whl", hash = "sha256:33eee4ec4244ef217952eeee0adff64a409120a1401c3bd35790e22145727e3f"},
-    {file = "elasticsearch-8.19.0.tar.gz", hash = "sha256:66fe755e55127afc47c68eca6858006932d9d128b68834a15e7e9894517cfb67"},
+    {file = "elasticsearch-9.1.0-py3-none-any.whl", hash = "sha256:96bb473dc70dbd94c37c4b05a0d2511af95d1b2db1657796f42546ef631cbbe4"},
+    {file = "elasticsearch-9.1.0.tar.gz", hash = "sha256:764d2f724eac94f6bf9903e4feae07112643a9efcfdc5c868c1b69bd48c52e09"},
 ]
 
 [package.dependencies]
-elastic-transport = ">=8.15.1,<9"
+elastic-transport = ">=9.1.0,<10"
 python-dateutil = "*"
 typing-extensions = "*"
 
@@ -8306,4 +8306,4 @@ test = ["zope.security", "zope.testrunner"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.11"
-content-hash = "a35b06d79bd070cd7dcafd4e1415f14feb9c55a044059e38a6c20d7230a8cc09"
+content-hash = "2146dbc9991f7488605d50156a51b8a73e6905275303ad027c15ae41a236c075"

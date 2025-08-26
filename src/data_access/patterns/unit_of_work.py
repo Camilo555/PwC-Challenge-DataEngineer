@@ -2,6 +2,8 @@
 Unit of Work Pattern Implementation
 Provides transaction management and coordinated repository access.
 """
+from __future__ import annotations
+
 import asyncio
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager

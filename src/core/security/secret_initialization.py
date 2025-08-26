@@ -2,6 +2,7 @@
 Secret Management Initialization
 Provides automated secret setup and initialization for production deployments.
 """
+from __future__ import annotations
 
 import os
 

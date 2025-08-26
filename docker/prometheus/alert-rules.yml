@@ -1,0 +1,286 @@
+groups:
+  - name: infrastructure.rules
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: (100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 2m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} for more than 2 minutes"
+          runbook_url: "https://runbooks.example.com/high-cpu"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 80
+        for: 1m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}% on filesystem {{ $labels.mountpoint }}"
+
+      # Disk Space Critical
+      - alert: DiskSpaceCritical
+        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}% on filesystem {{ $labels.mountpoint }}"
+
+  - name: application.rules
+    interval: 15s
+    rules:
+      # API Response Time
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-service"}[5m])) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is {{ $value }}s for API service"
+
+      # API Error Rate
+      - alert: HighAPIErrorRate
+        expr: (rate(http_requests_total{job="api-service",status=~"5.."}[5m]) / rate(http_requests_total{job="api-service"}[5m])) * 100 > 5
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value }}% over the last 5 minutes"
+
+      # Service Down
+      - alert: ServiceDown
+        expr: up{job=~"api-service|dagster|postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: service
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute"
+
+      # Too Many Concurrent Connections
+      - alert: TooManyConcurrentConnections
+        expr: service_mesh_active_connections > 1000
+        for: 2m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Too many concurrent connections"
+          description: "{{ $labels.service }} has {{ $value }} active connections"
+
+  - name: database.rules
+    interval: 30s
+    rules:
+      # Database Connection Pool Exhausted
+      - alert: DatabaseConnectionPoolExhausted
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Connection pool usage is {{ $value }}% of maximum connections"
+
+      # Slow Database Queries
+      - alert: SlowDatabaseQueries
+        expr: rate(pg_stat_user_tables_n_tup_upd[5m]) + rate(pg_stat_user_tables_n_tup_del[5m]) + rate(pg_stat_user_tables_n_tup_ins[5m]) < 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database appears to be running slowly"
+          description: "Very low database activity detected, possible performance issue"
+
+      # Database Replication Lag
+      - alert: DatabaseReplicationLag
+        expr: (pg_stat_replication_lag_bytes / 1024 / 1024) > 100
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database replication lag is high"
+          description: "Replication lag is {{ $value }}MB"
+
+      # Redis Memory Usage High
+      - alert: RedisMemoryHigh
+        expr: (redis_memory_used_bytes / redis_config_maxmemory) * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis memory usage is {{ $value }}%"
+
+  - name: etl.rules
+    interval: 60s
+    rules:
+      # ETL Job Failed
+      - alert: ETLJobFailed
+        expr: increase(dagster_job_failure_total[1h]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          component: etl
+        annotations:
+          summary: "ETL job failed"
+          description: "{{ $labels.job_name }} job has failed {{ $value }} times in the last hour"
+
+      # ETL Job Duration Too Long
+      - alert: ETLJobDurationTooLong
+        expr: dagster_job_duration_seconds > 3600
+        for: 0s
+        labels:
+          severity: warning
+          component: etl
+        annotations:
+          summary: "ETL job running too long"
+          description: "{{ $labels.job_name }} has been running for {{ $value }} seconds"
+
+      # Data Quality Issues
+      - alert: DataQualityIssue
+        expr: increase(data_quality_issues_total[1h]) > 10
+        for: 0s
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Data quality issues detected"
+          description: "{{ $value }} data quality issues detected in the last hour"
+
+      # Data Freshness Issue
+      - alert: DataFreshnessIssue
+        expr: time() - data_last_updated_timestamp > 7200  # 2 hours
+        for: 5m
+        labels:
+          severity: warning
+          component: data-freshness
+        annotations:
+          summary: "Data is stale"
+          description: "Data was last updated {{ $value | humanizeDuration }} ago"
+
+  - name: business.rules
+    interval: 60s
+    rules:
+      # Revenue Drop
+      - alert: RevenueDrop
+        expr: (rate(daily_revenue[1h]) / rate(daily_revenue[1h] offset 24h) - 1) * 100 < -20
+        for: 30m
+        labels:
+          severity: critical
+          component: business
+        annotations:
+          summary: "Significant revenue drop detected"
+          description: "Revenue has dropped by {{ $value }}% compared to yesterday"
+
+      # Transaction Volume Anomaly
+      - alert: TransactionVolumeAnomaly
+        expr: abs((rate(total_transactions[1h]) - rate(total_transactions[1h] offset 168h)) / rate(total_transactions[1h] offset 168h)) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "Unusual transaction volume"
+          description: "Transaction volume is {{ $value }}% different from last week"
+
+      # Customer Acquisition Rate Low
+      - alert: LowCustomerAcquisition
+        expr: rate(new_customers_total[24h]) < 50
+        for: 1h
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "Low customer acquisition rate"
+          description: "Only {{ $value }} new customers acquired in the last 24 hours"
+
+  - name: security.rules
+    interval: 15s
+    rules:
+      # High Authentication Failure Rate
+      - alert: HighAuthFailureRate
+        expr: (rate(http_requests_total{endpoint="/api/v1/auth/login",status="401"}[5m]) / rate(http_requests_total{endpoint="/api/v1/auth/login"}[5m])) * 100 > 50
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failure rate is {{ $value }}% - possible brute force attack"
+
+      # Unusual API Access Patterns
+      - alert: UnusualAPIAccess
+        expr: rate(http_requests_total[5m]) by (remote_addr) > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Unusual API access pattern"
+          description: "High request rate from {{ $labels.remote_addr }}: {{ $value }} requests/second"
+
+      # SSL Certificate Expiry
+      - alert: SSLCertificateExpiry
+        expr: (ssl_cert_not_after - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value }} days"
+
+  - name: cost-optimization.rules
+    interval: 300s  # 5 minutes
+    rules:
+      # Underutilized Resources
+      - alert: UnderutilizedCPU
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) < 20
+        for: 2h  # Must be underutilized for 2 hours
+        labels:
+          severity: info
+          component: cost-optimization
+        annotations:
+          summary: "Underutilized CPU resources"
+          description: "CPU usage on {{ $labels.instance }} is only {{ $value }}% - consider downsizing"
+
+      # Unused Storage Volumes
+      - alert: UnusedStorageVolume
+        expr: node_filesystem_files_free / node_filesystem_files > 0.95
+        for: 24h  # Volume must be mostly empty for 24 hours
+        labels:
+          severity: info
+          component: cost-optimization
+        annotations:
+          summary: "Storage volume appears unused"
+          description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value }}% empty"

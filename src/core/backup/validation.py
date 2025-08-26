@@ -4,6 +4,7 @@ Backup Validation and Integrity Checking
 Comprehensive backup validation system with integrity checks, corruption detection,
 and automated verification procedures.
 """
+from __future__ import annotations
 
 import gzip
 import hashlib
@@ -16,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from ...core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

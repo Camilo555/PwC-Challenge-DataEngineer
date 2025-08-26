@@ -4,10 +4,10 @@ Secret Management CLI
 Provides command-line interface for secret management operations.
 """
 
-import asyncio
 import argparse
-import sys
+import asyncio
 import os
+import sys
 from pathlib import Path
 
 # Fix Windows console encoding for emojis
@@ -18,10 +18,10 @@ if os.name == 'nt':  # Windows
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from core.security.secret_initialization import (
-    cli_init_secrets,
-    cli_rotate_secrets, 
     cli_health_check,
-    get_secret_initializer
+    cli_init_secrets,
+    cli_rotate_secrets,
+    get_secret_initializer,
 )
 
 
@@ -40,28 +40,28 @@ Examples:
   python secret_management.py export --format env     # Export secrets as .env file
         """
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
+
     # Init command
     init_parser = subparsers.add_parser('init', help='Initialize secrets')
     init_parser.add_argument(
-        '--force', 
-        action='store_true', 
+        '--force',
+        action='store_true',
         help='Force regeneration of existing secrets'
     )
-    
+
     # Rotate command
     rotate_parser = subparsers.add_parser('rotate', help='Rotate secrets')
     rotate_parser.add_argument(
-        'secrets', 
-        nargs='*', 
+        'secrets',
+        nargs='*',
         help='Specific secrets to rotate (default: all)'
     )
-    
+
     # Health command
     subparsers.add_parser('health', help='Check secret management health')
-    
+
     # Export command
     export_parser = subparsers.add_parser('export', help='Export secrets')
     export_parser.add_argument(
@@ -74,35 +74,35 @@ Examples:
         '--output',
         help='Output file (default: stdout)'
     )
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return
-    
+
     try:
         if args.command == 'init':
             await cli_init_secrets(force=args.force)
-            
+
         elif args.command == 'rotate':
             secret_names = args.secrets if args.secrets else None
             await cli_rotate_secrets(secret_names)
-            
+
         elif args.command == 'health':
             await cli_health_check()
-            
+
         elif args.command == 'export':
             initializer = get_secret_initializer()
             export_content = await initializer.export_secrets_for_deployment(args.format)
-            
+
             if args.output:
                 output_path = Path(args.output)
                 output_path.write_text(export_content)
                 print(f"[OK] Secrets exported to: {output_path}")
             else:
                 print(export_content)
-                
+
     except KeyboardInterrupt:
         print("\n[CANCELLED] Operation cancelled by user")
         sys.exit(1)

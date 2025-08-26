@@ -2,6 +2,7 @@
 Windows-specific PySpark configuration and utilities.
 Handles Hadoop winutils, Java detection, and proper environment setup.
 """
+from __future__ import annotations
 
 import os
 import subprocess
@@ -67,6 +68,101 @@ def detect_java_home() -> str | None:
 
     logger.warning("Could not detect Java installation")
     return None
+
+
+def validate_windows_environment() -> dict:
+    """
+    Validate Windows environment for Spark/Hadoop compatibility.
+    
+    Returns:
+        Dictionary containing validation results and environment information
+    """
+    import platform
+
+    result = {
+        'is_valid': True,
+        'platform': platform.system(),
+        'errors': [],
+        'warnings': []
+    }
+
+    # Check if we're on Windows
+    if result['platform'] != 'Windows':
+        result['is_valid'] = False
+        result['error'] = f"This function is for Windows only, current platform: {result['platform']}"
+        return result
+
+    # Check Java installation
+    java_home = os.environ.get('JAVA_HOME')
+    if java_home:
+        result['java_home'] = java_home
+        if not Path(java_home).exists():
+            result['errors'].append(f"JAVA_HOME path does not exist: {java_home}")
+            result['is_valid'] = False
+    else:
+        # Try to detect Java
+        detected_java = detect_java_home()
+        if detected_java:
+            result['java_home'] = detected_java
+            result['warnings'].append("JAVA_HOME not set, but Java was auto-detected")
+        else:
+            result['errors'].append("JAVA_HOME not set and Java not found")
+            result['is_valid'] = False
+
+    # Check Hadoop home
+    hadoop_home = os.environ.get('HADOOP_HOME')
+    if hadoop_home:
+        result['hadoop_home'] = hadoop_home
+        if not Path(hadoop_home).exists():
+            result['warnings'].append(f"HADOOP_HOME path does not exist: {hadoop_home}")
+    else:
+        result['warnings'].append("HADOOP_HOME not set")
+
+    # Check Spark home
+    spark_home = os.environ.get('SPARK_HOME')
+    if spark_home:
+        result['spark_home'] = spark_home
+        if not Path(spark_home).exists():
+            result['warnings'].append(f"SPARK_HOME path does not exist: {spark_home}")
+    else:
+        result['warnings'].append("SPARK_HOME not set")
+
+    return result
+
+
+def setup_hadoop_home() -> bool:
+    """
+    Setup Hadoop home directory for Windows compatibility.
+    
+    Returns:
+        True if setup successful, False otherwise
+    """
+    try:
+        project_root = Path(__file__).parent.parent.parent.parent
+        hadoop_dir = project_root / "hadoop"
+
+        # Create hadoop directory structure if it doesn't exist
+        hadoop_dir.mkdir(parents=True, exist_ok=True)
+        (hadoop_dir / "bin").mkdir(parents=True, exist_ok=True)
+
+        # Set environment variables
+        hadoop_home = str(hadoop_dir.absolute())
+        os.environ["HADOOP_HOME"] = hadoop_home
+        os.environ["HADOOP_CONF_DIR"] = hadoop_home
+
+        # Check for winutils.exe
+        winutils_path = hadoop_dir / "bin" / "winutils.exe"
+        if not winutils_path.exists():
+            logger.info(f"winutils.exe not found, creating placeholder at {winutils_path}")
+            # Create a placeholder file (in real scenario, you'd download winutils.exe)
+            winutils_path.touch()
+
+        logger.info(f"Hadoop home setup complete: {hadoop_home}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to setup Hadoop home: {e}")
+        return False
 
 
 def setup_windows_environment() -> bool:
@@ -405,3 +501,55 @@ def cleanup_spark_resources(spark: SparkSession) -> None:
 
     except Exception as e:
         logger.warning(f"Error during Spark cleanup: {e}")
+
+
+class WindowsSparkManager:
+    """Manager class for Windows-specific Spark operations."""
+
+    def __init__(self, app_name: str = "WindowsSparkApp"):
+        """Initialize the Windows Spark manager."""
+        self.app_name = app_name
+        self.spark_session = None
+        self._is_environment_setup = False
+
+    def setup_environment(self) -> bool:
+        """Setup the Windows environment for Spark."""
+        if not self._is_environment_setup:
+            self._is_environment_setup = setup_windows_environment()
+        return self._is_environment_setup
+
+    def validate_environment(self) -> dict:
+        """Validate the Windows environment."""
+        return validate_windows_environment()
+
+    def get_spark_session(self, force_recreate: bool = False) -> SparkSession:
+        """Get or create a Spark session."""
+        if self.spark_session is None or force_recreate:
+            if not self.setup_environment():
+                logger.warning("Environment setup had issues, continuing anyway...")
+
+            self.spark_session = create_windows_spark_session(self.app_name)
+
+        return self.spark_session
+
+    def test_functionality(self) -> bool:
+        """Test Spark functionality."""
+        if self.spark_session is None:
+            self.get_spark_session()
+
+        return test_spark_functionality(self.spark_session)
+
+    def cleanup(self) -> None:
+        """Cleanup Spark resources."""
+        if self.spark_session:
+            cleanup_spark_resources(self.spark_session)
+            self.spark_session = None
+
+    def __enter__(self):
+        """Context manager entry."""
+        self.get_spark_session()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.cleanup()

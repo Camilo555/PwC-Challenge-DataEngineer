@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 def main():
     """Run Gold layer processing based on environment configuration."""
     use_spark = os.getenv("USE_SPARK", "false").lower() == "true"
-    
+
     if use_spark:
         print("Using Spark-based Gold layer processing...")
         from etl.gold.spark_gold import main as spark_main

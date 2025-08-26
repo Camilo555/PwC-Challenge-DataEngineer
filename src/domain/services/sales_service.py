@@ -2,6 +2,7 @@
 Sales Domain Service
 Business logic for sales operations following domain-driven design principles.
 """
+from __future__ import annotations
 
 import logging
 

@@ -3,6 +3,7 @@ Domain Entities for Sales - Separate from Persistence
 Pure business logic without ORM dependencies.
 Implements DDD principles with rich domain models and business rules.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -53,19 +54,19 @@ class Money:
         if not self.currency or len(self.currency) != 3:
             raise ValueError("Currency must be a 3-letter ISO code")
 
-    def add(self, other: 'Money') -> 'Money':
+    def add(self, other: Money) -> Money:
         """Add two money amounts (same currency only)."""
         if self.currency != other.currency:
             raise ValueError("Cannot add different currencies")
         return Money(self.amount + other.amount, self.currency)
 
-    def subtract(self, other: 'Money') -> 'Money':
+    def subtract(self, other: Money) -> Money:
         """Subtract two money amounts (same currency only)."""
         if self.currency != other.currency:
             raise ValueError("Cannot subtract different currencies")
         return Money(self.amount - other.amount, self.currency)
 
-    def multiply(self, factor: Decimal) -> 'Money':
+    def multiply(self, factor: Decimal) -> Money:
         """Multiply money by a factor."""
         return Money(self.amount * factor, self.currency)
 

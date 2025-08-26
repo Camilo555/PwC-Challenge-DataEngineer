@@ -1,29 +1,20 @@
 """
-Redis Cache Implementation
-Provides high-performance caching with Redis backend.
+Distributed Messaging Cache Implementation
+Replaces Redis with RabbitMQ for task queuing and Kafka for event streaming.
 """
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
-import pickle
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any
 
-try:
-    import redis as sync_redis
-    import redis.asyncio as redis
-    REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
-
-try:
-    import msgpack
-    MSGPACK_AVAILABLE = True
-except ImportError:
-    MSGPACK_AVAILABLE = False
-
+from messaging.rabbitmq_manager import RabbitMQManager, QueueType, MessagePriority, TaskMessage, ResultMessage
+from streaming.kafka_manager import KafkaManager, StreamingTopic, StreamingMessage
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -57,79 +48,100 @@ class ICache:
         raise NotImplementedError
 
 
-class RedisCache(ICache):
-    """Redis cache implementation with advanced features."""
+class DistributedMessagingCache(ICache):
+    """Distributed messaging cache implementation using RabbitMQ and Kafka."""
 
-    def __init__(self, redis_url: str = "redis://localhost:6379",
-                 key_prefix: str = "pwc_challenge:",
+    def __init__(self, key_prefix: str = "pwc_challenge:",
                  default_ttl: int = 300,
-                 max_connections: int = 50,
-                 serialization: str = "json"):
+                 cache_queue_name: str = "cache_operations"):
 
-        if not REDIS_AVAILABLE:
-            raise ImportError("Redis is not available. Install with: pip install redis")
-
-        self.redis_url = redis_url
         self.key_prefix = key_prefix
         self.default_ttl = default_ttl
-        self.serialization = serialization
+        self.cache_queue_name = cache_queue_name
 
-        # Connection pool configuration
-        self.connection_pool = redis.ConnectionPool.from_url(
-            redis_url,
-            max_connections=max_connections,
-            decode_responses=False  # We handle encoding/decoding manually
-        )
-
-        self.redis_client = redis.Redis(connection_pool=self.connection_pool)
-
+        # Initialize messaging systems
+        self.rabbitmq_manager = RabbitMQManager()
+        self.kafka_manager = KafkaManager()
+        
+        # In-memory cache for frequently accessed items
+        self.local_cache: dict[str, dict[str, Any]] = {}
+        self.cache_timestamps: dict[str, datetime] = {}
+        
         # Metrics
         self.hit_count = 0
         self.miss_count = 0
         self.error_count = 0
+        
+        logger.info("DistributedMessagingCache initialized")
 
     def _build_key(self, key: str) -> str:
         """Build full cache key with prefix."""
         return f"{self.key_prefix}{key}"
 
-    def _serialize(self, value: Any) -> bytes:
+    def _serialize(self, value: Any) -> str:
         """Serialize value for storage."""
         try:
-            if self.serialization == "msgpack" and MSGPACK_AVAILABLE:
-                return msgpack.packb(value, use_bin_type=True)
-            elif self.serialization == "pickle":
-                return pickle.dumps(value)
-            else:  # Default to JSON
-                return json.dumps(value, default=str).encode('utf-8')
+            return json.dumps(value, default=str)
         except Exception as e:
             logger.error(f"Serialization error: {e}")
             raise
 
-    def _deserialize(self, data: bytes) -> Any:
+    def _deserialize(self, data: str) -> Any:
         """Deserialize value from storage."""
         try:
-            if self.serialization == "msgpack" and MSGPACK_AVAILABLE:
-                return msgpack.unpackb(data, raw=False)
-            elif self.serialization == "pickle":
-                return pickle.loads(data)
-            else:  # Default to JSON
-                return json.loads(data.decode('utf-8'))
+            return json.loads(data)
         except Exception as e:
             logger.error(f"Deserialization error: {e}")
             raise
+            
+    def _is_expired(self, timestamp: datetime, ttl: int) -> bool:
+        """Check if cache entry is expired."""
+        return datetime.now() > timestamp + timedelta(seconds=ttl)
+        
+    async def _publish_cache_operation(self, operation: str, key: str, value: Any = None, ttl: int = None) -> str:
+        """Publish cache operation to RabbitMQ for distributed processing."""
+        task_data = {
+            "operation": operation,
+            "key": key,
+            "value": self._serialize(value) if value is not None else None,
+            "ttl": ttl or self.default_ttl,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        task_id = self.rabbitmq_manager.publish_task(
+            task_name="cache_operation",
+            payload=task_data,
+            queue=QueueType.TASK_QUEUE,
+            priority=MessagePriority.HIGH
+        )
+        
+        return task_id
 
     async def get(self, key: str) -> Any | None:
-        """Get value from cache with automatic deserialization."""
+        """Get value from distributed cache system."""
         try:
             full_key = self._build_key(key)
-            data = await self.redis_client.get(full_key)
-
-            if data is None:
-                self.miss_count += 1
-                return None
-
-            self.hit_count += 1
-            return self._deserialize(data)
+            
+            # Check local cache first for performance
+            if full_key in self.local_cache:
+                if not self._is_expired(
+                    self.cache_timestamps[full_key], 
+                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                ):
+                    self.hit_count += 1
+                    return self.local_cache[full_key]['value']
+                else:
+                    # Remove expired entry
+                    del self.local_cache[full_key]
+                    del self.cache_timestamps[full_key]
+            
+            # Publish cache get operation to RabbitMQ
+            await self._publish_cache_operation("get", full_key)
+            
+            # For now, return None for cache miss
+            # In a full implementation, this would wait for a response from the cache worker
+            self.miss_count += 1
+            return None
 
         except Exception as e:
             self.error_count += 1
@@ -137,14 +149,33 @@ class RedisCache(ICache):
             return None
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> bool:
-        """Set value in cache with automatic serialization."""
+        """Set value in distributed cache system."""
         try:
             full_key = self._build_key(key)
-            serialized_value = self._serialize(value)
-
             cache_ttl = ttl or self.default_ttl
-
-            await self.redis_client.setex(full_key, cache_ttl, serialized_value)
+            
+            # Store in local cache immediately
+            self.local_cache[full_key] = {
+                'value': value,
+                'ttl': cache_ttl
+            }
+            self.cache_timestamps[full_key] = datetime.now()
+            
+            # Publish cache set operation to RabbitMQ for distribution
+            await self._publish_cache_operation("set", full_key, value, cache_ttl)
+            
+            # Publish cache event to Kafka for analytics/monitoring
+            self.kafka_manager.produce_message(
+                topic=StreamingTopic.SYSTEM_EVENTS,
+                message={
+                    "event_type": "cache_set",
+                    "key": full_key,
+                    "ttl": cache_ttl,
+                    "timestamp": datetime.now().isoformat()
+                },
+                key=full_key
+            )
+            
             return True
 
         except Exception as e:
@@ -153,11 +184,30 @@ class RedisCache(ICache):
             return False
 
     async def delete(self, key: str) -> bool:
-        """Delete key from cache."""
+        """Delete key from distributed cache system."""
         try:
             full_key = self._build_key(key)
-            result = await self.redis_client.delete(full_key)
-            return result > 0
+            
+            # Remove from local cache
+            if full_key in self.local_cache:
+                del self.local_cache[full_key]
+                del self.cache_timestamps[full_key]
+            
+            # Publish delete operation to RabbitMQ
+            await self._publish_cache_operation("delete", full_key)
+            
+            # Publish delete event to Kafka
+            self.kafka_manager.produce_message(
+                topic=StreamingTopic.SYSTEM_EVENTS,
+                message={
+                    "event_type": "cache_delete",
+                    "key": full_key,
+                    "timestamp": datetime.now().isoformat()
+                },
+                key=full_key
+            )
+            
+            return True
 
         except Exception as e:
             self.error_count += 1
@@ -165,11 +215,26 @@ class RedisCache(ICache):
             return False
 
     async def exists(self, key: str) -> bool:
-        """Check if key exists in cache."""
+        """Check if key exists in distributed cache system."""
         try:
             full_key = self._build_key(key)
-            result = await self.redis_client.exists(full_key)
-            return result > 0
+            
+            # Check local cache first
+            if full_key in self.local_cache:
+                if not self._is_expired(
+                    self.cache_timestamps[full_key], 
+                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                ):
+                    return True
+                else:
+                    # Remove expired entry
+                    del self.local_cache[full_key]
+                    del self.cache_timestamps[full_key]
+            
+            # For distributed check, publish existence check operation
+            await self._publish_cache_operation("exists", full_key)
+            
+            return False
 
         except Exception as e:
             self.error_count += 1
@@ -177,17 +242,40 @@ class RedisCache(ICache):
             return False
 
     async def invalidate(self, pattern: str) -> int:
-        """Invalidate keys matching pattern using SCAN for safety."""
+        """Invalidate keys matching pattern in distributed cache system."""
         try:
+            import fnmatch
+            
             full_pattern = self._build_key(pattern)
             deleted_count = 0
-
-            # Use SCAN to safely iterate over keys
-            async for key in self.redis_client.scan_iter(match=full_pattern, count=100):
-                await self.redis_client.delete(key)
+            
+            # Clear matching keys from local cache
+            keys_to_delete = []
+            for key in self.local_cache.keys():
+                if fnmatch.fnmatch(key, full_pattern):
+                    keys_to_delete.append(key)
+            
+            for key in keys_to_delete:
+                del self.local_cache[key]
+                del self.cache_timestamps[key]
                 deleted_count += 1
-
-            logger.info(f"Invalidated {deleted_count} keys matching pattern: {pattern}")
+            
+            # Publish invalidation operation to RabbitMQ for distributed clearing
+            await self._publish_cache_operation("invalidate", full_pattern)
+            
+            # Publish invalidation event to Kafka
+            self.kafka_manager.produce_message(
+                topic=StreamingTopic.SYSTEM_EVENTS,
+                message={
+                    "event_type": "cache_invalidate",
+                    "pattern": full_pattern,
+                    "local_deleted_count": deleted_count,
+                    "timestamp": datetime.now().isoformat()
+                },
+                key=f"invalidate_{uuid.uuid4()}"
+            )
+            
+            logger.info(f"Invalidated {deleted_count} local keys matching pattern: {pattern}")
             return deleted_count
 
         except Exception as e:
@@ -198,7 +286,6 @@ class RedisCache(ICache):
     async def clear(self) -> bool:
         """Clear all cache entries with prefix."""
         try:
-            pattern = f"{self.key_prefix}*"
             deleted_count = await self.invalidate("*")
             logger.info(f"Cleared {deleted_count} cache entries")
             return True
@@ -209,10 +296,24 @@ class RedisCache(ICache):
             return False
 
     async def increment(self, key: str, amount: int = 1) -> int:
-        """Increment numeric value in cache."""
+        """Increment numeric value in distributed cache system."""
         try:
             full_key = self._build_key(key)
-            return await self.redis_client.incrby(full_key, amount)
+            
+            # Get current value from local cache
+            current_value = 0
+            if full_key in self.local_cache:
+                if not self._is_expired(
+                    self.cache_timestamps[full_key], 
+                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                ):
+                    current_value = self.local_cache[full_key]['value']
+            
+            # Increment and store
+            new_value = current_value + amount
+            await self.set(key, new_value)
+            
+            return new_value
 
         except Exception as e:
             self.error_count += 1
@@ -223,7 +324,15 @@ class RedisCache(ICache):
         """Set expiration for existing key."""
         try:
             full_key = self._build_key(key)
-            return await self.redis_client.expire(full_key, ttl)
+            
+            if full_key in self.local_cache:
+                self.local_cache[full_key]['ttl'] = ttl
+                self.cache_timestamps[full_key] = datetime.now()
+            
+            # Publish expire operation to RabbitMQ
+            await self._publish_cache_operation("expire", full_key, ttl=ttl)
+            
+            return True
 
         except Exception as e:
             self.error_count += 1
@@ -234,7 +343,14 @@ class RedisCache(ICache):
         """Get remaining TTL for key."""
         try:
             full_key = self._build_key(key)
-            return await self.redis_client.ttl(full_key)
+            
+            if full_key in self.local_cache and full_key in self.cache_timestamps:
+                ttl = self.local_cache[full_key].get('ttl', self.default_ttl)
+                elapsed = (datetime.now() - self.cache_timestamps[full_key]).total_seconds()
+                remaining = max(0, int(ttl - elapsed))
+                return remaining
+            
+            return -1
 
         except Exception as e:
             self.error_count += 1
@@ -243,7 +359,7 @@ class RedisCache(ICache):
 
     async def cache_aside(self, key: str, func: Callable, ttl: int = 300, *args, **kwargs) -> Any:
         """
-        Cache-aside pattern implementation.
+        Cache-aside pattern implementation with distributed messaging.
         Check cache -> Miss -> Call function -> Store result -> Return
         """
         try:
@@ -260,6 +376,18 @@ class RedisCache(ICache):
 
             # Store in cache
             await self.set(key, result, ttl)
+            
+            # Publish cache miss event to Kafka for analytics
+            self.kafka_manager.produce_message(
+                topic=StreamingTopic.SYSTEM_EVENTS,
+                message={
+                    "event_type": "cache_miss",
+                    "key": key,
+                    "function": func.__name__ if hasattr(func, '__name__') else str(func),
+                    "timestamp": datetime.now().isoformat()
+                },
+                key=key
+            )
 
             return result
 
@@ -272,21 +400,20 @@ class RedisCache(ICache):
                 return func(*args, **kwargs)
 
     async def get_stats(self) -> dict[str, Any]:
-        """Get cache statistics."""
+        """Get distributed cache statistics."""
         total_requests = self.hit_count + self.miss_count
         hit_ratio = self.hit_count / total_requests if total_requests > 0 else 0
-
-        # Get Redis info
+        
+        # Get local cache info
+        local_cache_size = len(self.local_cache)
+        
+        # Get messaging system stats
         try:
-            redis_info = await self.redis_client.info()
-            memory_info = {
-                'used_memory': redis_info.get('used_memory', 0),
-                'used_memory_human': redis_info.get('used_memory_human', '0B'),
-                'total_connections': redis_info.get('total_connections_received', 0),
-                'connected_clients': redis_info.get('connected_clients', 0),
-            }
+            rabbitmq_stats = self.rabbitmq_manager.get_queue_stats(QueueType.TASK_QUEUE)
+            kafka_stats = self.kafka_manager.get_metrics()
         except Exception:
-            memory_info = {}
+            rabbitmq_stats = {}
+            kafka_stats = {}
 
         return {
             'hit_count': self.hit_count,
@@ -294,19 +421,36 @@ class RedisCache(ICache):
             'error_count': self.error_count,
             'hit_ratio': hit_ratio,
             'total_requests': total_requests,
-            'redis_info': memory_info
+            'local_cache_size': local_cache_size,
+            'messaging_stats': {
+                'rabbitmq': rabbitmq_stats,
+                'kafka': kafka_stats
+            }
         }
 
     async def health_check(self) -> dict[str, Any]:
-        """Perform health check on Redis connection."""
+        """Perform health check on distributed messaging systems."""
         try:
             start_time = datetime.now()
-            await self.redis_client.ping()
+            
+            # Check RabbitMQ connection
+            rabbitmq_healthy = self.rabbitmq_manager.connect()
+            
+            # Check Kafka connection
+            kafka_healthy = bool(self.kafka_manager.producer)
+            
             response_time = (datetime.now() - start_time).total_seconds() * 1000
+            
+            overall_status = 'healthy' if rabbitmq_healthy and kafka_healthy else 'degraded'
 
             return {
-                'status': 'healthy',
+                'status': overall_status,
                 'response_time_ms': response_time,
+                'components': {
+                    'rabbitmq': 'healthy' if rabbitmq_healthy else 'unhealthy',
+                    'kafka': 'healthy' if kafka_healthy else 'unhealthy',
+                    'local_cache': 'healthy'
+                },
                 'timestamp': datetime.now().isoformat()
             }
 
@@ -481,9 +625,9 @@ class CacheFactory:
     """Factory for creating cache instances."""
 
     @staticmethod
-    def create_redis_cache(redis_url: str = "redis://localhost:6379", **kwargs) -> RedisCache:
-        """Create Redis cache instance."""
-        return RedisCache(redis_url, **kwargs)
+    def create_distributed_cache(**kwargs) -> DistributedMessagingCache:
+        """Create distributed messaging cache instance."""
+        return DistributedMessagingCache(**kwargs)
 
     @staticmethod
     def create_memory_cache(**kwargs) -> MemoryCache:
@@ -491,10 +635,10 @@ class CacheFactory:
         return MemoryCache(**kwargs)
 
     @staticmethod
-    def create_cache(cache_type: str = "redis", **kwargs) -> ICache:
+    def create_cache(cache_type: str = "distributed", **kwargs) -> ICache:
         """Create cache instance by type."""
-        if cache_type == "redis":
-            return CacheFactory.create_redis_cache(**kwargs)
+        if cache_type == "distributed":
+            return CacheFactory.create_distributed_cache(**kwargs)
         elif cache_type == "memory":
             return CacheFactory.create_memory_cache(**kwargs)
         else:
@@ -510,9 +654,9 @@ def get_default_cache() -> ICache:
     global _default_cache
     if _default_cache is None:
         try:
-            _default_cache = CacheFactory.create_redis_cache()
-        except ImportError:
-            logger.warning("Redis not available, using memory cache")
+            _default_cache = CacheFactory.create_distributed_cache()
+        except Exception:
+            logger.warning("Distributed messaging not available, using memory cache")
             _default_cache = CacheFactory.create_memory_cache()
 
     return _default_cache

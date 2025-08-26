@@ -2,6 +2,7 @@
 Enhanced Factory Pattern for ETL Processors
 Provides improved type safety, plugin architecture, and configuration management.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum

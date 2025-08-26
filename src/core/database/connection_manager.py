@@ -4,6 +4,7 @@ Advanced Database Connection Manager
 Enterprise-grade database connection pooling with performance optimization,
 health monitoring, and automatic failover capabilities.
 """
+from __future__ import annotations
 
 import asyncio
 import time

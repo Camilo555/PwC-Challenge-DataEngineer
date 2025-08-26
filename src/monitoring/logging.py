@@ -3,6 +3,7 @@ Production-Ready Structured Logging with PII Scrubbing
 Provides enterprise-grade logging with automatic PII detection and correlation ID propagation.
 Designed for ETL pipelines and API applications with security and compliance requirements.
 """
+from __future__ import annotations
 
 import hashlib
 import json

@@ -2,6 +2,7 @@
 Value Objects for Search and Filtering Operations
 Encapsulates search parameters with validation and business rules.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime

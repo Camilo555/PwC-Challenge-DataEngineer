@@ -1,4 +1,5 @@
 """Transaction domain entity and related models."""
+from __future__ import annotations
 
 import re
 from datetime import datetime
@@ -168,7 +169,7 @@ class TransactionLine(DomainEntity):
         return v
 
     @model_validator(mode="after")
-    def calculate_derived_fields(self) -> "TransactionLine":
+    def calculate_derived_fields(self) -> TransactionLine:
         """Calculate derived fields after validation."""
         # Calculate line total
         if self.quantity and self.unit_price:
@@ -272,7 +273,7 @@ class Transaction(DomainEntity):
     )
 
     @model_validator(mode="after")
-    def calculate_aggregates(self) -> "Transaction":
+    def calculate_aggregates(self) -> Transaction:
         """Calculate aggregate fields from line items."""
         if self.lines:
             # Calculate totals
@@ -355,7 +356,7 @@ class CancelledTransaction(Transaction):
     )
 
     @model_validator(mode="after")
-    def extract_original_invoice(self) -> "CancelledTransaction":
+    def extract_original_invoice(self) -> CancelledTransaction:
         """Extract original invoice number from cancelled invoice."""
         if self.invoice_no.startswith(CANCELLED_INVOICE_PREFIX):
             self.original_invoice_no = self.invoice_no[len(

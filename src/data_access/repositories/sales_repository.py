@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 from sqlalchemy import func, or_
 from sqlmodel import select
 

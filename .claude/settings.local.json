@@ -37,7 +37,9 @@
       "Bash(set)",
       "Bash(git reset:*)",
       "Bash(del test_self_healing_simple.py)",
-      "Bash(del test_integration_lightweight.py)"
+      "Bash(del test_integration_lightweight.py)",
+      "Bash(poetry env remove:*)",
+      "Bash(poetry show:*)"
     ],
     "defaultMode": "acceptEdits"
   }

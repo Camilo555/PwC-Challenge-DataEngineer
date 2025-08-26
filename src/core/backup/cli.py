@@ -3,6 +3,7 @@ Backup and Disaster Recovery Command Line Interface
 
 Comprehensive CLI for backup and disaster recovery operations management.
 """
+from __future__ import annotations
 
 import asyncio
 from datetime import datetime
@@ -11,8 +12,9 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
-from ...core.config.base_config import BaseConfig, Environment
-from ...core.logging import get_logger
+from core.config.base_config import BaseConfig, Environment
+from core.logging import get_logger
+
 from .monitoring import AlertSeverity
 from .orchestrator import BackupOrchestrator, OrchestrationMode
 from .validation import IntegrityLevel

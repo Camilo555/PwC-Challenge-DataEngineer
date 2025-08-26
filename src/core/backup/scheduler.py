@@ -4,6 +4,7 @@ Backup Scheduling and Retention Management
 Enterprise backup scheduling system with retention policies, automated cleanup,
 and compliance monitoring.
 """
+from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ except ImportError:
     HAS_CRONITER = False
     croniter = None
 
-from ...core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -108,7 +109,7 @@ class RetentionPolicy:
         }
 
     @classmethod
-    def create_standard_policy(cls, policy_id: str, name: str) -> 'RetentionPolicy':
+    def create_standard_policy(cls, policy_id: str, name: str) -> RetentionPolicy:
         """Create standard 3-2-1 backup retention policy."""
         rules = [
             RetentionRule("daily", 7, RetentionUnit.DAYS, ["full", "incremental"]),
@@ -126,7 +127,7 @@ class RetentionPolicy:
         )
 
     @classmethod
-    def create_compliance_policy(cls, policy_id: str, name: str, years: int = 7) -> 'RetentionPolicy':
+    def create_compliance_policy(cls, policy_id: str, name: str, years: int = 7) -> RetentionPolicy:
         """Create compliance-focused retention policy."""
         rules = [
             RetentionRule("daily", 30, RetentionUnit.DAYS, ["full", "incremental"]),

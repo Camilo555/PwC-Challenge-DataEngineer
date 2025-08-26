@@ -1,48 +1,28 @@
 """
-Async Task Service
-Implements the Async Request-Reply pattern for long-running operations.
+Async Task Service with RabbitMQ
+Implements the Async Request-Reply pattern using RabbitMQ instead of Redis/Celery.
 """
+from __future__ import annotations
+
 import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, List
 
-import redis
-from celery import Celery
-
+from messaging.rabbitmq_manager import (
+    RabbitMQManager, QueueType, MessagePriority, 
+    TaskMessage, ResultMessage
+)
+from streaming.kafka_manager import KafkaManager, StreamingTopic
 from core.config.base_config import BaseConfig
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 config = BaseConfig()
 
-# Redis client for storing task results
-redis_client = redis.Redis(
-    host=getattr(config, 'redis_host', 'localhost'),
-    port=getattr(config, 'redis_port', 6379),
-    decode_responses=True
-)
-
-# Celery app configuration
-celery_app = Celery(
-    'retail_etl_tasks',
-    broker='redis://localhost:6379/0',
-    backend='redis://localhost:6379/0'
-)
-
-celery_app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-    result_expires=3600,  # 1 hour
-    task_routes={
-        'api.v1.services.async_tasks.generate_comprehensive_report': {'queue': 'reports'},
-        'api.v1.services.async_tasks.process_large_dataset': {'queue': 'etl'},
-        'api.v1.services.async_tasks.run_advanced_analytics': {'queue': 'analytics'},
-    }
-)
+# RabbitMQ and Kafka managers for task processing
+rabbitmq_manager = RabbitMQManager()
+kafka_manager = KafkaManager()
 
 
 class TaskStatus:
@@ -55,11 +35,16 @@ class TaskStatus:
 
 
 class AsyncTaskService:
-    """Service for managing async tasks and request-reply pattern."""
+    """Service for managing async tasks using RabbitMQ message queues."""
 
     def __init__(self):
-        self.redis_client = redis_client
+        self.rabbitmq_manager = rabbitmq_manager
+        self.kafka_manager = kafka_manager
         self.task_ttl = 3600  # 1 hour
+        
+        # In-memory task tracking (in production, this could be a database)
+        self.active_tasks: dict[str, dict[str, Any]] = {}
+        self.task_results: dict[str, dict[str, Any]] = {}
 
     async def submit_task(
         self,
@@ -67,10 +52,10 @@ class AsyncTaskService:
         task_args: dict[str, Any],
         user_id: str | None = None
     ) -> dict[str, Any]:
-        """Submit a task for async processing."""
+        """Submit a task for async processing using RabbitMQ."""
         task_id = str(uuid.uuid4())
 
-        # Store task metadata
+        # Store task metadata in memory
         task_metadata = {
             "task_id": task_id,
             "task_name": task_name,
@@ -79,34 +64,48 @@ class AsyncTaskService:
             "user_id": user_id,
             "args": task_args
         }
+        
+        self.active_tasks[task_id] = task_metadata
 
-        # Store in Redis
-        self.redis_client.setex(
-            f"task:{task_id}",
-            self.task_ttl,
-            json.dumps(task_metadata)
-        )
-
-        # Submit to Celery
+        # Submit to RabbitMQ
         try:
-            if task_name == "generate_comprehensive_report":
-                celery_task = generate_comprehensive_report.delay(task_id, **task_args)
-            elif task_name == "process_large_dataset":
-                celery_task = process_large_dataset.delay(task_id, **task_args)
-            elif task_name == "run_advanced_analytics":
-                celery_task = run_advanced_analytics.delay(task_id, **task_args)
+            # Determine target queue based on task type
+            if task_name in ["generate_comprehensive_report"]:
+                target_queue = QueueType.RESULT_QUEUE
+                priority = MessagePriority.NORMAL
+            elif task_name in ["process_large_dataset"]:
+                target_queue = QueueType.ETL_QUEUE
+                priority = MessagePriority.HIGH
+            elif task_name in ["run_advanced_analytics"]:
+                target_queue = QueueType.TASK_QUEUE
+                priority = MessagePriority.NORMAL
             else:
-                raise ValueError(f"Unknown task type: {task_name}")
+                target_queue = QueueType.TASK_QUEUE
+                priority = MessagePriority.NORMAL
 
-            # Update with Celery task ID
-            task_metadata["celery_task_id"] = celery_task.id
-            self.redis_client.setex(
-                f"task:{task_id}",
-                self.task_ttl,
-                json.dumps(task_metadata)
+            # Publish task to RabbitMQ
+            rabbitmq_task_id = self.rabbitmq_manager.publish_task(
+                task_name=task_name,
+                payload=task_args,
+                queue=target_queue,
+                priority=priority,
+                expires_in_seconds=self.task_ttl,
+                correlation_id=task_id
             )
 
-            logger.info(f"Task {task_id} submitted successfully")
+            # Update task metadata with RabbitMQ task ID
+            task_metadata["rabbitmq_task_id"] = rabbitmq_task_id
+            self.active_tasks[task_id] = task_metadata
+            
+            # Publish task event to Kafka for monitoring
+            self.kafka_manager.produce_task_event(
+                task_id=task_id,
+                task_name=task_name,
+                status=TaskStatus.PENDING,
+                metadata={"user_id": user_id, "submitted_at": task_metadata["submitted_at"]}
+            )
+
+            logger.info(f"Task {task_id} submitted to RabbitMQ successfully")
 
             return {
                 "task_id": task_id,
@@ -122,114 +121,143 @@ class AsyncTaskService:
             # Update status to failure
             task_metadata["status"] = TaskStatus.FAILURE
             task_metadata["error"] = str(e)
-            self.redis_client.setex(
-                f"task:{task_id}",
-                self.task_ttl,
-                json.dumps(task_metadata)
+            self.active_tasks[task_id] = task_metadata
+            
+            # Publish failure event to Kafka
+            self.kafka_manager.produce_task_event(
+                task_id=task_id,
+                task_name=task_name,
+                status=TaskStatus.FAILURE,
+                metadata={"error": str(e)}
             )
             raise
 
     async def get_task_status(self, task_id: str) -> dict[str, Any] | None:
-        """Get the status of a task."""
-        task_data = self.redis_client.get(f"task:{task_id}")
-        if not task_data:
+        """Get the status of a task from RabbitMQ system."""
+        # Check in-memory task storage first
+        if task_id not in self.active_tasks:
             return None
+            
+        task_metadata = self.active_tasks[task_id].copy()
 
-        task_metadata = json.loads(task_data)
-
-        # Check Celery task status if available
-        if "celery_task_id" in task_metadata:
+        # Check RabbitMQ task result if available
+        if "rabbitmq_task_id" in task_metadata:
             try:
-                celery_task = celery_app.AsyncResult(task_metadata["celery_task_id"])
-                task_metadata["celery_status"] = celery_task.status
-
-                if celery_task.ready():
-                    if celery_task.successful():
+                # Get task result from RabbitMQ manager
+                result = self.rabbitmq_manager.get_task_result(
+                    task_metadata["rabbitmq_task_id"], 
+                    timeout=1  # Short timeout for status check
+                )
+                
+                if result:
+                    task_metadata["rabbitmq_status"] = result.status
+                    
+                    if result.status == "success":
                         task_metadata["status"] = TaskStatus.SUCCESS
-                        if celery_task.result:
-                            task_metadata["result"] = celery_task.result
-                    else:
+                        if result.result:
+                            task_metadata["result"] = result.result
+                        
+                        # Store result for future retrieval
+                        self.task_results[task_id] = task_metadata
+                        
+                        # Publish success event to Kafka
+                        self.kafka_manager.produce_task_event(
+                            task_id=task_id,
+                            task_name=task_metadata["task_name"],
+                            status=TaskStatus.SUCCESS,
+                            metadata={"processing_time_ms": result.processing_time_ms}
+                        )
+                        
+                    elif result.status == "error":
                         task_metadata["status"] = TaskStatus.FAILURE
-                        task_metadata["error"] = str(celery_task.info)
-                elif celery_task.status == 'STARTED':
-                    task_metadata["status"] = TaskStatus.STARTED
+                        task_metadata["error"] = result.error
+                        
+                        # Publish failure event to Kafka
+                        self.kafka_manager.produce_task_event(
+                            task_id=task_id,
+                            task_name=task_metadata["task_name"],
+                            status=TaskStatus.FAILURE,
+                            metadata={"error": result.error}
+                        )
+                        
+                    # Update in-memory storage
+                    self.active_tasks[task_id] = task_metadata
 
             except Exception as e:
-                logger.error(f"Error checking Celery task status: {str(e)}")
+                logger.error(f"Error checking RabbitMQ task status: {str(e)}")
 
         return task_metadata
 
     async def cancel_task(self, task_id: str) -> bool:
-        """Cancel a running task."""
-        task_data = self.redis_client.get(f"task:{task_id}")
-        if not task_data:
+        """Cancel a running task (limited cancellation in RabbitMQ)."""
+        if task_id not in self.active_tasks:
             return False
 
-        task_metadata = json.loads(task_data)
+        task_metadata = self.active_tasks[task_id]
 
-        # Revoke Celery task
-        if "celery_task_id" in task_metadata:
-            try:
-                celery_app.control.revoke(task_metadata["celery_task_id"], terminate=True)
-                task_metadata["status"] = TaskStatus.REVOKED
-                task_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+        try:
+            # Mark task as cancelled in metadata
+            task_metadata["status"] = TaskStatus.REVOKED
+            task_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+            
+            # Update in-memory storage
+            self.active_tasks[task_id] = task_metadata
+            
+            # Publish cancellation event to Kafka
+            self.kafka_manager.produce_task_event(
+                task_id=task_id,
+                task_name=task_metadata["task_name"],
+                status=TaskStatus.REVOKED,
+                metadata={"cancelled_at": task_metadata["cancelled_at"]}
+            )
 
-                self.redis_client.setex(
-                    f"task:{task_id}",
-                    self.task_ttl,
-                    json.dumps(task_metadata)
-                )
+            logger.info(f"Task {task_id} marked as cancelled")
+            return True
 
-                logger.info(f"Task {task_id} cancelled successfully")
-                return True
-
-            except Exception as e:
-                logger.error(f"Error cancelling task {task_id}: {str(e)}")
-                return False
-
-        return False
+        except Exception as e:
+            logger.error(f"Error cancelling task {task_id}: {str(e)}")
+            return False
 
     async def list_user_tasks(
         self,
         user_id: str,
         status: str | None = None
     ) -> List[dict[str, Any]]:
-        """List tasks for a specific user."""
-        pattern = "task:*"
-        task_keys = self.redis_client.keys(pattern)
-
+        """List tasks for a specific user from in-memory storage."""
         user_tasks = []
-        for key in task_keys:
-            task_data = self.redis_client.get(key)
-            if task_data:
-                task_metadata = json.loads(task_data)
-                if task_metadata.get("user_id") == user_id:
-                    if not status or task_metadata.get("status") == status:
-                        user_tasks.append(task_metadata)
+        
+        for task_metadata in self.active_tasks.values():
+            if task_metadata.get("user_id") == user_id:
+                if not status or task_metadata.get("status") == status:
+                    user_tasks.append(task_metadata.copy())
+        
+        # Also check completed tasks
+        for task_metadata in self.task_results.values():
+            if task_metadata.get("user_id") == user_id:
+                if not status or task_metadata.get("status") == status:
+                    if task_metadata not in user_tasks:  # Avoid duplicates
+                        user_tasks.append(task_metadata.copy())
 
         # Sort by submission time
         user_tasks.sort(key=lambda x: x.get("submitted_at", ""), reverse=True)
         return user_tasks
 
 
-# Celery task definitions
+# RabbitMQ task processing functions (these would be consumed by separate workers)
 
-@celery_app.task(bind=True)
-def generate_comprehensive_report(self, task_id: str, report_type: str, filters: dict[str, Any]):
-    """Generate a comprehensive business report."""
+def process_generate_comprehensive_report(task_message: TaskMessage) -> ResultMessage:
+    """Process comprehensive business report generation task."""
     try:
-        # Update task status
-        _update_task_status(task_id, TaskStatus.STARTED, {"progress": 0})
+        task_id = task_message.task_id
+        payload = task_message.payload
+        
+        # Extract parameters
+        report_type = payload.get("report_type", "general")
+        filters = payload.get("filters", {})
 
-        # Simulate report generation with progress updates
-        for progress in [20, 40, 60, 80, 100]:
-            self.update_state(
-                state='PROGRESS',
-                meta={'progress': progress, 'status': f'Processing... {progress}%'}
-            )
-            # Simulate work
-            import time
-            time.sleep(2)
+        # Simulate report generation (in real implementation, this would be actual processing)
+        import time
+        time.sleep(5)  # Simulate processing time
 
         # Generate actual report (simplified)
         report_data = {
@@ -239,49 +267,46 @@ def generate_comprehensive_report(self, task_id: str, report_type: str, filters:
             "data": {
                 "summary": "Comprehensive business report generated successfully",
                 "total_records": 1000000,
-                "processing_time_seconds": 10,
+                "processing_time_seconds": 5,
                 "file_size_mb": 15.7
             },
             "download_url": f"/api/v1/reports/download/{task_id}",
             "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat()
         }
 
-        # Update final status
-        _update_task_status(task_id, TaskStatus.SUCCESS, {"result": report_data})
-
         logger.info(f"Report generation task {task_id} completed successfully")
-        return report_data
+        
+        return ResultMessage(
+            task_id=task_id,
+            correlation_id=task_message.correlation_id,
+            status="success",
+            result=report_data,
+            processing_time_ms=5000
+        )
 
     except Exception as e:
-        logger.error(f"Report generation task {task_id} failed: {str(e)}")
-        _update_task_status(task_id, TaskStatus.FAILURE, {"error": str(e)})
-        raise
+        logger.error(f"Report generation task {task_message.task_id} failed: {str(e)}")
+        return ResultMessage(
+            task_id=task_message.task_id,
+            correlation_id=task_message.correlation_id,
+            status="error",
+            error=str(e)
+        )
 
 
-@celery_app.task(bind=True)
-def process_large_dataset(self, task_id: str, dataset_path: str, processing_options: dict[str, Any]):
-    """Process a large dataset with ETL operations."""
+def process_large_dataset(task_message: TaskMessage) -> ResultMessage:
+    """Process large dataset ETL task."""
     try:
-        _update_task_status(task_id, TaskStatus.STARTED, {"progress": 0})
+        task_id = task_message.task_id
+        payload = task_message.payload
+        
+        # Extract parameters
+        dataset_path = payload.get("dataset_path", "")
+        processing_options = payload.get("processing_options", {})
 
         # Simulate dataset processing
-        processing_steps = [
-            "Loading dataset",
-            "Data validation",
-            "Data cleaning",
-            "Feature engineering",
-            "Data quality assessment",
-            "Saving results"
-        ]
-
-        for i, step in enumerate(processing_steps):
-            progress = int((i + 1) / len(processing_steps) * 100)
-            self.update_state(
-                state='PROGRESS',
-                meta={'progress': progress, 'status': step}
-            )
-            import time
-            time.sleep(3)
+        import time
+        time.sleep(8)  # Simulate processing time
 
         result_data = {
             "dataset_path": dataset_path,
@@ -291,45 +316,44 @@ def process_large_dataset(self, task_id: str, dataset_path: str, processing_opti
                 "input_records": 500000,
                 "output_records": 485000,
                 "quality_score": 94.5,
-                "processing_time_minutes": 8.5,
+                "processing_time_minutes": 8.0,
                 "output_path": f"/data/processed/{task_id}/results.parquet"
             }
         }
 
-        _update_task_status(task_id, TaskStatus.SUCCESS, {"result": result_data})
-
         logger.info(f"Dataset processing task {task_id} completed successfully")
-        return result_data
+        
+        return ResultMessage(
+            task_id=task_id,
+            correlation_id=task_message.correlation_id,
+            status="success",
+            result=result_data,
+            processing_time_ms=8000
+        )
 
     except Exception as e:
-        logger.error(f"Dataset processing task {task_id} failed: {str(e)}")
-        _update_task_status(task_id, TaskStatus.FAILURE, {"error": str(e)})
-        raise
+        logger.error(f"Dataset processing task {task_message.task_id} failed: {str(e)}")
+        return ResultMessage(
+            task_id=task_message.task_id,
+            correlation_id=task_message.correlation_id,
+            status="error",
+            error=str(e)
+        )
 
 
-@celery_app.task(bind=True)
-def run_advanced_analytics(self, task_id: str, analysis_type: str, parameters: dict[str, Any]):
+def run_advanced_analytics(task_message: TaskMessage) -> ResultMessage:
     """Run advanced analytics and machine learning models."""
     try:
-        _update_task_status(task_id, TaskStatus.STARTED, {"progress": 0})
+        task_id = task_message.task_id
+        payload = task_message.payload
+        
+        # Extract parameters
+        analysis_type = payload.get("analysis_type", "general")
+        parameters = payload.get("parameters", {})
 
-        # Simulate advanced analytics
-        analysis_steps = [
-            "Data preparation",
-            "Feature selection",
-            "Model training",
-            "Model validation",
-            "Results compilation"
-        ]
-
-        for i, step in enumerate(analysis_steps):
-            progress = int((i + 1) / len(analysis_steps) * 100)
-            self.update_state(
-                state='PROGRESS',
-                meta={'progress': progress, 'status': step}
-            )
-            import time
-            time.sleep(4)
+        # Simulate advanced analytics processing
+        import time
+        time.sleep(10)  # Simulate processing time
 
         analytics_result = {
             "analysis_type": analysis_type,
@@ -356,33 +380,70 @@ def run_advanced_analytics(self, task_id: str, analysis_type: str, parameters: d
             }
         }
 
-        _update_task_status(task_id, TaskStatus.SUCCESS, {"result": analytics_result})
-
         logger.info(f"Advanced analytics task {task_id} completed successfully")
-        return analytics_result
+        
+        return ResultMessage(
+            task_id=task_id,
+            correlation_id=task_message.correlation_id,
+            status="success",
+            result=analytics_result,
+            processing_time_ms=10000
+        )
 
     except Exception as e:
-        logger.error(f"Advanced analytics task {task_id} failed: {str(e)}")
-        _update_task_status(task_id, TaskStatus.FAILURE, {"error": str(e)})
-        raise
+        logger.error(f"Advanced analytics task {task_message.task_id} failed: {str(e)}")
+        return ResultMessage(
+            task_id=task_message.task_id,
+            correlation_id=task_message.correlation_id,
+            status="error",
+            error=str(e)
+        )
 
 
-def _update_task_status(task_id: str, status: str, additional_data: dict[str, Any] = None):
-    """Update task status in Redis."""
-    try:
-        task_data = redis_client.get(f"task:{task_id}")
-        if task_data:
-            task_metadata = json.loads(task_data)
-            task_metadata["status"] = status
-            task_metadata["updated_at"] = datetime.utcnow().isoformat()
+# Task processor mapping
+TASK_PROCESSORS = {
+    "generate_comprehensive_report": process_generate_comprehensive_report,
+    "process_large_dataset": process_large_dataset,
+    "run_advanced_analytics": run_advanced_analytics
+}
 
-            if additional_data:
-                task_metadata.update(additional_data)
 
-            redis_client.setex(
-                f"task:{task_id}",
-                3600,  # 1 hour TTL
-                json.dumps(task_metadata)
+class TaskWorker:
+    """RabbitMQ task worker that processes tasks from queues."""
+    
+    def __init__(self):
+        self.rabbitmq_manager = RabbitMQManager()
+        self.kafka_manager = KafkaManager()
+        self.logger = get_logger(__name__)
+    
+    def process_task(self, task_message: TaskMessage) -> ResultMessage:
+        """Process a single task message."""
+        task_name = task_message.task_name
+        
+        if task_name in TASK_PROCESSORS:
+            processor = TASK_PROCESSORS[task_name]
+            return processor(task_message)
+        else:
+            error_msg = f"Unknown task type: {task_name}"
+            self.logger.error(error_msg)
+            return ResultMessage(
+                task_id=task_message.task_id,
+                correlation_id=task_message.correlation_id,
+                status="error",
+                error=error_msg
             )
-    except Exception as e:
-        logger.error(f"Failed to update task status for {task_id}: {str(e)}")
+    
+    def start_worker(self, queue: QueueType = QueueType.TASK_QUEUE):
+        """Start consuming tasks from the specified queue."""
+        self.logger.info(f"Starting task worker for queue: {queue.value}")
+        
+        self.rabbitmq_manager.consume_tasks(
+            queue=queue,
+            callback=self.process_task,
+            auto_ack=False,
+            max_workers=5
+        )
+
+
+# Create global task service instance
+task_service = AsyncTaskService()

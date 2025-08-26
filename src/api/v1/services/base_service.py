@@ -2,6 +2,9 @@
 Base Service for API Layer
 Provides abstract base class for service layer implementation.
 """
+from __future__ import annotations
+
+import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
@@ -11,6 +14,7 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from core.logging import get_logger
+from core.caching.redis_cache import get_default_cache
 
 T = TypeVar('T', bound=BaseModel)
 CreateT = TypeVar('CreateT', bound=BaseModel)
@@ -268,8 +272,12 @@ class BusinessLogicMixin:
 
 class CachingMixin:
     """
-    Mixin providing caching capabilities.
+    Mixin providing caching capabilities using distributed messaging cache.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cache = get_default_cache()
 
     def _get_cache_key(self, operation: str, **kwargs) -> str:
         """
@@ -282,14 +290,14 @@ class CachingMixin:
         Returns:
             Cache key string
         """
-        key_parts = [operation]
+        key_parts = [self.__class__.__name__, operation]
         for k, v in sorted(kwargs.items()):
             key_parts.append(f"{k}:{v}")
         return ":".join(key_parts)
 
     async def _get_from_cache(self, key: str) -> Any | None:
         """
-        Get value from cache.
+        Get value from distributed messaging cache.
         
         Args:
             key: Cache key
@@ -297,20 +305,25 @@ class CachingMixin:
         Returns:
             Cached value or None
         """
-        # In a real implementation, this would interface with Redis or similar
-        return None
+        try:
+            return await self._cache.get(key)
+        except Exception as e:
+            logger.warning(f"Cache get error for key {key}: {e}")
+            return None
 
     async def _set_cache(self, key: str, value: Any, ttl: int = 300) -> None:
         """
-        Set value in cache.
+        Set value in distributed messaging cache.
         
         Args:
             key: Cache key
             value: Value to cache
             ttl: Time to live in seconds
         """
-        # In a real implementation, this would interface with Redis or similar
-        pass
+        try:
+            await self._cache.set(key, value, ttl)
+        except Exception as e:
+            logger.warning(f"Cache set error for key {key}: {e}")
 
     async def _invalidate_cache(self, pattern: str) -> None:
         """
@@ -319,8 +332,34 @@ class CachingMixin:
         Args:
             pattern: Cache key pattern to invalidate
         """
-        # In a real implementation, this would interface with Redis or similar
-        pass
+        try:
+            await self._cache.invalidate(pattern)
+        except Exception as e:
+            logger.warning(f"Cache invalidation error for pattern {pattern}: {e}")
+
+    async def _cache_aside(self, key: str, func, ttl: int = 300, *args, **kwargs) -> Any:
+        """
+        Implement cache-aside pattern for expensive operations.
+        
+        Args:
+            key: Cache key
+            func: Function to call on cache miss
+            ttl: Time to live in seconds
+            *args: Function arguments
+            **kwargs: Function keyword arguments
+            
+        Returns:
+            Result from cache or function
+        """
+        try:
+            return await self._cache.cache_aside(key, func, ttl, *args, **kwargs)
+        except Exception as e:
+            logger.warning(f"Cache-aside error for key {key}: {e}")
+            # Fallback to direct function call
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
 
 
 class MetricsMixin:

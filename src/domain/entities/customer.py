@@ -2,6 +2,8 @@
 Domain Entity for Customer
 Pure Pydantic model for customer business logic and validation.
 """
+from __future__ import annotations
+
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum

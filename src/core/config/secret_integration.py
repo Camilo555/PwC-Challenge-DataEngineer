@@ -2,6 +2,7 @@
 Secret Management Integration for Configuration
 Integrates secret manager with application configuration system.
 """
+from __future__ import annotations
 
 import asyncio
 import os

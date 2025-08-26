@@ -2,7 +2,7 @@ import os
 
 if __name__ == "__main__":
     use_spark = os.getenv("USE_SPARK", "false").lower() == "true"
-    
+
     if use_spark:
         print("Using Spark-based Silver layer processing...")
         from etl.silver.clean_silver import clean_to_silver

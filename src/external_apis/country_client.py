@@ -1,5 +1,5 @@
 """Country information API client for geographic data enrichment."""
-
+from __future__ import annotations
 
 from core.logging import get_logger
 

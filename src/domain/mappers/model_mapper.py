@@ -2,6 +2,8 @@
 Model Mapping Layer
 Provides conversion between domain entities, DTOs, and persistence models.
 """
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, TypeVar

@@ -4,6 +4,7 @@ Enterprise Backup Manager
 Comprehensive backup system supporting multiple backup types, strategies,
 and storage backends with automated scheduling and validation.
 """
+from __future__ import annotations
 
 import gzip
 import hashlib
@@ -15,8 +16,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from ...core.config.base_config import BaseConfig
-from ...core.logging import get_logger
+from core.config.base_config import BaseConfig
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -2,6 +2,8 @@
 Batch Operations API Router
 Provides batch CRUD operations for efficient bulk data processing.
 """
+from __future__ import annotations
+
 from typing import Any
 from uuid import UUID
 

@@ -4,6 +4,7 @@ Disaster Recovery Manager
 Enterprise-grade disaster recovery system with automated recovery procedures,
 point-in-time restoration, and comprehensive disaster recovery planning.
 """
+from __future__ import annotations
 
 import asyncio
 import gzip
@@ -16,8 +17,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from ...core.config.base_config import BaseConfig
-from ...core.logging import get_logger
+from core.config.base_config import BaseConfig
+from core.logging import get_logger
+
 from .backup_manager import BackupManager, BackupStatus, BackupType
 
 logger = get_logger(__name__)

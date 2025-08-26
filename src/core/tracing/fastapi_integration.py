@@ -2,6 +2,7 @@
 FastAPI Integration for Distributed Tracing
 Enhances the existing correlation middleware with OpenTelemetry tracing.
 """
+from __future__ import annotations
 
 import time
 from collections.abc import Callable

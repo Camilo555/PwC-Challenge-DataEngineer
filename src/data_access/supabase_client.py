@@ -2,6 +2,7 @@
 Supabase integration module for the PwC Data Engineering Challenge.
 Provides secure connection management, schema operations, and data integrity checks.
 """
+from __future__ import annotations
 
 import logging
 import time

@@ -2,6 +2,7 @@
 Centralized logging configuration.
 Provides structured logging with support for multiple formats and outputs.
 """
+from __future__ import annotations
 
 import json
 import logging

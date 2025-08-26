@@ -1,4 +1,5 @@
 """Product categorization API client for enriching product data."""
+from __future__ import annotations
 
 import re
 

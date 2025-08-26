@@ -369,8 +369,8 @@ services:
     container_name: pwc-airflow-init-dev
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://dev_user:dev_password@postgres:5432/retail_dw_dev
-      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
-      AIRFLOW__CELERY__RESULT_BACKEND: redis://redis:6379/1
+      AIRFLOW__CELERY__BROKER_URL: pyamqp://dev_admin:dev_password@rabbitmq:5672//
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
       AIRFLOW__CORE__FERNET_KEY: dev_fernet_key_32_chars_long!
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: false
       AIRFLOW__CORE__LOAD_EXAMPLES: false
@@ -383,8 +383,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     profiles: ["orchestration", "airflow", "dev-airflow"]
     command: >
       bash -c "
@@ -401,8 +401,8 @@ services:
     container_name: pwc-airflow-webserver-dev
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://dev_user:dev_password@postgres:5432/retail_dw_dev
-      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
-      AIRFLOW__CELERY__RESULT_BACKEND: redis://redis:6379/1
+      AIRFLOW__CELERY__BROKER_URL: pyamqp://dev_admin:dev_password@rabbitmq:5672//
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://dev_user:dev_password@postgres:5432/retail_dw_dev
       AIRFLOW__CORE__FERNET_KEY: dev_fernet_key_32_chars_long!
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: false
       AIRFLOW__CORE__LOAD_EXAMPLES: false
@@ -422,20 +422,19 @@ services:
       - frontend-network
       - backend-network
 
-  # Redis for Airflow (dev)
-  redis:
-    image: redis:7-alpine
-    container_name: pwc-redis-dev
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_dev_data:/data
+  # RabbitMQ Management (dev) - Additional configuration for Airflow
+  rabbitmq-management:
+    image: rabbitmq:3-management-alpine
+    container_name: pwc-rabbitmq-management-dev
+    environment:
+      RABBITMQ_DEFAULT_USER: dev_admin
+      RABBITMQ_DEFAULT_PASS: dev_password
+      RABBITMQ_DEFAULT_VHOST: airflow
     ports:
-      - "6380:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "5675:5672"
+      - "15675:15672"
+    volumes:
+      - rabbitmq_management_dev_data:/var/lib/rabbitmq
     profiles: ["orchestration", "airflow", "dev-airflow"]
     restart: unless-stopped
     networks:
@@ -522,7 +521,7 @@ volumes:
     driver: local
   airflow_dev_home:
     driver: local
-  redis_dev_data:
+  rabbitmq_management_dev_data:
     driver: local
   prometheus_dev_data:
     driver: local

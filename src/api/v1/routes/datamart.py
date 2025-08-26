@@ -2,6 +2,8 @@
 Data Mart API Router
 Provides access to star schema data marts for analytics and business intelligence.
 """
+from __future__ import annotations
+
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

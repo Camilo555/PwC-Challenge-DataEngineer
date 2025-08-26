@@ -2,6 +2,7 @@
 OpenTelemetry Tracer Wrapper
 Provides simplified interface for creating and managing traces and spans.
 """
+from __future__ import annotations
 
 import functools
 from collections.abc import Awaitable, Callable

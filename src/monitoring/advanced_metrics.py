@@ -2,6 +2,7 @@
 Advanced Metrics Collection and Monitoring Architecture
 Provides comprehensive metrics, tracing, and observability capabilities.
 """
+from __future__ import annotations
 
 import json
 import statistics
@@ -259,8 +260,19 @@ class MetricCollector:
             MetricDefinition("etl_throughput", MetricType.GAUGE, "Records per second", MetricUnit.RATE),
             MetricDefinition("system_memory_usage", MetricType.GAUGE, "Memory usage", MetricUnit.BYTES),
             MetricDefinition("system_cpu_usage", MetricType.GAUGE, "CPU usage", MetricUnit.PERCENT),
+            # Messaging system metrics
+            MetricDefinition("rabbitmq_queue_depth", MetricType.GAUGE, "RabbitMQ queue message count", MetricUnit.COUNT),
+            MetricDefinition("rabbitmq_consumer_count", MetricType.GAUGE, "RabbitMQ consumer count", MetricUnit.COUNT),
+            MetricDefinition("rabbitmq_message_rate", MetricType.GAUGE, "RabbitMQ message rate", MetricUnit.RATE),
+            MetricDefinition("rabbitmq_connection_count", MetricType.GAUGE, "RabbitMQ connection count", MetricUnit.COUNT),
+            MetricDefinition("kafka_consumer_lag", MetricType.GAUGE, "Kafka consumer lag", MetricUnit.COUNT),
+            MetricDefinition("kafka_partition_count", MetricType.GAUGE, "Kafka partition count", MetricUnit.COUNT),
+            MetricDefinition("kafka_broker_count", MetricType.GAUGE, "Kafka broker count", MetricUnit.COUNT),
+            MetricDefinition("kafka_messages_per_sec", MetricType.GAUGE, "Kafka messages per second", MetricUnit.RATE),
             MetricDefinition("api_request_duration", MetricType.HISTOGRAM, "API request duration", MetricUnit.MILLISECONDS),
             MetricDefinition("api_request_count", MetricType.COUNTER, "API request count", MetricUnit.COUNT),
+            MetricDefinition("messaging_errors", MetricType.COUNTER, "Messaging system errors", MetricUnit.COUNT),
+            MetricDefinition("message_processing_time", MetricType.HISTOGRAM, "Message processing time", MetricUnit.MILLISECONDS),
         ]
 
         for metric in default_metrics:

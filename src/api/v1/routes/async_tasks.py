@@ -2,6 +2,8 @@
 Async Tasks Router
 Implements the Async Request-Reply pattern for long-running operations.
 """
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 

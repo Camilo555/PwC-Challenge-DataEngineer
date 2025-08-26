@@ -1,4 +1,5 @@
 """Data quality validation and metrics."""
+from __future__ import annotations
 
 import statistics
 from collections import defaultdict

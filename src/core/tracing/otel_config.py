@@ -2,6 +2,7 @@
 OpenTelemetry Configuration
 Provides centralized configuration for OpenTelemetry tracing infrastructure.
 """
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass
@@ -78,7 +79,7 @@ class TracingConfig:
     propagators: list[str] = None
 
     @classmethod
-    def from_environment(cls) -> 'TracingConfig':
+    def from_environment(cls) -> TracingConfig:
         """Create configuration from environment variables."""
 
         # Default propagators

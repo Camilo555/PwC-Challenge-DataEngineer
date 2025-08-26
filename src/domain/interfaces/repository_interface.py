@@ -1,4 +1,5 @@
 """Repository interfaces for domain layer."""
+from __future__ import annotations
 
 import builtins
 from abc import ABC, abstractmethod

@@ -1,4 +1,5 @@
 """Product domain entity and related models."""
+from __future__ import annotations
 
 import re
 from decimal import Decimal
@@ -239,7 +240,7 @@ class Product(DomainEntity):
         return v
 
     @model_validator(mode="after")
-    def extract_attributes(self) -> "Product":
+    def extract_attributes(self) -> Product:
         """Extract attributes from description."""
         if self.description:
             desc_lower = self.description.lower()
@@ -295,7 +296,7 @@ class Product(DomainEntity):
         return self
 
     @model_validator(mode="after")
-    def calculate_metrics(self) -> "Product":
+    def calculate_metrics(self) -> Product:
         """Calculate product metrics."""
         # Calculate return rate
         if self.total_sold and self.total_returned:

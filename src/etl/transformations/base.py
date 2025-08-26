@@ -2,6 +2,8 @@
 Base Transformation Framework
 Provides abstract base classes and strategy pattern for ETL transformations.
 """
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 

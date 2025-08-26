@@ -2,6 +2,8 @@
 Repository Pattern Implementation
 Provides data access abstractions with clean separation of concerns.
 """
+from __future__ import annotations
+
 import builtins
 from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
@@ -40,12 +42,12 @@ class BaseSpecification(ISpecification):
             return self.conditions[0]
         return and_(*self.conditions)
 
-    def and_(self, other: 'BaseSpecification') -> 'BaseSpecification':
+    def and_(self, other: BaseSpecification) -> BaseSpecification:
         """Combine specifications with AND."""
         combined_conditions = self.conditions + other.conditions
         return BaseSpecification(combined_conditions)
 
-    def or_(self, other: 'BaseSpecification') -> 'BaseSpecification':
+    def or_(self, other: BaseSpecification) -> BaseSpecification:
         """Combine specifications with OR."""
         return BaseSpecification([or_(self.to_sql_condition(), other.to_sql_condition())])
 

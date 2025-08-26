@@ -2,6 +2,7 @@
 Enhanced Spark Processors with Advanced Monitoring and Data Quality
 Comprehensive Spark-based ETL processors with built-in monitoring, error handling, and data quality validation.
 """
+from __future__ import annotations
 
 import json
 import os

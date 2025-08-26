@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, Query
 
 from api.v1.schemas.sales import PaginatedSales, SaleItem

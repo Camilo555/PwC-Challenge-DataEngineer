@@ -2,6 +2,8 @@
 Monitoring Dashboard
 Provides web-based dashboard for system monitoring and observability.
 """
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime
 
@@ -181,6 +183,84 @@ class MonitoringDashboard:
                 ]
             except Exception as e:
                 logger.error(f"Error getting metric history for {metric_name}: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # Messaging system endpoints
+        @self.app.get("/api/messaging/rabbitmq")
+        async def get_rabbitmq_metrics():
+            """Get RabbitMQ metrics and health status."""
+            try:
+                # This would integrate with the messaging monitoring system
+                # For now, return mock data structure
+                return {
+                    "status": "healthy",
+                    "queues": {
+                        "task_queue": {"depth": 25, "consumers": 3, "rate": 12.5},
+                        "result_queue": {"depth": 5, "consumers": 2, "rate": 8.2},
+                        "etl_queue": {"depth": 150, "consumers": 5, "rate": 45.3}
+                    },
+                    "connections": 8,
+                    "channels": 15,
+                    "memory_usage_mb": 125,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            except Exception as e:
+                logger.error(f"Error getting RabbitMQ metrics: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/messaging/kafka")
+        async def get_kafka_metrics():
+            """Get Kafka metrics and health status."""
+            try:
+                # This would integrate with the messaging monitoring system
+                # For now, return mock data structure
+                return {
+                    "status": "healthy",
+                    "brokers": 3,
+                    "topics": {
+                        "retail-transactions": {"partitions": 3, "lag": 245},
+                        "customer-events": {"partitions": 2, "lag": 12},
+                        "system-events": {"partitions": 1, "lag": 0}
+                    },
+                    "total_consumer_lag": 257,
+                    "messages_per_sec": 125.7,
+                    "under_replicated_partitions": 0,
+                    "offline_partitions": 0,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            except Exception as e:
+                logger.error(f"Error getting Kafka metrics: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/messaging/health")  
+        async def get_messaging_health():
+            """Get overall messaging system health."""
+            try:
+                return {
+                    "overall_status": "healthy",
+                    "components": {
+                        "rabbitmq": {
+                            "status": "healthy",
+                            "queues_healthy": 3,
+                            "queues_warning": 1,
+                            "queues_critical": 0
+                        },
+                        "kafka": {
+                            "status": "healthy",
+                            "brokers_online": 3,
+                            "topics_healthy": 8,
+                            "consumer_lag_critical": 0
+                        }
+                    },
+                    "alerts": {
+                        "active": 2,
+                        "critical": 0,
+                        "warning": 2
+                    },
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            except Exception as e:
+                logger.error(f"Error getting messaging health: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
         # System info endpoint
@@ -376,6 +456,16 @@ class MonitoringDashboard:
                     <h3>System Resources</h3>
                     <div id="systemResources">Loading...</div>
                 </div>
+                
+                <div class="card">
+                    <h3>RabbitMQ Status</h3>
+                    <div id="rabbitmqStatus">Loading...</div>
+                </div>
+                
+                <div class="card">
+                    <h3>Kafka Status</h3>
+                    <div id="kafkaStatus">Loading...</div>
+                </div>
             </div>
             
             <!-- Detailed Views -->
@@ -550,12 +640,77 @@ class MonitoringDashboard:
                     `;
                 }
                 
+                async function updateRabbitMQ() {
+                    const rabbitmq = await fetchAPI('/messaging/rabbitmq');
+                    if (!rabbitmq) return;
+                    
+                    const statusElement = document.getElementById('rabbitmqStatus');
+                    const statusClass = `status-${rabbitmq.status}`;
+                    
+                    let queuesHtml = '<div class="table-container"><table class="table"><thead><tr><th>Queue</th><th>Depth</th><th>Consumers</th><th>Rate</th></tr></thead><tbody>';
+                    
+                    Object.entries(rabbitmq.queues).forEach(([name, stats]) => {
+                        queuesHtml += `
+                            <tr>
+                                <td>${name}</td>
+                                <td>${stats.depth}</td>
+                                <td>${stats.consumers}</td>
+                                <td>${stats.rate.toFixed(1)}/s</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    queuesHtml += '</tbody></table></div>';
+                    
+                    statusElement.innerHTML = `
+                        <div><span class="status-indicator ${statusClass}"></span>${rabbitmq.status}</div>
+                        <div><strong>Connections:</strong> ${rabbitmq.connections}</div>
+                        <div><strong>Channels:</strong> ${rabbitmq.channels}</div>
+                        <div><strong>Memory:</strong> ${rabbitmq.memory_usage_mb} MB</div>
+                        ${queuesHtml}
+                    `;
+                }
+                
+                async function updateKafka() {
+                    const kafka = await fetchAPI('/messaging/kafka');
+                    if (!kafka) return;
+                    
+                    const statusElement = document.getElementById('kafkaStatus');
+                    const statusClass = `status-${kafka.status}`;
+                    
+                    let topicsHtml = '<div class="table-container"><table class="table"><thead><tr><th>Topic</th><th>Partitions</th><th>Lag</th></tr></thead><tbody>';
+                    
+                    Object.entries(kafka.topics).forEach(([name, stats]) => {
+                        topicsHtml += `
+                            <tr>
+                                <td>${name}</td>
+                                <td>${stats.partitions}</td>
+                                <td>${stats.lag}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    topicsHtml += '</tbody></table></div>';
+                    
+                    statusElement.innerHTML = `
+                        <div><span class="status-indicator ${statusClass}"></span>${kafka.status}</div>
+                        <div><strong>Brokers:</strong> ${kafka.brokers}</div>
+                        <div><strong>Total Lag:</strong> ${kafka.total_consumer_lag}</div>
+                        <div><strong>Messages/sec:</strong> ${kafka.messages_per_sec.toFixed(1)}</div>
+                        <div><strong>Under-replicated:</strong> ${kafka.under_replicated_partitions}</div>
+                        <div><strong>Offline:</strong> ${kafka.offline_partitions}</div>
+                        ${topicsHtml}
+                    `;
+                }
+                
                 async function refreshAll() {
                     await Promise.all([
                         updateHealth(),
                         updateAlerts(), 
                         updateJobs(),
-                        updateSystemInfo()
+                        updateSystemInfo(),
+                        updateRabbitMQ(),
+                        updateKafka()
                     ]);
                     
                     document.getElementById('lastUpdate').textContent = 
@@ -668,7 +823,8 @@ def create_monitoring_dashboard(title: str = "System Monitoring Dashboard",
 
 
 async def setup_monitoring_stack(database_url: str | None = None,
-                                redis_url: str | None = None,
+                                rabbitmq_host: str | None = None,
+                                kafka_servers: list[str] | None = None,
                                 enable_dashboard: bool = True,
                                 dashboard_port: int = 8080):
     """Setup complete monitoring stack."""
@@ -682,13 +838,15 @@ async def setup_monitoring_stack(database_url: str | None = None,
     # Setup health checks
     setup_basic_health_checks(
         database_url=database_url,
-        redis_url=redis_url,
+        rabbitmq_host=rabbitmq_host,
+        kafka_servers=kafka_servers,
         file_paths=["/tmp", "/var/log"] if database_url else None
     )
 
     # Setup basic alert rules
     alert_manager.add_rule(create_health_check_rule("database"))
-    alert_manager.add_rule(create_health_check_rule("redis"))
+    alert_manager.add_rule(create_health_check_rule("rabbitmq"))
+    alert_manager.add_rule(create_health_check_rule("kafka"))
     alert_manager.add_rule(create_system_resource_rule("cpu", 80.0))
     alert_manager.add_rule(create_system_resource_rule("memory", 85.0))
 

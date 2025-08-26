@@ -4,6 +4,7 @@ Database Performance Optimization
 Comprehensive database performance monitoring, query optimization,
 and maintenance utilities for the retail data warehouse.
 """
+from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field

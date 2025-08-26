@@ -2,6 +2,7 @@
 Centralized configuration management using Pydantic BaseSettings.
 Supports multiple environments and future Supabase integration.
 """
+from __future__ import annotations
 
 import os
 import secrets
@@ -428,7 +429,7 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> "Settings":
+def get_settings() -> Settings:
     """Uses LRU cache to ensure single instance across application."""
     return Settings()
 

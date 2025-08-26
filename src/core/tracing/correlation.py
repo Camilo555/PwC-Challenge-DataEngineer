@@ -2,6 +2,7 @@
 Correlation ID and Context Management
 Provides correlation ID generation, propagation, and context management for distributed tracing.
 """
+from __future__ import annotations
 
 import contextvars
 import uuid
@@ -155,7 +156,7 @@ class CorrelationContext:
         return headers
 
     @classmethod
-    def from_headers(cls, headers: dict[str, str]) -> 'CorrelationContext':
+    def from_headers(cls, headers: dict[str, str]) -> CorrelationContext:
         """Create correlation context from HTTP headers."""
         return cls(
             correlation_id=headers.get('X-Correlation-ID') or headers.get('x-correlation-id'),

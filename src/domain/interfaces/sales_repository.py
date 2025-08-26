@@ -2,6 +2,7 @@
 Sales Repository Interface
 Domain layer interface for sales data access operations.
 """
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 

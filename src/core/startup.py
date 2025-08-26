@@ -2,6 +2,7 @@
 Application Startup Module
 Handles initialization of critical systems including secret management.
 """
+from __future__ import annotations
 
 import asyncio
 from typing import Any

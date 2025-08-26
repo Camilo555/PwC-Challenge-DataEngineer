@@ -3,7 +3,7 @@
 API Sales Service
 Application layer service that coordinates between API and domain layers.
 """
-
+from __future__ import annotations
 
 from api.v1.schemas.sales import SaleItem
 from domain.interfaces.sales_service import ISalesService

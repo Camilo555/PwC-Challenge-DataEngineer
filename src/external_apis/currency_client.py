@@ -1,4 +1,5 @@
 """Currency exchange rate API client for data enrichment."""
+from __future__ import annotations
 
 from datetime import datetime
 

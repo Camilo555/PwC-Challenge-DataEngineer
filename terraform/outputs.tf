@@ -310,6 +310,141 @@ output "deployment_summary" {
   }
 }
 
+# ============================================================================
+# MULTI-CLOUD DATA PLATFORM OUTPUTS
+# ============================================================================
+
+# Data Lake Outputs
+output "data_lake_configuration" {
+  description = "Data lake configuration across clouds"
+  value = var.enable_data_lake ? {
+    enabled           = true
+    primary_cloud     = local.primary_cloud
+    secondary_cloud   = local.secondary_cloud
+    buckets          = module.data_lake[0].all_data_lake_endpoints
+    replication      = module.data_lake[0].replication_configuration
+    monitoring       = module.data_lake[0].monitoring_configuration
+  } : { enabled = false }
+}
+
+# Data Catalog Outputs
+output "data_catalog_configuration" {
+  description = "Data catalog and governance configuration"
+  value = var.enable_data_catalog ? {
+    enabled           = true
+    unified_endpoint  = module.data_catalog[0].catalog_endpoint
+    all_endpoints     = module.data_catalog[0].all_catalog_endpoints
+    governance        = module.data_catalog[0].data_governance_configuration
+  } : { enabled = false }
+}
+
+# Messaging Infrastructure Outputs
+output "messaging_configuration" {
+  description = "Messaging infrastructure configuration"
+  value = {
+    kafka_bootstrap_servers     = module.messaging_infrastructure.kafka_bootstrap_servers
+    rabbitmq_endpoint          = module.messaging_infrastructure.rabbitmq_endpoint
+    schema_registry_endpoint   = module.messaging_infrastructure.schema_registry_endpoint
+    kafka_connect_endpoint     = module.messaging_infrastructure.kafka_connect_endpoint
+    topics                     = module.messaging_infrastructure.kafka_topics
+    monitoring                 = module.messaging_infrastructure.monitoring_configuration
+    security                   = module.messaging_infrastructure.security_configuration
+  }
+}
+
+# Cost Optimization Outputs
+output "cost_optimization_configuration" {
+  description = "Cost optimization and governance configuration"
+  value = var.enable_cost_optimization ? {
+    enabled                    = true
+    budget_threshold          = var.budget_alert_threshold
+    auto_shutdown_enabled     = var.auto_shutdown_enabled
+    intelligent_scaling       = var.enable_intelligent_scaling
+    spot_instances_enabled    = var.enable_spot_instances
+    reserved_instance_target  = var.reserved_instance_coverage
+  } : { enabled = false }
+}
+
+# Disaster Recovery Outputs
+output "disaster_recovery_configuration" {
+  description = "Disaster recovery configuration"
+  value = var.enable_disaster_recovery ? {
+    enabled         = true
+    strategy        = var.rto_minutes <= 30 ? "active-active" : var.rto_minutes <= 120 ? "active-passive" : "backup-restore"
+    rto_minutes     = var.rto_minutes
+    rpo_minutes     = var.rpo_minutes
+    primary_cloud   = local.primary_cloud
+    secondary_cloud = local.secondary_cloud
+    cross_cloud_replication = var.cross_cloud_replication
+  } : { enabled = false }
+}
+
+# GitOps Configuration Outputs
+output "gitops_configuration" {
+  description = "GitOps and CI/CD configuration"
+  value = var.enable_gitops ? {
+    enabled                = true
+    repository_url         = var.gitops_repo_url
+    drift_detection        = var.enable_infrastructure_drift_detection
+    automated_deployment   = true
+    canary_deployment      = var.environment == "prod"
+  } : { enabled = false }
+}
+
+# ============================================================================
+# ENTERPRISE FEATURES SUMMARY
+# ============================================================================
+
+output "enterprise_features" {
+  description = "Summary of enabled enterprise features"
+  value = {
+    multi_cloud_deployment     = var.enable_multi_cloud
+    data_lake_enabled         = var.enable_data_lake
+    data_catalog_enabled      = var.enable_data_catalog
+    data_mesh_enabled         = var.enable_data_mesh
+    cost_optimization_enabled = var.enable_cost_optimization
+    disaster_recovery_enabled = var.enable_disaster_recovery
+    gitops_enabled           = var.enable_gitops
+    security_scanning_enabled = var.enable_security_scanning
+    pii_detection_enabled    = var.enable_pii_detection
+    intelligent_scaling      = var.enable_intelligent_scaling
+    
+    compliance_frameworks = var.compliance_frameworks
+    data_retention_days   = var.data_retention_days
+    backup_enabled       = var.enable_backup
+    
+    architecture_tier = var.rto_minutes <= 30 ? "tier1-mission-critical" : var.rto_minutes <= 240 ? "tier2-business-critical" : "tier3-standard"
+  }
+}
+
+# ============================================================================
+# PLATFORM HEALTH AND STATUS
+# ============================================================================
+
+output "platform_health" {
+  description = "Platform health and status indicators"
+  value = {
+    deployment_status = "completed"
+    health_checks = {
+      kubernetes_cluster    = local.cluster_name != null && local.cluster_name != ""
+      database_available   = local.database_host != null && local.database_host != ""
+      messaging_ready      = module.messaging_infrastructure.kafka_bootstrap_servers != null
+      monitoring_active    = var.enable_monitoring
+      security_hardened    = var.enable_encryption && var.enable_audit_logs
+    }
+    
+    resource_counts = {
+      clouds_deployed    = length([for cloud in ["aws", "azure", "gcp"] : cloud if (cloud == "aws" && local.deploy_to_aws) || (cloud == "azure" && local.deploy_to_azure) || (cloud == "gcp" && local.deploy_to_gcp)])
+      data_lake_zones   = var.enable_data_lake ? 4 : 0  # bronze, silver, gold, platinum
+      kafka_topics      = length(module.messaging_infrastructure.kafka_topic_names)
+      compliance_frameworks = length(var.compliance_frameworks)
+    }
+    
+    deployed_at = timestamp()
+    terraform_version = "1.6+"
+  }
+}
+
 output "next_steps" {
   description = "Next steps after deployment"
   value = [
@@ -318,17 +453,49 @@ output "next_steps" {
     "3. Check application status: kubectl get pods -n ${local.project_name}-${var.environment}",
     "4. Access API: ${local.api_endpoint}",
     var.enable_monitoring ? "5. Access Grafana: ${local.grafana_endpoint}" : "",
-    "6. View database connection details in sensitive outputs"
+    "6. View database connection details in sensitive outputs",
+    var.enable_data_lake ? "7. Verify data lake buckets are accessible" : "",
+    var.enable_data_catalog ? "8. Access data catalog for metadata management" : "",
+    var.enable_disaster_recovery ? "9. Test disaster recovery procedures" : "",
+    "10. Review cost optimization recommendations"
   ]
+}
+
+# ============================================================================
+# QUICK ACCESS COMMANDS
+# ============================================================================
+
+output "quick_access_commands" {
+  description = "Quick access commands for common operations"
+  value = {
+    kubectl_config = local.kubectl_config_command
+    
+    database_connect = "psql postgresql://${local.database_username}:<password>@${local.database_host}:5432/${local.database_name}"
+    
+    kafka_console_consumer = var.enable_data_lake ? (
+      "kubectl exec -it deployment/${var.project_name}-${var.environment}-kafka-kafka-0 -n ${var.project_name}-kafka -- /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic ${var.kafka_topic_prefix}-sales-events"
+    ) : "Kafka not deployed"
+    
+    data_lake_access = var.enable_data_lake ? {
+      aws   = local.deploy_to_aws ? "aws s3 ls s3://${try(module.data_lake[0].aws_bucket_name, "not-deployed")}" : null
+      azure = local.deploy_to_azure ? "az storage blob list --account-name ${try(module.data_lake[0].azure_storage_account, "not-deployed")} --container-name bronze" : null
+      gcp   = local.deploy_to_gcp ? "gsutil ls gs://${try(module.data_lake[0].gcp_bucket_name, "not-deployed")}" : null
+    } : null
+    
+    monitoring_access = var.enable_monitoring ? {
+      prometheus = "kubectl port-forward svc/prometheus-server 9090:80 -n monitoring"
+      grafana    = "kubectl port-forward svc/grafana 3000:80 -n monitoring"
+    } : null
+  }
 }
 
 # Local values for computed outputs
 locals {
-  kubectl_config_command = var.cloud_provider == "aws" && length(module.aws_infrastructure) > 0 ? (
+  kubectl_config_command = local.primary_cloud == "aws" && local.deploy_to_aws && length(module.aws_infrastructure) > 0 ? (
     "aws eks update-kubeconfig --region ${var.region} --name ${module.aws_infrastructure[0].cluster_name}"
-  ) : var.cloud_provider == "azure" && length(module.azure_infrastructure) > 0 ? (
+  ) : local.primary_cloud == "azure" && local.deploy_to_azure && length(module.azure_infrastructure) > 0 ? (
     "az aks get-credentials --resource-group ${module.azure_infrastructure[0].resource_group_name} --name ${module.azure_infrastructure[0].cluster_name}"
-  ) : var.cloud_provider == "gcp" && length(module.gcp_infrastructure) > 0 ? (
+  ) : local.primary_cloud == "gcp" && local.deploy_to_gcp && length(module.gcp_infrastructure) > 0 ? (
     "gcloud container clusters get-credentials ${module.gcp_infrastructure[0].cluster_name} --region ${var.region} --project ${var.gcp_project_id}"
   ) : "Cluster not deployed"
   

@@ -2,6 +2,7 @@
 Custom exception classes for the application.
 Provides specific error types for better error handling and debugging.
 """
+from __future__ import annotations
 
 from typing import Any
 

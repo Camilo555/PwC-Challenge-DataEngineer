@@ -2,6 +2,7 @@
 Sales Service Interface
 Domain layer interface for sales business operations.
 """
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 

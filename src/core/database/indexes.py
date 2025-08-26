@@ -4,6 +4,7 @@ Database Index Management
 Comprehensive index creation and optimization for the retail data warehouse.
 Includes performance-optimized indexes for all query patterns.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum

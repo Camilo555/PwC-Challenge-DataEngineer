@@ -2,6 +2,7 @@
 Enhanced Error Handling and Retry Mechanisms for ETL Processors
 Provides comprehensive retry logic, circuit breakers, and fault tolerance.
 """
+from __future__ import annotations
 
 import asyncio
 import random

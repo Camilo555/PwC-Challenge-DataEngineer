@@ -2,6 +2,7 @@
 Advanced Configuration Management System
 Provides hierarchical configuration, environment management, and validation.
 """
+from __future__ import annotations
 
 import hashlib
 import json

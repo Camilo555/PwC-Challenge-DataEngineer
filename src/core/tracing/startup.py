@@ -2,6 +2,7 @@
 Tracing Startup Integration
 Automatic configuration and initialization of distributed tracing on application startup.
 """
+from __future__ import annotations
 
 import os
 from typing import Any

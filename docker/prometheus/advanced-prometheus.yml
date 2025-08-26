@@ -1,0 +1,203 @@
+# Advanced Prometheus Configuration
+# Enterprise-grade monitoring with service discovery and advanced rules
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'pwc-retail-platform'
+    environment: '${ENVIRONMENT}'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Rule files specifying where to find rule configurations
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+
+  # Node Exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  # Application services
+  - job_name: 'api-service'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'api-service'
+
+  - job_name: 'dagster'
+    static_configs:
+      - targets: ['dagster:3000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'dagster-service'
+
+  # Database monitoring
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 10s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 10s
+
+  # Message queue monitoring
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+    scrape_interval: 10s
+    metrics_path: /metrics/per-object
+
+  # Elasticsearch monitoring
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch-exporter:9114']
+    scrape_interval: 30s
+
+  # Custom application metrics
+  - job_name: 'service-mesh'
+    static_configs:
+      - targets: ['service-mesh-monitor:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Kubernetes service discovery (if running in k8s)
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - default
+            - kube-system
+            - monitoring
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - role: node
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/$1/proxy/metrics
+
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+  # Service discovery for Docker Swarm (alternative to k8s)
+  - job_name: 'docker-services'
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: services
+    relabel_configs:
+      - source_labels: [__meta_dockerswarm_service_label_prometheus_enable]
+        action: keep
+        regex: true
+      - source_labels: [__meta_dockerswarm_service_label_prometheus_port]
+        action: replace
+        target_label: __address__
+        regex: (.+)
+        replacement: tasks.$1:$1
+
+# Storage configuration
+storage:
+  tsdb:
+    # Retention time for metrics
+    retention.time: 30d
+    retention.size: 50GB
+    # Compression settings
+    wal-compression: true
+    # Performance tuning
+    max-block-duration: 2h
+    min-block-duration: 5m
+
+# Remote storage (for long-term storage)
+remote_write:
+  - url: "${REMOTE_STORAGE_URL}"
+    queue_config:
+      capacity: 2500
+      max_shards: 200
+      min_shards: 1
+      max_samples_per_send: 500
+      batch_send_deadline: 5s
+      min_backoff: 30ms
+      max_backoff: 100ms
+    metadata_config:
+      send: true
+      send_interval: 30s
+    write_relabel_configs:
+      # Drop high-cardinality metrics to reduce storage costs
+      - source_labels: [__name__]
+        regex: 'high_cardinality_metric_.*'
+        action: drop
+
+# Remote read (for querying historical data)
+remote_read:
+  - url: "${REMOTE_STORAGE_READ_URL}"
+    read_recent: true
+    required_matchers:
+      job: "prometheus"

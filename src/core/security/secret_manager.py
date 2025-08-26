@@ -2,6 +2,7 @@
 Secret Management Integration
 Provides secure secret management for production deployments.
 """
+from __future__ import annotations
 
 import logging
 import os

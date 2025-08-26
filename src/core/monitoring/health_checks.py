@@ -2,6 +2,8 @@
 Health Check System
 Provides comprehensive health monitoring for system components.
 """
+from __future__ import annotations
+
 import asyncio
 import platform
 import time
@@ -14,10 +16,18 @@ from typing import Any
 import psutil
 
 try:
-    import redis.asyncio as redis
-    REDIS_AVAILABLE = True
+    import aio_pika
+    import pika
+    RABBITMQ_AVAILABLE = True
 except ImportError:
-    REDIS_AVAILABLE = False
+    RABBITMQ_AVAILABLE = False
+
+try:
+    from kafka import KafkaConsumer
+    from kafka.admin import KafkaAdminClient
+    KAFKA_AVAILABLE = True
+except ImportError:
+    KAFKA_AVAILABLE = False
 
 try:
     from sqlalchemy import text
@@ -217,6 +227,150 @@ class RedisHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
                 message=f"Redis connection failed: {str(e)}",
+                timestamp=datetime.utcnow()
+            )
+
+
+class RabbitMQHealthCheck(BaseHealthCheck):
+    """Health check for RabbitMQ connectivity."""
+
+    def __init__(self, name: str, host: str = "localhost", port: int = 5672, 
+                 username: str = "guest", password: str = "guest", timeout: float = 10.0):
+        super().__init__(name, timeout)
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+
+    async def _check_health(self) -> HealthCheckResult:
+        """Check RabbitMQ connectivity."""
+        if not RABBITMQ_AVAILABLE:
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.UNKNOWN,
+                message="RabbitMQ client not available",
+                timestamp=datetime.utcnow()
+            )
+
+        try:
+            # Test connection using blocking connection for health check
+            connection_params = pika.ConnectionParameters(
+                host=self.host,
+                port=self.port,
+                credentials=pika.PlainCredentials(self.username, self.password),
+                connection_attempts=1,
+                retry_delay=1.0,
+                socket_timeout=self.timeout
+            )
+            
+            connection = pika.BlockingConnection(connection_params)
+            channel = connection.channel()
+            
+            # Test basic queue operation
+            test_queue = f"health_check_{int(time.time())}"
+            channel.queue_declare(queue=test_queue, durable=False, auto_delete=True)
+            
+            # Publish and consume test message
+            test_message = "health_check_message"
+            channel.basic_publish(exchange='', routing_key=test_queue, body=test_message)
+            
+            method_frame, header_frame, body = channel.basic_get(queue=test_queue, auto_ack=True)
+            
+            # Clean up
+            channel.queue_delete(queue=test_queue)
+            connection.close()
+            
+            if body and body.decode() == test_message:
+                return HealthCheckResult(
+                    component=self.name,
+                    status=HealthStatus.HEALTHY,
+                    message="RabbitMQ connection and operations successful",
+                    timestamp=datetime.utcnow(),
+                    details={
+                        "host": self.host,
+                        "port": self.port,
+                        "test_queue_created": True,
+                        "message_published": True,
+                        "message_consumed": True
+                    }
+                )
+            else:
+                return HealthCheckResult(
+                    component=self.name,
+                    status=HealthStatus.DEGRADED,
+                    message="RabbitMQ operations failed",
+                    timestamp=datetime.utcnow()
+                )
+
+        except Exception as e:
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.UNHEALTHY,
+                message=f"RabbitMQ connection failed: {str(e)}",
+                timestamp=datetime.utcnow()
+            )
+
+
+class KafkaHealthCheck(BaseHealthCheck):
+    """Health check for Kafka connectivity."""
+
+    def __init__(self, name: str, bootstrap_servers: list[str] = None, timeout: float = 10.0):
+        super().__init__(name, timeout)
+        self.bootstrap_servers = bootstrap_servers or ["localhost:9092"]
+
+    async def _check_health(self) -> HealthCheckResult:
+        """Check Kafka connectivity."""
+        if not KAFKA_AVAILABLE:
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.UNKNOWN,
+                message="Kafka client not available",
+                timestamp=datetime.utcnow()
+            )
+
+        try:
+            # Test admin client connection
+            admin_client = KafkaAdminClient(
+                bootstrap_servers=self.bootstrap_servers,
+                request_timeout_ms=int(self.timeout * 1000),
+                api_version=(2, 0, 0)
+            )
+            
+            # List topics to test connectivity
+            topic_metadata = admin_client.list_topics(timeout=self.timeout)
+            topics = list(topic_metadata.topics.keys())
+            
+            # Test consumer creation (without subscribing)
+            consumer = KafkaConsumer(
+                bootstrap_servers=self.bootstrap_servers,
+                consumer_timeout_ms=1000,
+                api_version=(2, 0, 0)
+            )
+            
+            # Get cluster metadata
+            cluster_metadata = consumer.list_consumer_groups()
+            
+            consumer.close()
+            admin_client.close()
+            
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.HEALTHY,
+                message="Kafka connection and operations successful",
+                timestamp=datetime.utcnow(),
+                details={
+                    "bootstrap_servers": self.bootstrap_servers,
+                    "topics_available": len(topics),
+                    "cluster_connected": True,
+                    "consumer_groups_available": len(cluster_metadata) if cluster_metadata else 0
+                }
+            )
+
+        except Exception as e:
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.UNHEALTHY,
+                message=f"Kafka connection failed: {str(e)}",
                 timestamp=datetime.utcnow()
             )
 
@@ -530,7 +684,8 @@ health_manager = HealthCheckManager()
 # Utility functions for common health check setups
 
 def setup_basic_health_checks(database_url: str | None = None,
-                            redis_url: str | None = None,
+                            rabbitmq_host: str | None = None,
+                            kafka_servers: list[str] | None = None,
                             file_paths: list[str] | None = None):
     """Setup basic health checks for common components."""
 
@@ -543,10 +698,15 @@ def setup_basic_health_checks(database_url: str | None = None,
         db_check = DatabaseHealthCheck("database", database_url)
         health_manager.register_health_check(db_check)
 
-    # Redis check
-    if redis_url:
-        redis_check = RedisHealthCheck("redis", redis_url)
-        health_manager.register_health_check(redis_check)
+    # RabbitMQ check
+    if rabbitmq_host:
+        rabbitmq_check = RabbitMQHealthCheck("rabbitmq", rabbitmq_host)
+        health_manager.register_health_check(rabbitmq_check)
+    
+    # Kafka check
+    if kafka_servers:
+        kafka_check = KafkaHealthCheck("kafka", kafka_servers)
+        health_manager.register_health_check(kafka_check)
 
     # File system check
     if file_paths:

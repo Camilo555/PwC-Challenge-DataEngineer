@@ -2,6 +2,7 @@
 Enhanced Sales Router for API V2
 Advanced sales endpoints with improved functionality and performance.
 """
+from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlmodel import Session

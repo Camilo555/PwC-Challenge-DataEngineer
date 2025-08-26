@@ -2,6 +2,8 @@
 GraphQL Resolvers
 Business logic for GraphQL queries and mutations.
 """
+from __future__ import annotations
+
 import json
 from datetime import datetime
 

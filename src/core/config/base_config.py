@@ -70,7 +70,7 @@ class BaseConfig(BaseSettings):
     enable_monitoring: bool = Field(default=True)
     enable_caching: bool = Field(default=True)
     enable_vector_search: bool = Field(default=True)
-    
+
     # Elasticsearch Configuration
     ELASTICSEARCH_HOST: str = Field(default="localhost")
     ELASTICSEARCH_PORT: int = Field(default=9200)

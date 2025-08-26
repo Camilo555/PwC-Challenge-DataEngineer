@@ -2,6 +2,8 @@
 Enhanced Sales Schemas for API V2
 Includes additional fields and improved validation.
 """
+from __future__ import annotations
+
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID

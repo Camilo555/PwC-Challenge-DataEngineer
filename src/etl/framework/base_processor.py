@@ -2,6 +2,7 @@
 Base ETL Processor Framework
 Provides a unified interface and common functionality for all ETL processors.
 """
+from __future__ import annotations
 
 import json
 import os

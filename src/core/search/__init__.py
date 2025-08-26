@@ -8,16 +8,13 @@ from .elasticsearch_client import (
     SearchQuery,
     SearchResult,
     get_elasticsearch_client,
-    test_elasticsearch_connection
+    test_elasticsearch_connection,
 )
-from .indexing_service import (
-    ElasticsearchIndexingService,
-    get_indexing_service
-)
+from .indexing_service import ElasticsearchIndexingService, get_indexing_service
 
 __all__ = [
     "ElasticsearchClient",
-    "SearchQuery", 
+    "SearchQuery",
     "SearchResult",
     "get_elasticsearch_client",
     "test_elasticsearch_connection",

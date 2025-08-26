@@ -2,6 +2,8 @@
 Enhanced Sales Service for API V2
 Provides advanced analytics and improved performance.
 """
+from __future__ import annotations
+
 import asyncio
 import time
 from datetime import datetime, timedelta

@@ -1,4 +1,5 @@
 """Invoice domain entity and related models."""
+from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
@@ -183,7 +184,7 @@ class Invoice(DomainEntity):
         return v
 
     @model_validator(mode="after")
-    def process_cancellation(self) -> "Invoice":
+    def process_cancellation(self) -> Invoice:
         """Process cancellation information."""
         # Check if cancelled based on invoice number
         if self.invoice_no.startswith(CANCELLED_INVOICE_PREFIX):
@@ -208,7 +209,7 @@ class Invoice(DomainEntity):
         return self
 
     @model_validator(mode="after")
-    def calculate_total(self) -> "Invoice":
+    def calculate_total(self) -> Invoice:
         """Calculate total amount including tax, discounts, and shipping."""
         total = self.subtotal
 

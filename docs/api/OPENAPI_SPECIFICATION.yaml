@@ -1,0 +1,1696 @@
+openapi: 3.0.3
+info:
+  title: PwC Data Engineering Platform API
+  description: |
+    ## Enterprise-grade REST API for retail data analytics
+
+    The PwC Data Engineering Platform API provides comprehensive access to retail analytics data, 
+    advanced analytics capabilities, and business intelligence insights. Built with FastAPI, 
+    this production-ready API includes:
+
+    - **JWT Authentication** with role-based access control
+    - **Rate Limiting** with intelligent burst protection  
+    - **Circuit Breaker** patterns for resilience
+    - **Multi-level Caching** for optimal performance
+    - **Comprehensive Monitoring** with distributed tracing
+    - **Data Quality** validation and scoring
+    - **Advanced Analytics** with ML-powered insights
+
+    ### Authentication
+    This API uses JWT (JSON Web Tokens) for authentication. Include your token in the Authorization header:
+    ```
+    Authorization: Bearer <your-jwt-token>
+    ```
+
+    ### Rate Limits
+    - **Authentication endpoints**: 5 requests per minute
+    - **Analytics endpoints**: 20 requests per minute (burst: 30)
+    - **General endpoints**: 100 requests per minute (burst: 150)
+
+    ### API Versions
+    - **v1**: Stable CRUD operations and basic analytics
+    - **v2**: Advanced analytics with ML capabilities
+  version: 2.0.0
+  termsOfService: https://pwc.com/terms
+  contact:
+    name: PwC Data Engineering Team
+    email: data-engineering@pwc.com
+    url: https://docs.pwc-data-platform.com
+  license:
+    name: Proprietary
+    url: https://pwc.com/license
+
+servers:
+  - url: https://api.pwc-retail.com
+    description: Production server
+  - url: https://api-staging.pwc-retail.com
+    description: Staging server
+  - url: http://localhost:8000
+    description: Development server
+
+security:
+  - BearerAuth: []
+  - BasicAuth: []
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Health
+    description: System health and status endpoints
+  - name: Sales v1
+    description: Core sales data operations
+  - name: Sales v2
+    description: Enhanced sales operations with advanced features
+  - name: Analytics v2
+    description: Advanced analytics and machine learning insights
+  - name: Search
+    description: Vector and full-text search capabilities
+  - name: Data Mart
+    description: Business intelligence and reporting
+  - name: Async Tasks
+    description: Background task management and monitoring
+  - name: GraphQL
+    description: Flexible GraphQL queries
+
+paths:
+  # Root and Health Endpoints
+  /:
+    get:
+      tags: [Health]
+      summary: API root information
+      description: Get basic API information and available endpoints
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "PwC Data Engineering Challenge API"
+                  version:
+                    type: string
+                    example: "2.0.0"
+                  documentation:
+                    type: string
+                    example: "/docs"
+                  health:
+                    type: string
+                    example: "/health"
+
+  /health:
+    get:
+      tags: [Health]
+      summary: System health check
+      description: Get comprehensive system health status and configuration
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  # Authentication Endpoints
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      description: Authenticate user and receive JWT access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: "data_analyst"
+              password: "secure_password_2024"
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      description: Use refresh token to get new access token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefreshResponse'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Sales v1 Endpoints
+  /api/v1/sales:
+    get:
+      tags: [Sales v1]
+      summary: List sales transactions
+      description: |
+        Retrieve paginated sales transactions with comprehensive filtering options.
+        Supports date range filtering, product/country filtering, and flexible sorting.
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - $ref: '#/components/parameters/Product'
+        - $ref: '#/components/parameters/Country'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: List of sales transactions
+          headers:
+            X-Total-Count:
+              description: Total number of records
+              schema:
+                type: integer
+            X-Page-Count:
+              description: Total number of pages
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSales'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/sales/{transaction_id}:
+    get:
+      tags: [Sales v1]
+      summary: Get sales transaction by ID
+      description: Retrieve detailed information for a specific sales transaction
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          description: Unique transaction identifier
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Sales transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleItem'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/sales/analytics:
+    get:
+      tags: [Sales v1]
+      summary: Basic sales analytics
+      description: Get aggregated sales metrics and key performance indicators
+      parameters:
+        - name: metrics
+          in: query
+          description: Metrics to calculate
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [revenue, transactions, customers, products]
+            example: [revenue, transactions, customers]
+        - name: dimensions
+          in: query
+          description: Dimensions to group by
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [country, product, time, customer_segment]
+            example: [country, time]
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - name: granularity
+          in: query
+          description: Time granularity for time-based analysis
+          schema:
+            type: string
+            enum: [hour, day, week, month, quarter, year]
+            default: day
+      responses:
+        '200':
+          description: Sales analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesAnalytics'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Sales v2 Endpoints (Enhanced)
+  /api/v2/sales:
+    get:
+      tags: [Sales v2]
+      summary: Enhanced sales data with ML features
+      description: |
+        Advanced sales data endpoint with machine learning enrichment, 
+        customer segmentation, and predictive features.
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - $ref: '#/components/parameters/Product'
+        - $ref: '#/components/parameters/Country'
+        - name: include_ml_features
+          in: query
+          description: Include machine learning features in response
+          schema:
+            type: boolean
+            default: false
+        - name: customer_segment
+          in: query
+          description: Filter by customer segment
+          schema:
+            type: string
+            enum: [new_customers, loyal_customers, at_risk, champions]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Enhanced sales data with ML features
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnhancedPaginatedSales'
+
+  # Advanced Analytics v2 Endpoints
+  /api/v2/analytics/advanced-analytics:
+    post:
+      tags: [Analytics v2]
+      summary: Create advanced analytics request
+      description: |
+        Submit complex analytics request for asynchronous processing.
+        Supports advanced metrics calculation, customer segmentation,
+        and multi-dimensional analysis with ML insights.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvancedAnalyticsRequest'
+            example:
+              start_date: "2024-01-01T00:00:00Z"
+              end_date: "2024-01-31T23:59:59Z"
+              metrics: ["revenue", "customers", "retention_rate"]
+              dimensions: ["country", "product_category", "time"]
+              filters:
+                country: ["United Kingdom", "Germany"]
+                min_order_value: 10.0
+      responses:
+        '202':
+          description: Analytics request accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/analytics/analytics-status/{request_id}:
+    get:
+      tags: [Analytics v2]
+      summary: Get analytics processing status
+      description: Check the status of an advanced analytics request
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          description: Analytics request identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Analytics processing status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResult'
+        '404':
+          description: Analytics request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/analytics/cohort-analysis:
+    post:
+      tags: [Analytics v2]
+      summary: Customer cohort analysis
+      description: |
+        Perform sophisticated customer cohort analysis to understand
+        customer retention patterns and lifetime value progression.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CohortAnalysisRequest'
+      responses:
+        '200':
+          description: Cohort analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CohortAnalysisResponse'
+
+  /api/v2/analytics/predictive-insights:
+    get:
+      tags: [Analytics v2]
+      summary: Predictive analytics and forecasting
+      description: |
+        Generate ML-powered predictive insights including revenue forecasting,
+        customer behavior prediction, and trend analysis.
+      parameters:
+        - name: forecast_days
+          in: query
+          description: Number of days to forecast
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+        - name: confidence_interval
+          in: query
+          description: Confidence interval for predictions
+          schema:
+            type: number
+            format: float
+            minimum: 0.8
+            maximum: 0.99
+            default: 0.95
+        - name: include_seasonality
+          in: query
+          description: Include seasonal patterns in forecast
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Predictive insights and forecasts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictiveInsights'
+
+  /api/v2/analytics/real-time-metrics:
+    get:
+      tags: [Analytics v2]
+      summary: Real-time business metrics
+      description: |
+        Get live business metrics updated in real-time including
+        active users, conversion rates, and revenue velocity.
+      parameters:
+        - name: metrics
+          in: query
+          description: Specific metrics to retrieve
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [active_users, revenue_rate, conversion_rate, cart_abandonment, session_duration]
+            default: [active_users, revenue_rate, conversion_rate]
+      responses:
+        '200':
+          description: Real-time metrics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealTimeMetrics'
+
+  # Search Endpoints
+  /api/v1/search:
+    get:
+      tags: [Search]
+      summary: Vector and full-text search
+      description: |
+        Unified search endpoint supporting both vector similarity search
+        and full-text search across products, customers, and transactions.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query
+          schema:
+            type: string
+            example: "heart shaped holder"
+        - name: type
+          in: query
+          description: Search type
+          schema:
+            type: string
+            enum: [products, transactions, customers, all]
+            default: all
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: use_vector_search
+          in: query
+          description: Enable semantic vector search
+          schema:
+            type: boolean
+            default: true
+        - name: filters
+          in: query
+          description: Additional search filters (JSON)
+          schema:
+            type: object
+            example: {"category": "Home Decor", "price_range": {"min": 5, "max": 50}}
+      responses:
+        '200':
+          description: Search results with relevance scoring
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+
+  # Data Mart Endpoints
+  /api/v1/datamart/reports:
+    get:
+      tags: [Data Mart]
+      summary: List available reports
+      description: Get list of available business intelligence reports
+      responses:
+        '200':
+          description: Available reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReportMetadata'
+
+  /api/v1/datamart/reports/{report_id}:
+    get:
+      tags: [Data Mart]
+      summary: Execute business intelligence report
+      description: Execute a specific BI report with parameters
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          description: Report identifier
+          schema:
+            type: string
+            enum: [sales_summary, customer_analysis, product_performance, geographic_analysis]
+        - name: parameters
+          in: query
+          description: Report parameters (JSON)
+          schema:
+            type: object
+            example: {"start_date": "2024-01-01", "end_date": "2024-01-31", "country": "United Kingdom"}
+      responses:
+        '200':
+          description: Report execution results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResults'
+
+  # Async Tasks Endpoints
+  /api/v1/async-tasks:
+    get:
+      tags: [Async Tasks]
+      summary: List async tasks
+      description: Get list of background tasks with status information
+      parameters:
+        - name: status
+          in: query
+          description: Filter by task status
+          schema:
+            type: string
+            enum: [pending, processing, completed, failed]
+        - name: task_type
+          in: query
+          description: Filter by task type
+          schema:
+            type: string
+            enum: [etl_pipeline, analytics, data_export, model_training]
+      responses:
+        '200':
+          description: List of async tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AsyncTask'
+
+  /api/v1/async-tasks/{task_id}:
+    get:
+      tags: [Async Tasks]
+      summary: Get async task status
+      description: Get detailed status and progress of a specific async task
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: Task identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task status and details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTask'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # GraphQL Endpoint
+  /api/graphql:
+    post:
+      tags: [GraphQL]
+      summary: GraphQL endpoint
+      description: |
+        Flexible GraphQL endpoint for complex queries with custom field selection.
+        Supports nested queries, aggregations, and real-time subscriptions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: GraphQL query
+                  example: |
+                    query {
+                      sales(first: 10, country: "United Kingdom") {
+                        edges {
+                          node {
+                            id
+                            invoiceNo
+                            totalAmount
+                            customer {
+                              id
+                              country
+                              segment
+                            }
+                          }
+                        }
+                        totalCount
+                      }
+                    }
+                variables:
+                  type: object
+                  description: Query variables
+                operationName:
+                  type: string
+                  description: Operation name for multiple queries
+      responses:
+        '200':
+          description: GraphQL response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                  errors:
+                    type: array
+                    items:
+                      type: object
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from /api/v1/auth/login
+
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Basic HTTP authentication (fallback for development)
+
+  parameters:
+    DateFrom:
+      name: date_from
+      in: query
+      description: Start date filter (ISO 8601 format)
+      schema:
+        type: string
+        format: date
+        example: "2024-01-01"
+
+    DateTo:
+      name: date_to
+      in: query
+      description: End date filter (ISO 8601 format)
+      schema:
+        type: string
+        format: date
+        example: "2024-01-31"
+
+    Product:
+      name: product
+      in: query
+      description: Product code filter
+      schema:
+        type: string
+        example: "85123A"
+
+    Country:
+      name: country
+      in: query
+      description: Country name filter
+      schema:
+        type: string
+        example: "United Kingdom"
+
+    Page:
+      name: page
+      in: query
+      description: Page number (1-based)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+        example: 1
+
+    Size:
+      name: size
+      in: query
+      description: Page size
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 20
+        example: 100
+
+    Sort:
+      name: sort
+      in: query
+      description: Sort field and direction (field:asc|desc)
+      schema:
+        type: string
+        default: "invoice_date:desc"
+        example: "total_amount:desc"
+
+  schemas:
+    # Authentication Schemas
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: User identifier
+          example: "data_analyst"
+        password:
+          type: string
+          format: password
+          description: User password
+          example: "secure_password_2024"
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "bearer"
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+          example: 1800
+        refresh_token:
+          type: string
+          description: Refresh token for obtaining new access tokens
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              example: "user_123"
+            username:
+              type: string
+              example: "data_analyst"
+            roles:
+              type: array
+              items:
+                type: string
+              example: ["analyst", "user"]
+
+    TokenRefreshResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "bearer"
+        expires_in:
+          type: integer
+          example: 1800
+
+    # Health Schema
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: "healthy"
+        environment:
+          type: string
+          enum: [development, staging, production]
+          example: "production"
+        version:
+          type: string
+          example: "2.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        security:
+          type: object
+          properties:
+            auth_enabled:
+              type: boolean
+              example: true
+            rate_limiting:
+              type: boolean
+              example: true
+            https_enabled:
+              type: boolean
+              example: true
+        services:
+          type: object
+          properties:
+            database:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "healthy"
+                response_time:
+                  type: number
+                  example: 12.5
+            redis:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "healthy"
+                memory_usage:
+                  type: number
+                  example: 45.2
+            spark:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "healthy"
+                active_jobs:
+                  type: integer
+                  example: 3
+
+    # Sales Schemas
+    SaleItem:
+      type: object
+      required:
+        - invoice_no
+        - stock_code
+        - quantity
+        - invoice_date
+        - unit_price
+        - total
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Unique transaction identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        invoice_no:
+          type: string
+          description: Invoice number
+          example: "536365"
+        stock_code:
+          type: string
+          description: Product stock code
+          example: "85123A"
+        description:
+          type: string
+          nullable: true
+          description: Product description
+          example: "WHITE HANGING HEART T-LIGHT HOLDER"
+        quantity:
+          type: integer
+          description: Quantity purchased
+          example: 6
+        invoice_date:
+          type: string
+          format: date-time
+          description: Invoice date and time
+          example: "2024-01-01T08:26:00Z"
+        unit_price:
+          type: number
+          format: float
+          description: Price per unit
+          example: 2.55
+        customer_id:
+          type: string
+          nullable: true
+          description: Customer identifier
+          example: "17850"
+        country:
+          type: string
+          nullable: true
+          description: Customer country
+          example: "United Kingdom"
+        total:
+          type: number
+          format: float
+          description: Total amount (quantity × unit_price)
+          example: 15.30
+        total_str:
+          type: string
+          description: Formatted total amount
+          example: "15.30"
+        data_quality_score:
+          type: number
+          format: float
+          description: Data quality score (0.0-1.0)
+          example: 0.95
+        created_at:
+          type: string
+          format: date-time
+          description: Record creation timestamp
+          example: "2024-01-01T08:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Record last update timestamp
+          example: "2024-01-01T08:30:00Z"
+
+    PaginatedSales:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleItem'
+        total:
+          type: integer
+          description: Total number of records
+          example: 1000
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        size:
+          type: integer
+          description: Page size
+          example: 20
+        pages:
+          type: integer
+          description: Total number of pages
+          example: 50
+
+    EnhancedPaginatedSales:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedSales'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/SaleItem'
+                  - type: object
+                    properties:
+                      ml_features:
+                        type: object
+                        description: Machine learning enriched features
+                        properties:
+                          customer_segment:
+                            type: string
+                            enum: [new_customers, loyal_customers, at_risk, champions]
+                            example: "loyal_customers"
+                          predicted_clv:
+                            type: number
+                            format: float
+                            description: Predicted customer lifetime value
+                            example: 1250.75
+                          churn_probability:
+                            type: number
+                            format: float
+                            description: Probability of customer churn (0.0-1.0)
+                            example: 0.15
+                          product_affinity:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                product_code:
+                                  type: string
+                                  example: "85123B"
+                                affinity_score:
+                                  type: number
+                                  format: float
+                                  example: 0.85
+            aggregations:
+              type: object
+              description: Aggregated statistics for current filter
+              properties:
+                total_revenue:
+                  type: number
+                  format: float
+                  example: 125000.50
+                unique_customers:
+                  type: integer
+                  example: 8945
+                avg_order_value:
+                  type: number
+                  format: float
+                  example: 27.63
+
+    # Analytics Schemas
+    SalesAnalytics:
+      type: object
+      properties:
+        metrics:
+          type: object
+          properties:
+            total_revenue:
+              type: number
+              format: float
+              example: 1250000.50
+            total_transactions:
+              type: integer
+              example: 45230
+            unique_customers:
+              type: integer
+              example: 8945
+            unique_products:
+              type: integer
+              example: 3500
+            avg_order_value:
+              type: number
+              format: float
+              example: 27.63
+        dimensions:
+          type: object
+          properties:
+            by_country:
+              type: array
+              items:
+                type: object
+                properties:
+                  country:
+                    type: string
+                    example: "United Kingdom"
+                  revenue:
+                    type: number
+                    format: float
+                    example: 650000.25
+                  transactions:
+                    type: integer
+                    example: 15000
+            by_product:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_code:
+                    type: string
+                    example: "85123A"
+                  description:
+                    type: string
+                    example: "WHITE HANGING HEART T-LIGHT HOLDER"
+                  revenue:
+                    type: number
+                    format: float
+                    example: 25000.75
+                  quantity_sold:
+                    type: integer
+                    example: 1500
+            by_time:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                    example: "2024-01-01"
+                  revenue:
+                    type: number
+                    format: float
+                    example: 15000.50
+                  transactions:
+                    type: integer
+                    example: 450
+        period:
+          type: object
+          properties:
+            start_date:
+              type: string
+              format: date
+              example: "2024-01-01"
+            end_date:
+              type: string
+              format: date
+              example: "2024-01-31"
+
+    AdvancedAnalyticsRequest:
+      type: object
+      required:
+        - start_date
+        - end_date
+      properties:
+        start_date:
+          type: string
+          format: date-time
+          description: Analysis start date
+          example: "2024-01-01T00:00:00Z"
+        end_date:
+          type: string
+          format: date-time
+          description: Analysis end date
+          example: "2024-01-31T23:59:59Z"
+        metrics:
+          type: array
+          items:
+            type: string
+            enum: [revenue, transactions, customers, retention_rate, clv, churn_rate]
+          default: [revenue, transactions]
+          example: [revenue, customers, retention_rate]
+        dimensions:
+          type: array
+          items:
+            type: string
+            enum: [country, product, time, customer_segment, product_category]
+          default: [country, product]
+          example: [country, product_category, time]
+        filters:
+          type: object
+          nullable: true
+          description: Additional filters to apply
+          example:
+            country: ["United Kingdom", "Germany"]
+            min_order_value: 10.0
+            customer_segment: ["loyal_customers", "champions"]
+
+    AnalyticsResult:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier
+          example: "req_550e8400-e29b-41d4-a716-446655440000"
+        status:
+          type: string
+          enum: [processing, completed, failed]
+          description: Processing status
+          example: "completed"
+        data:
+          type: object
+          nullable: true
+          description: Analytics results (null if still processing)
+          properties:
+            revenue_analysis:
+              type: object
+              properties:
+                total_revenue:
+                  type: number
+                  format: float
+                  example: 1250000.50
+                growth_rate:
+                  type: number
+                  format: float
+                  example: 15.2
+                top_products:
+                  type: array
+                  items:
+                    type: string
+                  example: ["Product A", "Product B", "Product C"]
+            customer_analysis:
+              type: object
+              properties:
+                total_customers:
+                  type: integer
+                  example: 45230
+                new_customers:
+                  type: integer
+                  example: 1250
+                retention_rate:
+                  type: number
+                  format: float
+                  example: 87.5
+        metadata:
+          type: object
+          properties:
+            processing_time:
+              type: string
+              example: "45.2 seconds"
+            estimated_duration:
+              type: string
+              example: "30-60 seconds"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-01-15T10:30:45Z"
+
+    CohortAnalysisRequest:
+      type: object
+      required:
+        - start_date
+        - end_date
+      properties:
+        start_date:
+          type: string
+          format: date-time
+          example: "2024-01-01T00:00:00Z"
+        end_date:
+          type: string
+          format: date-time
+          example: "2024-01-31T23:59:59Z"
+        cohort_period:
+          type: string
+          enum: [day, week, month]
+          default: month
+          description: Period for cohort grouping
+        analysis_period:
+          type: string
+          enum: [day, week, month]
+          default: month
+          description: Period for retention analysis
+
+    CohortAnalysisResponse:
+      type: object
+      properties:
+        cohort_periods:
+          type: array
+          items:
+            type: string
+          example: ["2024-01", "2024-02", "2024-03"]
+        retention_rates:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          example:
+            month_0: 100.0
+            month_1: 45.2
+            month_2: 32.1
+            month_3: 28.5
+        cohort_sizes:
+          type: array
+          items:
+            type: integer
+          example: [1200, 1350, 1180]
+        revenue_per_cohort:
+          type: array
+          items:
+            type: object
+            properties:
+              period:
+                type: string
+                example: "2024-01"
+              revenue:
+                type: number
+                format: float
+                example: 45000.0
+
+    PredictiveInsights:
+      type: object
+      properties:
+        forecast_period:
+          type: integer
+          description: Number of days forecasted
+          example: 30
+        confidence_interval:
+          type: number
+          format: float
+          description: Confidence interval used
+          example: 0.95
+        predictions:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date-time
+                example: "2024-02-01T00:00:00Z"
+              predicted_revenue:
+                type: number
+                format: float
+                example: 12500.50
+              lower_bound:
+                type: number
+                format: float
+                example: 11250.45
+              upper_bound:
+                type: number
+                format: float
+                example: 13750.55
+        model_accuracy:
+          type: number
+          format: float
+          description: Model accuracy score
+          example: 0.85
+        last_updated:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    RealTimeMetrics:
+      type: object
+      properties:
+        metrics:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              value:
+                type: number
+                format: float
+              change_24h:
+                type: number
+                format: float
+                description: 24-hour change percentage
+              unit:
+                type: string
+          example:
+            active_users:
+              value: 542
+              change_24h: 8.5
+              unit: "users"
+            revenue_rate:
+              value: 1050.75
+              change_24h: 12.3
+              unit: "$/hour"
+            conversion_rate:
+              value: 3.8
+              change_24h: 0.2
+              unit: "%"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        refresh_interval:
+          type: integer
+          description: Refresh interval in seconds
+          example: 30
+
+    # Search Schemas
+    SearchResults:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: "85123A"
+              type:
+                type: string
+                enum: [product, transaction, customer]
+                example: "product"
+              title:
+                type: string
+                example: "WHITE HANGING HEART T-LIGHT HOLDER"
+              description:
+                type: string
+                example: "Decorative heart-shaped tea light holder in white"
+              score:
+                type: number
+                format: float
+                description: Relevance score (0.0-1.0)
+                example: 0.95
+              metadata:
+                type: object
+                description: Type-specific metadata
+        total:
+          type: integer
+          description: Total number of matching results
+          example: 156
+        query:
+          type: string
+          description: Original search query
+          example: "heart holder"
+        facets:
+          type: object
+          description: Search facets for filtering
+          properties:
+            category:
+              type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: string
+                    example: "Home Decor"
+                  count:
+                    type: integer
+                    example: 89
+            price_range:
+              type: array
+              items:
+                type: object
+                properties:
+                  range:
+                    type: string
+                    example: "0-10"
+                  count:
+                    type: integer
+                    example: 120
+
+    # Report Schemas
+    ReportMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "sales_summary"
+        name:
+          type: string
+          example: "Sales Summary Report"
+        description:
+          type: string
+          example: "Comprehensive sales performance analysis"
+        category:
+          type: string
+          example: "Sales & Revenue"
+        parameters:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "start_date"
+              type:
+                type: string
+                example: "date"
+              required:
+                type: boolean
+                example: true
+              description:
+                type: string
+                example: "Report start date"
+
+    ReportResults:
+      type: object
+      properties:
+        report_id:
+          type: string
+          example: "sales_summary"
+        generated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        parameters:
+          type: object
+          description: Parameters used for report generation
+        data:
+          type: object
+          description: Report data structure (varies by report type)
+        metadata:
+          type: object
+          properties:
+            execution_time:
+              type: number
+              format: float
+              example: 2.5
+            row_count:
+              type: integer
+              example: 1000
+
+    # Async Task Schema
+    AsyncTask:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          example: "task_550e8400-e29b-41d4-a716-446655440000"
+        task_type:
+          type: string
+          enum: [etl_pipeline, analytics, data_export, model_training]
+          example: "analytics"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "processing"
+        progress:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Task completion progress (0.0-1.0)
+          example: 0.75
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-01-15T10:30:15Z"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-01-15T10:32:30Z"
+        result:
+          type: object
+          nullable: true
+          description: Task result (available when status is completed)
+        error:
+          type: object
+          nullable: true
+          description: Error details (available when status is failed)
+          properties:
+            code:
+              type: string
+              example: "PROCESSING_ERROR"
+            message:
+              type: string
+              example: "Failed to process data due to schema mismatch"
+            details:
+              type: object
+
+    # Error Schemas
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Request validation failed"
+            details:
+              type: object
+              description: Additional error details
+              properties:
+                field:
+                  type: string
+                  example: "customer_id"
+                message:
+                  type: string
+                  example: "Field is required"
+            timestamp:
+              type: string
+              format: date-time
+              example: "2024-01-15T10:30:00Z"
+            request_id:
+              type: string
+              description: Unique request identifier for troubleshooting
+              example: "req_abc123"
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication required"
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"
+
+    ForbiddenError:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "Insufficient permissions to access this resource"
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Request validation failed"
+              details:
+                field: "start_date"
+                message: "Invalid date format, expected YYYY-MM-DD"
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"
+
+    RateLimitError:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in current window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Time when rate limit resets (Unix timestamp)
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "RATE_LIMIT_EXCEEDED"
+              message: "Rate limit exceeded. Please retry after 60 seconds."
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"
+
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "INTERNAL_SERVER_ERROR"
+              message: "An unexpected error occurred. Please try again later."
+              timestamp: "2024-01-15T10:30:00Z"
+              request_id: "req_abc123"

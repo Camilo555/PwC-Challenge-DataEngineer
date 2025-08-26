@@ -3,6 +3,7 @@ Correlation ID Middleware
 Provides automatic correlation ID propagation for FastAPI applications with logging integration.
 Implements distributed tracing patterns and request context management.
 """
+from __future__ import annotations
 
 import time
 import uuid
@@ -21,7 +22,7 @@ except ImportError:
     Request = Any
     Response = Any
 
-from ...monitoring.logging import (
+from monitoring.logging import (
     CorrelationIdManager,
     correlation_id_context,
     get_structured_logger,

@@ -2,13 +2,13 @@
 Common validation utilities for consistent data validation across the application.
 Provides reusable validation functions and decorators.
 """
+from __future__ import annotations
+
 import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, TypeVar
 from uuid import UUID
-
-from pydantic import ValidationError as PydanticValidationError
 
 T = TypeVar('T')
 

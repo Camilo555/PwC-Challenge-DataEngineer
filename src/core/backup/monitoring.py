@@ -3,6 +3,7 @@ Backup and Recovery Monitoring System
 
 Real-time monitoring, metrics collection, and alerting for backup and recovery operations.
 """
+from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
-from ...core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

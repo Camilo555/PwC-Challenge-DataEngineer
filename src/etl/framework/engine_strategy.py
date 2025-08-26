@@ -7,6 +7,7 @@ Provides engine-agnostic DataFrame operations with production-ready features:
 - SCD Type 2 operations
 - Engine parity validation
 """
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

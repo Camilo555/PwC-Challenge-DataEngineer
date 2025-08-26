@@ -2,6 +2,8 @@
 Alerting System
 Provides comprehensive alerting capabilities for monitoring events.
 """
+from __future__ import annotations
+
 import asyncio
 import smtplib
 from collections.abc import Callable

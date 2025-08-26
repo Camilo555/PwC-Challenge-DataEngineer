@@ -3,20 +3,18 @@ PwC Retail Data Platform - Elasticsearch Client
 Advanced search and analytics capabilities for retail data
 """
 
-import asyncio
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime
+from typing import Any
 
 from elasticsearch import AsyncElasticsearch, Elasticsearch
 from elasticsearch.exceptions import ConnectionError, NotFoundError
 from pydantic import BaseModel
 
-from ..config.base_config import get_config
+from ..config.unified_config import get_base_config
 from ..logging import get_logger
 
 logger = get_logger(__name__)
-config = get_config()
+config = get_base_config()
 
 
 class SearchQuery(BaseModel):
@@ -24,60 +22,60 @@ class SearchQuery(BaseModel):
     query: str
     size: int = 10
     from_: int = 0
-    filters: Optional[Dict[str, Any]] = None
-    sort: Optional[List[Dict[str, str]]] = None
+    filters: dict[str, Any] | None = None
+    sort: list[dict[str, str]] | None = None
     highlight: bool = True
-    aggregations: Optional[Dict[str, Any]] = None
+    aggregations: dict[str, Any] | None = None
 
 
 class SearchResult(BaseModel):
     """Search result model"""
     total: int
-    hits: List[Dict[str, Any]]
-    aggregations: Optional[Dict[str, Any]] = None
+    hits: list[dict[str, Any]]
+    aggregations: dict[str, Any] | None = None
     took: int
-    max_score: Optional[float] = None
+    max_score: float | None = None
 
 
 class ElasticsearchClient:
     """Elasticsearch client for search and analytics operations"""
-    
+
     def __init__(self):
         self.host = config.ELASTICSEARCH_HOST
         self.port = config.ELASTICSEARCH_PORT
         self.scheme = getattr(config, 'ELASTICSEARCH_SCHEME', 'http')
         self.username = getattr(config, 'ELASTICSEARCH_USERNAME', None)
         self.password = getattr(config, 'ELASTICSEARCH_PASSWORD', None)
-        
+
         # Connection configuration
         self.connection_config = {
             'hosts': [f"{self.scheme}://{self.host}:{self.port}"],
-            'timeout': 30,
+            'request_timeout': 30,
             'max_retries': 3,
             'retry_on_timeout': True
         }
-        
+
         if self.username and self.password:
             self.connection_config['http_auth'] = (self.username, self.password)
-        
+
         self._client = None
         self._async_client = None
-        
+
     @property
     def client(self) -> Elasticsearch:
         """Get synchronous Elasticsearch client"""
         if self._client is None:
             self._client = Elasticsearch(**self.connection_config)
         return self._client
-    
+
     @property
     def async_client(self) -> AsyncElasticsearch:
         """Get asynchronous Elasticsearch client"""
         if self._async_client is None:
             self._async_client = AsyncElasticsearch(**self.connection_config)
         return self._async_client
-    
-    async def health_check(self) -> Dict[str, Any]:
+
+    async def health_check(self) -> dict[str, Any]:
         """Check Elasticsearch cluster health"""
         try:
             health = await self.async_client.cluster.health()
@@ -102,25 +100,25 @@ class ElasticsearchClient:
                 "error": str(e),
                 "timestamp": datetime.utcnow().isoformat()
             }
-    
-    async def create_index(self, index_name: str, mapping: Dict[str, Any]) -> bool:
+
+    async def create_index(self, index_name: str, mapping: dict[str, Any]) -> bool:
         """Create an index with mapping"""
         try:
             if await self.async_client.indices.exists(index=index_name):
                 logger.info(f"Index {index_name} already exists")
                 return True
-            
+
             await self.async_client.indices.create(
                 index=index_name,
                 body=mapping
             )
             logger.info(f"Created index: {index_name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error creating index {index_name}: {e}")
             return False
-    
+
     async def delete_index(self, index_name: str) -> bool:
         """Delete an index"""
         try:
@@ -133,32 +131,32 @@ class ElasticsearchClient:
         except Exception as e:
             logger.error(f"Error deleting index {index_name}: {e}")
             return False
-    
+
     async def index_document(
-        self, 
-        index_name: str, 
-        document: Dict[str, Any], 
-        doc_id: Optional[str] = None
+        self,
+        index_name: str,
+        document: dict[str, Any],
+        doc_id: str | None = None
     ) -> bool:
         """Index a single document"""
         try:
             kwargs = {'index': index_name, 'body': document}
             if doc_id:
                 kwargs['id'] = doc_id
-            
+
             response = await self.async_client.index(**kwargs)
             return response.get('result') in ['created', 'updated']
-            
+
         except Exception as e:
             logger.error(f"Error indexing document: {e}")
             return False
-    
+
     async def bulk_index(
-        self, 
-        index_name: str, 
-        documents: List[Dict[str, Any]], 
-        id_field: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self,
+        index_name: str,
+        documents: list[dict[str, Any]],
+        id_field: str | None = None
+    ) -> dict[str, Any]:
         """Bulk index multiple documents"""
         try:
             actions = []
@@ -170,27 +168,27 @@ class ElasticsearchClient:
                 if id_field and id_field in doc:
                     action["_id"] = doc[id_field]
                 actions.append(action)
-            
+
             response = await self.async_client.bulk(body=actions)
-            
+
             # Count successful operations
             successful = 0
             errors = []
-            
+
             for item in response.get('items', []):
                 if 'index' in item:
                     if item['index'].get('status') in [200, 201]:
                         successful += 1
                     else:
                         errors.append(item['index'])
-            
+
             return {
                 "total": len(documents),
                 "successful": successful,
                 "errors": len(errors),
                 "error_details": errors[:10]  # First 10 errors
             }
-            
+
         except Exception as e:
             logger.error(f"Error in bulk indexing: {e}")
             return {
@@ -199,10 +197,10 @@ class ElasticsearchClient:
                 "errors": len(documents),
                 "error": str(e)
             }
-    
+
     async def search(
-        self, 
-        index_name: str, 
+        self,
+        index_name: str,
         search_query: SearchQuery
     ) -> SearchResult:
         """Perform search with complex queries"""
@@ -213,11 +211,11 @@ class ElasticsearchClient:
                 "size": search_query.size,
                 "from": search_query.from_
             }
-            
+
             # Add sorting
             if search_query.sort:
                 query_body["sort"] = search_query.sort
-            
+
             # Add highlighting
             if search_query.highlight:
                 query_body["highlight"] = {
@@ -227,16 +225,16 @@ class ElasticsearchClient:
                     "pre_tags": ["<mark>"],
                     "post_tags": ["</mark>"]
                 }
-            
+
             # Add aggregations
             if search_query.aggregations:
                 query_body["aggs"] = search_query.aggregations
-            
+
             response = await self.async_client.search(
                 index=index_name,
                 body=query_body
             )
-            
+
             # Format response
             hits = []
             for hit in response.get('hits', {}).get('hits', []):
@@ -247,7 +245,7 @@ class ElasticsearchClient:
                     "highlight": hit.get('highlight', {})
                 }
                 hits.append(hit_data)
-            
+
             return SearchResult(
                 total=response.get('hits', {}).get('total', {}).get('value', 0),
                 hits=hits,
@@ -255,7 +253,7 @@ class ElasticsearchClient:
                 took=response.get('took', 0),
                 max_score=response.get('hits', {}).get('max_score')
             )
-            
+
         except Exception as e:
             logger.error(f"Error in search: {e}")
             return SearchResult(
@@ -264,14 +262,14 @@ class ElasticsearchClient:
                 took=0,
                 aggregations={"error": str(e)}
             )
-    
-    def _build_query(self, query_string: str, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
+    def _build_query(self, query_string: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """Build Elasticsearch query with filters"""
         if not query_string and not filters:
             return {"match_all": {}}
-        
+
         must_clauses = []
-        
+
         # Add text query if provided
         if query_string:
             must_clauses.append({
@@ -279,7 +277,7 @@ class ElasticsearchClient:
                     "query": query_string,
                     "fields": [
                         "product_name^3",
-                        "description^2", 
+                        "description^2",
                         "category^2",
                         "brand",
                         "customer_name",
@@ -289,7 +287,7 @@ class ElasticsearchClient:
                     "fuzziness": "AUTO"
                 }
             })
-        
+
         # Add filters
         if filters:
             for field, value in filters.items():
@@ -305,13 +303,13 @@ class ElasticsearchClient:
                     must_clauses.append({
                         "term": {f"{field}.keyword": value}
                     })
-        
+
         if not must_clauses:
             return {"match_all": {}}
-        
+
         return {"bool": {"must": must_clauses}}
-    
-    async def get_analytics(self, index_name: str, date_range: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+
+    async def get_analytics(self, index_name: str, date_range: dict[str, str] | None = None) -> dict[str, Any]:
         """Get analytics and aggregations for the data"""
         try:
             # Build date filter if provided
@@ -325,7 +323,7 @@ class ElasticsearchClient:
                         }
                     }
                 })
-            
+
             query_body = {
                 "query": {
                     "bool": {
@@ -385,18 +383,18 @@ class ElasticsearchClient:
                     }
                 }
             }
-            
+
             response = await self.async_client.search(
                 index=index_name,
                 body=query_body
             )
-            
+
             return response.get('aggregations', {})
-            
+
         except Exception as e:
             logger.error(f"Error getting analytics: {e}")
             return {"error": str(e)}
-    
+
     async def close(self):
         """Close connections"""
         if self._async_client:

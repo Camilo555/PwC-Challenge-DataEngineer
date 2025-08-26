@@ -3,14 +3,16 @@ Simple Backup and Disaster Recovery Command Line Interface
 
 Simplified CLI for backup and disaster recovery operations without external dependencies.
 """
+from __future__ import annotations
 
 import asyncio
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from ...core.config.base_config import BaseConfig, Environment
-from ...core.logging import get_logger
+from core.config.base_config import BaseConfig, Environment
+from core.logging import get_logger
+
 from .orchestrator import BackupOrchestrator, OrchestrationMode
 
 logger = get_logger(__name__)

@@ -2,6 +2,8 @@
 GraphQL Schemas and Types
 Defines GraphQL types and schemas for the retail data API.
 """
+from __future__ import annotations
+
 from datetime import date, datetime
 
 import strawberry

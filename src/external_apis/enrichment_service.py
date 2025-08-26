@@ -1,4 +1,5 @@
 """Main enrichment service orchestrating multiple external APIs."""
+from __future__ import annotations
 
 import asyncio
 

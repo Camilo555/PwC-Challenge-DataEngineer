@@ -3,6 +3,7 @@ Connection Pool Configuration
 
 Optimized connection pool configurations for different environments and database types.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
@@ -59,7 +60,7 @@ class ConnectionPoolConfig:
     async_max_overflow: int = 10
 
     @classmethod
-    def for_environment(cls, environment: Environment, db_type: DatabaseType = DatabaseType.SQLITE) -> 'ConnectionPoolConfig':
+    def for_environment(cls, environment: Environment, db_type: DatabaseType = DatabaseType.SQLITE) -> ConnectionPoolConfig:
         """Create optimized pool configuration for specific environment."""
         configs = {
             Environment.DEVELOPMENT: cls._get_development_config(db_type),
@@ -71,7 +72,7 @@ class ConnectionPoolConfig:
         return configs.get(environment, cls._get_development_config(db_type))
 
     @classmethod
-    def for_strategy(cls, strategy: PoolStrategy, db_type: DatabaseType = DatabaseType.SQLITE) -> 'ConnectionPoolConfig':
+    def for_strategy(cls, strategy: PoolStrategy, db_type: DatabaseType = DatabaseType.SQLITE) -> ConnectionPoolConfig:
         """Create configuration based on pooling strategy."""
         strategies = {
             PoolStrategy.CONSERVATIVE: cls._get_conservative_config(db_type),
@@ -83,7 +84,7 @@ class ConnectionPoolConfig:
         return strategies.get(strategy, cls._get_balanced_config(db_type))
 
     @classmethod
-    def _get_development_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_development_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Optimized for development - low resource usage, fast iteration."""
         config = cls(
             # Small pool for development
@@ -120,7 +121,7 @@ class ConnectionPoolConfig:
         return config
 
     @classmethod
-    def _get_testing_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_testing_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Optimized for testing - isolated, predictable behavior."""
         config = cls(
             # Small, isolated pool
@@ -159,7 +160,7 @@ class ConnectionPoolConfig:
         return config
 
     @classmethod
-    def _get_staging_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_staging_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Optimized for staging - production-like with monitoring."""
         config = cls(
             # Production-like pool sizes
@@ -195,7 +196,7 @@ class ConnectionPoolConfig:
         return config
 
     @classmethod
-    def _get_production_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_production_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Optimized for production - maximum performance and reliability."""
         config = cls(
             # Large pool for high concurrency
@@ -236,7 +237,7 @@ class ConnectionPoolConfig:
         return config
 
     @classmethod
-    def _get_conservative_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_conservative_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Conservative strategy - minimal resource usage."""
         return cls(
             pool_size=3,
@@ -249,7 +250,7 @@ class ConnectionPoolConfig:
         )
 
     @classmethod
-    def _get_balanced_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_balanced_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Balanced strategy - good performance with reasonable resource usage."""
         config = cls(
             pool_size=10,
@@ -267,7 +268,7 @@ class ConnectionPoolConfig:
         return config
 
     @classmethod
-    def _get_aggressive_config(cls, db_type: DatabaseType) -> 'ConnectionPoolConfig':
+    def _get_aggressive_config(cls, db_type: DatabaseType) -> ConnectionPoolConfig:
         """Aggressive strategy - maximum performance."""
         config = cls(
             pool_size=25,

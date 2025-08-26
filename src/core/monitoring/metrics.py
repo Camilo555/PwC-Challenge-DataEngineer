@@ -2,6 +2,8 @@
 Metrics Collection and Reporting
 Provides comprehensive metrics collection for ETL pipeline monitoring.
 """
+from __future__ import annotations
+
 import threading
 import time
 from collections import defaultdict, deque

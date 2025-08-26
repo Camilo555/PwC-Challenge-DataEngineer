@@ -1,4 +1,5 @@
 """Base domain model with common functionality."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -70,7 +71,7 @@ class DomainEntity(BaseModel, ABC):
         return self.model_dump_json(exclude_none=True)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DomainEntity":
+    def from_dict(cls, data: dict[str, Any]) -> DomainEntity:
         """Create entity from dictionary."""
         return cls(**data)
 

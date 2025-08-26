@@ -10,6 +10,97 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+class TypesenseClient:
+    """Basic Typesense client for vector search operations."""
+
+    def __init__(self, config: dict = None):
+        """Initialize TypesenseClient with configuration."""
+        if config:
+            self.client = typesense.Client({
+                'nodes': [{
+                    'host': config.get('host', 'localhost'),
+                    'port': config.get('port', 8108),
+                    'protocol': config.get('protocol', 'http')
+                }],
+                'api_key': config.get('api_key', 'test_key'),
+                'connection_timeout_seconds': config.get('timeout', 10)
+            })
+        else:
+            self.client = get_typesense_client()
+
+    def create_collection(self, schema: dict) -> dict:
+        """Create a collection with the given schema."""
+        try:
+            return self.client.collections.create(schema)
+        except Exception as e:
+            logger.error(f"Failed to create collection: {e}")
+            raise
+
+    def index_document(self, collection_name: str, document: dict) -> dict:
+        """Index a single document."""
+        try:
+            return self.client.collections[collection_name].documents.create(document)
+        except Exception as e:
+            logger.error(f"Failed to index document: {e}")
+            raise
+
+    def index_documents(self, collection_name: str, documents: list) -> dict:
+        """Index multiple documents."""
+        try:
+            return self.client.collections[collection_name].documents.import_(documents)
+        except Exception as e:
+            logger.error(f"Failed to index documents: {e}")
+            raise
+
+    def search(self, collection_name: str, query: str, search_parameters: dict = None) -> dict:
+        """Perform a search query."""
+        try:
+            search_params = {
+                'q': query,
+                'query_by': search_parameters.get('query_by', 'name,description') if search_parameters else 'name,description'
+            }
+
+            if search_parameters:
+                search_params.update(search_parameters)
+
+            return self.client.collections[collection_name].documents.search(search_params)
+        except Exception as e:
+            logger.error(f"Failed to perform search: {e}")
+            raise
+
+    def delete_document(self, collection_name: str, document_id: str) -> dict:
+        """Delete a document by ID."""
+        try:
+            return self.client.collections[collection_name].documents[document_id].delete()
+        except Exception as e:
+            logger.error(f"Failed to delete document: {e}")
+            raise
+
+    def update_document(self, collection_name: str, document_id: str, document: dict) -> dict:
+        """Update a document."""
+        try:
+            return self.client.collections[collection_name].documents[document_id].update(document)
+        except Exception as e:
+            logger.error(f"Failed to update document: {e}")
+            raise
+
+    def get_collection_info(self, collection_name: str) -> dict:
+        """Get collection information."""
+        try:
+            return self.client.collections[collection_name].retrieve()
+        except Exception as e:
+            logger.error(f"Failed to get collection info: {e}")
+            raise
+
+    def delete_collection(self, collection_name: str) -> dict:
+        """Delete a collection."""
+        try:
+            return self.client.collections[collection_name].delete()
+        except Exception as e:
+            logger.error(f"Failed to delete collection: {e}")
+            raise
+
+
 def get_typesense_client() -> Any:  # typesense.Client
     """Get configured Typesense client."""
     cfg = settings.typesense_config

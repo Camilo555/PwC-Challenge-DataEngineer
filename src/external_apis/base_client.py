@@ -1,4 +1,5 @@
 """Base API client with retry logic and error handling."""
+from __future__ import annotations
 
 import asyncio
 import time

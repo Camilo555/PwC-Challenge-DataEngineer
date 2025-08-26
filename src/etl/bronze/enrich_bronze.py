@@ -1,4 +1,5 @@
 """Enhanced bronze layer with external API enrichment."""
+from __future__ import annotations
 
 import asyncio
 from pathlib import Path

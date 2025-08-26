@@ -2,25 +2,21 @@
 Automated Performance Benchmarking and Regression Detection System
 Provides continuous performance monitoring, automated benchmarking, and regression detection.
 """
-import asyncio
 import json
 import statistics
+import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable, Tuple
-import threading
-import uuid
+from typing import Any
 
 import pandas as pd
 import polars as pl
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from core.config.unified_config import get_unified_config
 from core.logging import get_logger
-from etl.framework.engine_strategy import DataFrameEngineFactory, EngineType
 
 
 class BenchmarkType(Enum):
@@ -53,9 +49,9 @@ class BenchmarkResult:
     cpu_usage_percent: float
     throughput_ops_per_sec: float
     success: bool
-    error_message: Optional[str]
+    error_message: str | None
     timestamp: datetime
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -89,15 +85,15 @@ class RegressionAlert:
 
 class DataGenerator:
     """Generates test data for benchmarking"""
-    
+
     @staticmethod
     def generate_sales_data(num_records: int) -> pd.DataFrame:
         """Generate synthetic sales data for benchmarking"""
         import random
-        from datetime import datetime, timedelta
-        
+        from datetime import datetime
+
         start_date = datetime.now() - timedelta(days=365)
-        
+
         data = {
             'InvoiceNo': [f'INV-{i:06d}' for i in range(num_records)],
             'StockCode': [f'ITEM-{random.randint(1, 1000):04d}' for _ in range(num_records)],
@@ -108,9 +104,9 @@ class DataGenerator:
             'CustomerID': [f'CUST-{random.randint(1, 1000):04d}' for _ in range(num_records)],
             'Country': [random.choice(['UK', 'Germany', 'France', 'Spain', 'Italy']) for _ in range(num_records)]
         }
-        
+
         return pd.DataFrame(data)
-    
+
     @staticmethod
     def generate_large_dataset(size_mb: int) -> pd.DataFrame:
         """Generate dataset of specific size in MB"""
@@ -122,47 +118,47 @@ class DataGenerator:
 
 class BenchmarkRunner:
     """Executes performance benchmarks"""
-    
+
     def __init__(self):
         self.logger = get_logger(__name__)
         self.data_generator = DataGenerator()
-        
+
     def benchmark_pandas_processing(self, data_size_mb: int) -> BenchmarkResult:
         """Benchmark Pandas data processing"""
         start_time = time.perf_counter()
         start_memory = self._get_memory_usage()
-        
+
         try:
             # Generate test data
             df = self.data_generator.generate_large_dataset(data_size_mb)
-            
+
             # Perform typical ETL operations
             df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
             df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
             df['Year'] = df['InvoiceDate'].dt.year
             df['Month'] = df['InvoiceDate'].dt.month
-            
+
             # Aggregations
             monthly_sales = df.groupby(['Year', 'Month']).agg({
                 'TotalAmount': ['sum', 'mean', 'count'],
                 'CustomerID': 'nunique'
             })
-            
+
             customer_stats = df.groupby('CustomerID').agg({
                 'TotalAmount': 'sum',
                 'InvoiceNo': 'nunique'
             }).sort_values('TotalAmount', ascending=False)
-            
+
             # Filter operations
             high_value_sales = df[df['TotalAmount'] > df['TotalAmount'].quantile(0.9)]
-            
+
             end_time = time.perf_counter()
             end_memory = self._get_memory_usage()
-            
+
             execution_time = (end_time - start_time) * 1000
             memory_delta = end_memory - start_memory
             throughput = len(df) / ((end_time - start_time) or 0.001)  # records per second
-            
+
             return BenchmarkResult(
                 id=str(uuid.uuid4()),
                 benchmark_name="pandas_etl_processing",
@@ -181,7 +177,7 @@ class BenchmarkRunner:
                     'engine': 'pandas'
                 }
             )
-            
+
         except Exception as e:
             end_time = time.perf_counter()
             return BenchmarkResult(
@@ -197,31 +193,31 @@ class BenchmarkRunner:
                 timestamp=datetime.now(),
                 metadata={'data_size_mb': data_size_mb, 'engine': 'pandas'}
             )
-    
+
     def benchmark_polars_processing(self, data_size_mb: int) -> BenchmarkResult:
         """Benchmark Polars data processing"""
         start_time = time.perf_counter()
         start_memory = self._get_memory_usage()
-        
+
         try:
             # Generate test data and convert to Polars
             df_pandas = self.data_generator.generate_large_dataset(data_size_mb)
             df = pl.from_pandas(df_pandas)
-            
+
             # Perform typical ETL operations with Polars
             df = df.with_columns([
                 (pl.col('Quantity') * pl.col('UnitPrice')).alias('TotalAmount')
             ])
-            
+
             df = df.with_columns([
                 pl.col('InvoiceDate').str.to_datetime().alias('InvoiceDate')
             ])
-            
+
             df = df.with_columns([
                 pl.col('InvoiceDate').dt.year().alias('Year'),
                 pl.col('InvoiceDate').dt.month().alias('Month')
             ])
-            
+
             # Aggregations
             monthly_sales = df.group_by(['Year', 'Month']).agg([
                 pl.col('TotalAmount').sum().alias('total_sales'),
@@ -229,23 +225,23 @@ class BenchmarkRunner:
                 pl.col('TotalAmount').count().alias('transaction_count'),
                 pl.col('CustomerID').n_unique().alias('unique_customers')
             ])
-            
+
             customer_stats = df.group_by('CustomerID').agg([
                 pl.col('TotalAmount').sum().alias('total_spent'),
                 pl.col('InvoiceNo').n_unique().alias('unique_orders')
             ]).sort('total_spent', descending=True)
-            
+
             # Filter operations
             total_amount_q90 = df['TotalAmount'].quantile(0.9)
             high_value_sales = df.filter(pl.col('TotalAmount') > total_amount_q90)
-            
+
             end_time = time.perf_counter()
             end_memory = self._get_memory_usage()
-            
+
             execution_time = (end_time - start_time) * 1000
             memory_delta = end_memory - start_memory
             throughput = len(df_pandas) / ((end_time - start_time) or 0.001)
-            
+
             return BenchmarkResult(
                 id=str(uuid.uuid4()),
                 benchmark_name="polars_etl_processing",
@@ -264,7 +260,7 @@ class BenchmarkRunner:
                     'engine': 'polars'
                 }
             )
-            
+
         except Exception as e:
             end_time = time.perf_counter()
             return BenchmarkResult(
@@ -280,56 +276,55 @@ class BenchmarkRunner:
                 timestamp=datetime.now(),
                 metadata={'data_size_mb': data_size_mb, 'engine': 'polars'}
             )
-    
+
     def benchmark_file_io(self, data_size_mb: int) -> BenchmarkResult:
         """Benchmark file I/O operations"""
         import tempfile
-        import os
-        
+
         start_time = time.perf_counter()
         start_memory = self._get_memory_usage()
-        
+
         try:
             # Generate test data
             df = self.data_generator.generate_large_dataset(data_size_mb)
-            
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
-                
+
                 # Benchmark CSV write
                 csv_path = temp_path / "test_data.csv"
                 csv_write_start = time.perf_counter()
                 df.to_csv(csv_path, index=False)
                 csv_write_time = time.perf_counter() - csv_write_start
-                
+
                 # Benchmark CSV read
                 csv_read_start = time.perf_counter()
                 df_read_csv = pd.read_csv(csv_path)
                 csv_read_time = time.perf_counter() - csv_read_start
-                
+
                 # Benchmark Parquet write
                 parquet_path = temp_path / "test_data.parquet"
                 parquet_write_start = time.perf_counter()
                 df.to_parquet(parquet_path, index=False)
                 parquet_write_time = time.perf_counter() - parquet_write_start
-                
+
                 # Benchmark Parquet read
                 parquet_read_start = time.perf_counter()
                 df_read_parquet = pd.read_parquet(parquet_path)
                 parquet_read_time = time.perf_counter() - parquet_read_start
-                
+
                 # Get file sizes
                 csv_size = csv_path.stat().st_size / 1024 / 1024  # MB
                 parquet_size = parquet_path.stat().st_size / 1024 / 1024  # MB
-            
+
             end_time = time.perf_counter()
             end_memory = self._get_memory_usage()
-            
+
             execution_time = (end_time - start_time) * 1000
             memory_delta = end_memory - start_memory
             total_records = len(df) * 4  # read + write for both formats
             throughput = total_records / ((end_time - start_time) or 0.001)
-            
+
             return BenchmarkResult(
                 id=str(uuid.uuid4()),
                 benchmark_name="file_io_operations",
@@ -353,7 +348,7 @@ class BenchmarkRunner:
                     'compression_ratio': csv_size / parquet_size if parquet_size > 0 else 0
                 }
             )
-            
+
         except Exception as e:
             end_time = time.perf_counter()
             return BenchmarkResult(
@@ -369,29 +364,29 @@ class BenchmarkRunner:
                 timestamp=datetime.now(),
                 metadata={'data_size_mb': data_size_mb}
             )
-    
+
     def benchmark_data_validation(self, num_records: int) -> BenchmarkResult:
         """Benchmark data validation operations"""
         start_time = time.perf_counter()
         start_memory = self._get_memory_usage()
-        
+
         try:
             from core.validation import BusinessRuleValidators, DataQualityValidators
-            
+
             # Generate test data with some invalid records
             df = self.data_generator.generate_sales_data(num_records)
-            
+
             # Introduce some invalid data
             df.loc[::100, 'Quantity'] = -1  # Invalid negative quantities
             df.loc[::150, 'UnitPrice'] = 0   # Invalid zero prices
             df.loc[::200, 'InvoiceNo'] = None  # Missing invoice numbers
-            
+
             validation_results = []
-            
+
             # Validate each record
             for _, row in df.iterrows():
                 row_dict = row.to_dict()
-                
+
                 # Business rule validations
                 try:
                     BusinessRuleValidators.validate_invoice_number(row_dict.get('InvoiceNo'))
@@ -400,26 +395,26 @@ class BenchmarkRunner:
                     validation_results.append({'valid': True})
                 except Exception as e:
                     validation_results.append({'valid': False, 'error': str(e)})
-                
+
                 # Data quality checks
                 required_fields = ['InvoiceNo', 'StockCode', 'Quantity', 'UnitPrice']
                 completeness = DataQualityValidators.check_completeness(row_dict, required_fields)
-                
+
                 ranges = {
                     'Quantity': {'min': 1, 'max': 10000},
                     'UnitPrice': {'min': 0.01, 'max': 100000}
                 }
                 range_check = DataQualityValidators.check_value_ranges(row_dict, ranges)
-            
+
             end_time = time.perf_counter()
             end_memory = self._get_memory_usage()
-            
+
             execution_time = (end_time - start_time) * 1000
             memory_delta = end_memory - start_memory
             throughput = num_records / ((end_time - start_time) or 0.001)
-            
+
             valid_records = sum(1 for r in validation_results if r['valid'])
-            
+
             return BenchmarkResult(
                 id=str(uuid.uuid4()),
                 benchmark_name="data_validation_operations",
@@ -438,7 +433,7 @@ class BenchmarkRunner:
                     'validation_accuracy': valid_records / num_records
                 }
             )
-            
+
         except Exception as e:
             end_time = time.perf_counter()
             return BenchmarkResult(
@@ -454,7 +449,7 @@ class BenchmarkRunner:
                 timestamp=datetime.now(),
                 metadata={'records_validated': num_records}
             )
-    
+
     def _get_memory_usage(self) -> float:
         """Get current memory usage in MB"""
         try:
@@ -467,23 +462,23 @@ class BenchmarkRunner:
 
 class PerformanceRegressionDetector:
     """Detects performance regressions by comparing against baselines"""
-    
-    def __init__(self, baseline_storage_path: Optional[Path] = None):
+
+    def __init__(self, baseline_storage_path: Path | None = None):
         self.baseline_storage_path = baseline_storage_path or Path("performance_baselines.json")
-        self.baselines: Dict[str, PerformanceBaseline] = {}
+        self.baselines: dict[str, PerformanceBaseline] = {}
         self.logger = get_logger(__name__)
         self.lock = threading.Lock()
-        
+
         # Load existing baselines
         self._load_baselines()
-    
+
     def _load_baselines(self):
         """Load performance baselines from storage"""
         try:
             if self.baseline_storage_path.exists():
-                with open(self.baseline_storage_path, 'r') as f:
+                with open(self.baseline_storage_path) as f:
                     data = json.load(f)
-                    
+
                 for name, baseline_data in data.items():
                     self.baselines[name] = PerformanceBaseline(
                         benchmark_name=baseline_data['benchmark_name'],
@@ -497,11 +492,11 @@ class PerformanceRegressionDetector:
                         created_at=datetime.fromisoformat(baseline_data['created_at']),
                         last_updated=datetime.fromisoformat(baseline_data['last_updated'])
                     )
-                    
+
                 self.logger.info(f"Loaded {len(self.baselines)} performance baselines")
         except Exception as e:
             self.logger.warning(f"Failed to load baselines: {e}")
-    
+
     def _save_baselines(self):
         """Save performance baselines to storage"""
         try:
@@ -519,30 +514,30 @@ class PerformanceRegressionDetector:
                     'created_at': baseline.created_at.isoformat(),
                     'last_updated': baseline.last_updated.isoformat()
                 }
-            
+
             with open(self.baseline_storage_path, 'w') as f:
                 json.dump(data, f, indent=2)
-                
+
         except Exception as e:
             self.logger.error(f"Failed to save baselines: {e}")
-    
-    def update_baseline(self, results: List[BenchmarkResult]):
+
+    def update_baseline(self, results: list[BenchmarkResult]):
         """Update performance baseline with new results"""
         if not results:
             return
-        
+
         benchmark_name = results[0].benchmark_name
         successful_results = [r for r in results if r.success]
-        
+
         if not successful_results:
             self.logger.warning(f"No successful results for {benchmark_name}")
             return
-        
+
         # Calculate statistics
         execution_times = [r.execution_time_ms for r in successful_results]
         memory_usages = [r.memory_usage_mb for r in successful_results]
         throughputs = [r.throughput_ops_per_sec for r in successful_results]
-        
+
         baseline = PerformanceBaseline(
             benchmark_name=benchmark_name,
             avg_execution_time_ms=statistics.mean(execution_times),
@@ -555,31 +550,31 @@ class PerformanceRegressionDetector:
             created_at=datetime.now(),
             last_updated=datetime.now()
         )
-        
+
         with self.lock:
             self.baselines[benchmark_name] = baseline
             self._save_baselines()
-        
+
         self.logger.info(f"Updated baseline for {benchmark_name} with {len(successful_results)} samples")
-    
-    def detect_regressions(self, result: BenchmarkResult) -> List[RegressionAlert]:
+
+    def detect_regressions(self, result: BenchmarkResult) -> list[RegressionAlert]:
         """Detect performance regressions in a benchmark result"""
         if not result.success:
             return []
-        
+
         with self.lock:
             baseline = self.baselines.get(result.benchmark_name)
-        
+
         if not baseline:
             self.logger.warning(f"No baseline found for {result.benchmark_name}")
             return []
-        
+
         alerts = []
-        
+
         # Check execution time regression
-        time_degradation = ((result.execution_time_ms - baseline.avg_execution_time_ms) / 
+        time_degradation = ((result.execution_time_ms - baseline.avg_execution_time_ms) /
                            baseline.avg_execution_time_ms * 100)
-        
+
         if time_degradation > 20:  # 20% slower
             severity = PerformanceStatus.CRITICAL if time_degradation > 50 else PerformanceStatus.DEGRADED
             alerts.append(RegressionAlert(
@@ -593,11 +588,11 @@ class PerformanceRegressionDetector:
                 detected_at=datetime.now(),
                 description=f"Execution time increased by {time_degradation:.1f}%"
             ))
-        
+
         # Check memory usage regression
-        memory_degradation = ((result.memory_usage_mb - baseline.avg_memory_usage_mb) / 
+        memory_degradation = ((result.memory_usage_mb - baseline.avg_memory_usage_mb) /
                              baseline.avg_memory_usage_mb * 100) if baseline.avg_memory_usage_mb > 0 else 0
-        
+
         if memory_degradation > 30:  # 30% more memory
             severity = PerformanceStatus.CRITICAL if memory_degradation > 100 else PerformanceStatus.DEGRADED
             alerts.append(RegressionAlert(
@@ -611,11 +606,11 @@ class PerformanceRegressionDetector:
                 detected_at=datetime.now(),
                 description=f"Memory usage increased by {memory_degradation:.1f}%"
             ))
-        
+
         # Check throughput regression
-        throughput_degradation = ((baseline.avg_throughput_ops_per_sec - result.throughput_ops_per_sec) / 
+        throughput_degradation = ((baseline.avg_throughput_ops_per_sec - result.throughput_ops_per_sec) /
                                  baseline.avg_throughput_ops_per_sec * 100) if baseline.avg_throughput_ops_per_sec > 0 else 0
-        
+
         if throughput_degradation > 20:  # 20% less throughput
             severity = PerformanceStatus.CRITICAL if throughput_degradation > 50 else PerformanceStatus.DEGRADED
             alerts.append(RegressionAlert(
@@ -629,10 +624,10 @@ class PerformanceRegressionDetector:
                 detected_at=datetime.now(),
                 description=f"Throughput decreased by {throughput_degradation:.1f}%"
             ))
-        
+
         return alerts
-    
-    def _percentile(self, data: List[float], percentile: int) -> float:
+
+    def _percentile(self, data: list[float], percentile: int) -> float:
         """Calculate percentile value"""
         if not data:
             return 0.0
@@ -643,74 +638,74 @@ class PerformanceRegressionDetector:
 
 class AutomatedBenchmarkSuite:
     """Automated benchmark suite runner"""
-    
+
     def __init__(self):
         self.runner = BenchmarkRunner()
         self.regression_detector = PerformanceRegressionDetector()
         self.logger = get_logger(__name__)
-        self.results_history: List[BenchmarkResult] = []
+        self.results_history: list[BenchmarkResult] = []
         self.lock = threading.Lock()
-    
-    def run_comprehensive_benchmark(self, data_sizes: List[int] = None) -> Dict[str, List[BenchmarkResult]]:
+
+    def run_comprehensive_benchmark(self, data_sizes: list[int] = None) -> dict[str, list[BenchmarkResult]]:
         """Run comprehensive benchmark suite"""
         data_sizes = data_sizes or [1, 5, 10, 25, 50]  # MB
         all_results = {}
-        
+
         self.logger.info(f"Starting comprehensive benchmark suite with data sizes: {data_sizes}")
-        
+
         # ETL Processing Benchmarks
         pandas_results = []
         polars_results = []
-        
+
         for size in data_sizes:
             self.logger.info(f"Running ETL benchmarks for {size}MB data")
-            
+
             # Pandas benchmark
             result = self.runner.benchmark_pandas_processing(size)
             pandas_results.append(result)
-            
+
             # Polars benchmark
             result = self.runner.benchmark_polars_processing(size)
             polars_results.append(result)
-        
+
         all_results['pandas_etl'] = pandas_results
         all_results['polars_etl'] = polars_results
-        
+
         # File I/O Benchmarks
         file_io_results = []
         for size in [1, 10, 25]:  # Smaller sizes for file I/O
             result = self.runner.benchmark_file_io(size)
             file_io_results.append(result)
-        
+
         all_results['file_io'] = file_io_results
-        
+
         # Data Validation Benchmarks
         validation_results = []
         for records in [1000, 5000, 10000, 25000]:
             result = self.runner.benchmark_data_validation(records)
             validation_results.append(result)
-        
+
         all_results['data_validation'] = validation_results
-        
+
         # Store results and check for regressions
         with self.lock:
             for category, results in all_results.items():
                 self.results_history.extend(results)
-                
+
                 # Check for regressions
                 for result in results:
                     regressions = self.regression_detector.detect_regressions(result)
                     if regressions:
                         for regression in regressions:
                             self.logger.warning(f"Performance regression detected: {regression.description}")
-        
+
         # Update baselines (run periodically, not every time)
         self._update_baselines_if_needed(all_results)
-        
+
         self.logger.info("Comprehensive benchmark suite completed")
         return all_results
-    
-    def _update_baselines_if_needed(self, results: Dict[str, List[BenchmarkResult]]):
+
+    def _update_baselines_if_needed(self, results: dict[str, list[BenchmarkResult]]):
         """Update baselines if enough new data is available"""
         for category, result_list in results.items():
             if len(result_list) >= 3:  # Minimum samples for baseline
@@ -720,65 +715,65 @@ class AutomatedBenchmarkSuite:
                     if result.benchmark_name not in by_benchmark:
                         by_benchmark[result.benchmark_name] = []
                     by_benchmark[result.benchmark_name].append(result)
-                
+
                 # Update baselines
                 for benchmark_name, benchmark_results in by_benchmark.items():
                     self.regression_detector.update_baseline(benchmark_results)
-    
+
     def run_continuous_monitoring(self, interval_minutes: int = 60):
         """Run continuous performance monitoring"""
         self.logger.info(f"Starting continuous performance monitoring (interval: {interval_minutes} minutes)")
-        
+
         while True:
             try:
                 # Run lightweight benchmarks
                 results = self.run_comprehensive_benchmark([5, 10])  # Small data sizes for continuous monitoring
-                
+
                 # Log summary
                 total_tests = sum(len(result_list) for result_list in results.values())
                 successful_tests = sum(
-                    len([r for r in result_list if r.success]) 
+                    len([r for r in result_list if r.success])
                     for result_list in results.values()
                 )
-                
+
                 self.logger.info(f"Continuous monitoring: {successful_tests}/{total_tests} tests passed")
-                
+
                 # Sleep until next run
                 time.sleep(interval_minutes * 60)
-                
+
             except Exception as e:
                 self.logger.error(f"Error in continuous monitoring: {e}")
                 time.sleep(60)  # Wait 1 minute before retry
-    
-    def generate_performance_report(self) -> Dict[str, Any]:
+
+    def generate_performance_report(self) -> dict[str, Any]:
         """Generate comprehensive performance report"""
         with self.lock:
             if not self.results_history:
                 return {"error": "No benchmark results available"}
-        
+
         # Group results by benchmark name
         by_benchmark = {}
         for result in self.results_history:
             if result.benchmark_name not in by_benchmark:
                 by_benchmark[result.benchmark_name] = []
             by_benchmark[result.benchmark_name].append(result)
-        
+
         report = {
             'generated_at': datetime.now(),
             'total_benchmarks_run': len(self.results_history),
             'benchmarks': {}
         }
-        
+
         for benchmark_name, results in by_benchmark.items():
             successful_results = [r for r in results if r.success]
-            
+
             if not successful_results:
                 continue
-            
+
             execution_times = [r.execution_time_ms for r in successful_results]
             memory_usages = [r.memory_usage_mb for r in successful_results]
             throughputs = [r.throughput_ops_per_sec for r in successful_results]
-            
+
             report['benchmarks'][benchmark_name] = {
                 'total_runs': len(results),
                 'successful_runs': len(successful_results),
@@ -792,10 +787,10 @@ class AutomatedBenchmarkSuite:
                 'avg_throughput_ops_per_sec': statistics.mean(throughputs),
                 'last_run': max(r.timestamp for r in results)
             }
-        
+
         return report
-    
-    def _percentile(self, data: List[float], percentile: int) -> float:
+
+    def _percentile(self, data: list[float], percentile: int) -> float:
         """Calculate percentile value"""
         if not data:
             return 0.0
@@ -805,7 +800,7 @@ class AutomatedBenchmarkSuite:
 
 
 # Global benchmark suite instance
-_benchmark_suite: Optional[AutomatedBenchmarkSuite] = None
+_benchmark_suite: AutomatedBenchmarkSuite | None = None
 
 
 def get_benchmark_suite() -> AutomatedBenchmarkSuite:
@@ -824,7 +819,7 @@ def benchmark_function(benchmark_name: str = None, data_size_mb: int = 1):
             nonlocal benchmark_name
             if benchmark_name is None:
                 benchmark_name = f"{func.__module__}.{func.__name__}"
-            
+
             start_time = time.perf_counter()
             start_memory = 0
             try:
@@ -833,7 +828,7 @@ def benchmark_function(benchmark_name: str = None, data_size_mb: int = 1):
                 start_memory = process.memory_info().rss / 1024 / 1024
             except ImportError:
                 pass
-            
+
             try:
                 result = func(*args, **kwargs)
                 success = True
@@ -852,10 +847,10 @@ def benchmark_function(benchmark_name: str = None, data_size_mb: int = 1):
                     end_memory = process.memory_info().rss / 1024 / 1024
                 except ImportError:
                     pass
-                
+
                 execution_time = (end_time - start_time) * 1000
                 memory_delta = end_memory - start_memory
-                
+
                 benchmark_result = BenchmarkResult(
                     id=str(uuid.uuid4()),
                     benchmark_name=benchmark_name,
@@ -869,19 +864,19 @@ def benchmark_function(benchmark_name: str = None, data_size_mb: int = 1):
                     timestamp=datetime.now(),
                     metadata={'function_call': True, 'data_size_mb': data_size_mb}
                 )
-                
+
                 # Store result in global suite
                 suite = get_benchmark_suite()
                 with suite.lock:
                     suite.results_history.append(benchmark_result)
-                
+
                 # Check for regressions
                 regressions = suite.regression_detector.detect_regressions(benchmark_result)
                 if regressions:
                     for regression in regressions:
                         suite.logger.warning(f"Performance regression in {func.__name__}: {regression.description}")
-            
+
             return result
-        
+
         return wrapper
     return decorator

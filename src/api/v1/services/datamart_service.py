@@ -2,6 +2,8 @@
 Data Mart Service
 Business logic for accessing and analyzing star schema data.
 """
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 

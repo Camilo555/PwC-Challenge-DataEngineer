@@ -80,7 +80,7 @@ opentelemetry-instrumentation-httpx = "^0.48b0"
 # opentelemetry-instrumentation-redis = "^0.48b0"  # Removed with Redis
 opentelemetry-instrumentation-psycopg2 = "^0.48b0"
 opentelemetry-instrumentation = "^0.48b0"
-psutil = "^6.1.1"
+psutil = "^7.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

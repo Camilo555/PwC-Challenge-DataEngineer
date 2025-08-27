@@ -1,0 +1,456 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "executive-overview",
+    "title": "Executive Overview Dashboard",
+    "description": "High-level business metrics and KPIs for executive stakeholders",
+    "tags": ["executive", "kpi", "business", "overview"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Revenue (24h)",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(increase(business_sales_revenue_total[24h]))",
+            "legendFormat": "Revenue",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Total revenue for the last 24 hours",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 50000},
+                {"color": "green", "value": 100000}
+              ]
+            },
+            "custom": {
+              "displayMode": "basic"
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Active Customers",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(business_active_customers)",
+            "legendFormat": "Active Customers",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Current number of active customers",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 1000},
+                {"color": "green", "value": 5000}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "title": "System Health",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "(sum(rate(app_requests_total{status!~\"5..\"}[5m])) / sum(rate(app_requests_total[5m]))) * 100",
+            "legendFormat": "Success Rate",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall system health percentage based on successful requests",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Rate",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(app_errors_total[5m])) * 100",
+            "legendFormat": "Error Rate",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Application error rate percentage",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 10,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 5,
+        "title": "Revenue Trend",
+        "type": "timeseries",
+        "gridPos": {"h": 9, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(business_sales_revenue_total[1h]))",
+            "legendFormat": "Hourly Revenue",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "interval": "1h"
+          }
+        ],
+        "description": "Revenue trend over time",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 80}
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "single", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "single"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Top Products by Revenue",
+        "type": "barchart",
+        "gridPos": {"h": 9, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "topk(10, sum by (product_category) (increase(business_sales_revenue_total[24h])))",
+            "legendFormat": "{{product_category}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Top 10 products by revenue in the last 24 hours",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "custom": {
+              "orientation": "auto",
+              "barWidth": 0.97,
+              "groupWidth": 0.7,
+              "barRadius": 0.5,
+              "fullHighlight": false,
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null}
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "single", "sort": "desc"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "single",
+          "orientation": "auto",
+          "barWidth": 0.97,
+          "groupWidth": 0.7,
+          "xTickLabelRotation": -45,
+          "xTickLabelSpacing": 0,
+          "barRadius": 0.5,
+          "fullHighlight": false
+        }
+      },
+      {
+        "id": 7,
+        "title": "ML Model Performance",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 17},
+        "targets": [
+          {
+            "expr": "avg(ml_model_accuracy)",
+            "legendFormat": "Average Model Accuracy",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Average accuracy across all ML models",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.8},
+                {"color": "green", "value": 0.9}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Data Freshness",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 17},
+        "targets": [
+          {
+            "expr": "(time() - data_last_updated_timestamp) / 3600",
+            "legendFormat": "Hours Since Last Update",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Hours since data was last updated",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "h",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 2},
+                {"color": "red", "value": 4}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Security Alerts",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 17},
+        "targets": [
+          {
+            "expr": "sum(increase(threats_detected_total[24h]))",
+            "legendFormat": "Threats Detected (24h)",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Number of security threats detected in the last 24 hours",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 10,
+        "title": "SLO Compliance",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 17},
+        "targets": [
+          {
+            "expr": "avg(slo_compliance_percentage)",
+            "legendFormat": "SLO Compliance",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall SLO compliance percentage",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      }
+    ],
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "5m",
+    "schemaVersion": 30,
+    "version": 1,
+    "editable": true,
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "links": []
+  },
+  "folderId": null,
+  "overwrite": true
+}

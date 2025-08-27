@@ -284,3 +284,329 @@ groups:
         annotations:
           summary: "Storage volume appears unused"
           description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value }}% empty"
+
+  # ML Model Monitoring Rules
+  - name: ml.rules
+    interval: 60s
+    rules:
+      # Model Drift Detection
+      - alert: MLModelDriftDetected
+        expr: ml_model_drift_score > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: ml-monitoring
+        annotations:
+          summary: "ML model drift detected"
+          description: "Model {{ $labels.model_id }} feature {{ $labels.feature_name }} drift score: {{ $value }}"
+          runbook_url: "https://runbooks.example.com/ml-drift"
+
+      # Critical Model Drift
+      - alert: MLModelCriticalDrift
+        expr: ml_model_drift_score > 0.2
+        for: 2m
+        labels:
+          severity: critical
+          component: ml-monitoring
+        annotations:
+          summary: "Critical ML model drift detected"
+          description: "Model {{ $labels.model_id }} has critical drift ({{ $value }}) - immediate retraining required"
+
+      # Model Accuracy Drop
+      - alert: MLModelAccuracyDrop
+        expr: ml_model_accuracy < 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: ml-monitoring
+        annotations:
+          summary: "ML model accuracy below threshold"
+          description: "Model {{ $labels.model_id }} accuracy dropped to {{ $value }}"
+
+      # Model Inference Errors
+      - alert: MLModelInferenceErrors
+        expr: (rate(ml_model_inferences_total{status="error"}[5m]) / rate(ml_model_inferences_total[5m])) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: ml-monitoring
+        annotations:
+          summary: "High ML model inference error rate"
+          description: "Model {{ $labels.model_id }} error rate: {{ $value }}%"
+
+      # Model Latency High
+      - alert: MLModelHighLatency
+        expr: histogram_quantile(0.95, rate(ml_model_inference_duration_seconds_bucket[5m])) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: ml-monitoring
+        annotations:
+          summary: "High ML model inference latency"
+          description: "Model {{ $labels.model_id }} 95th percentile latency: {{ $value }}s"
+
+  # Streaming Pipeline Rules
+  - name: streaming.rules
+    interval: 30s
+    rules:
+      # Kafka Consumer Lag
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag_sum > 1000
+        for: 2m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer {{ $labels.consumer_group }} lag: {{ $value }} messages"
+
+      # Stream Processing Errors
+      - alert: StreamProcessingErrors
+        expr: rate(stream_processing_errors_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: critical
+          component: streaming
+        annotations:
+          summary: "Stream processing errors detected"
+          description: "Stream {{ $labels.stream_name }} error rate: {{ $value }} errors/sec"
+
+      # Real-time Data Delay
+      - alert: RealtimeDataDelay
+        expr: realtime_processing_delay_seconds > 30
+        for: 1m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "Real-time data processing delay"
+          description: "Stream {{ $labels.stream_name }} delay: {{ $value }}s"
+
+      # Schema Evolution Failure
+      - alert: SchemaEvolutionFailure
+        expr: increase(schema_evolution_failures_total[1h]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          component: streaming
+        annotations:
+          summary: "Schema evolution failure"
+          description: "Schema evolution failed for stream {{ $labels.stream_name }}"
+
+  # Data Quality Rules
+  - name: data-quality.rules
+    interval: 60s
+    rules:
+      # Data Completeness Issues
+      - alert: DataCompletenessIssue
+        expr: data_completeness_percentage < 95
+        for: 5m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Data completeness below threshold"
+          description: "Dataset {{ $labels.dataset_name }} completeness: {{ $value }}%"
+
+      # Data Accuracy Issues
+      - alert: DataAccuracyIssue
+        expr: data_accuracy_score < 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Data accuracy below threshold"
+          description: "Dataset {{ $labels.dataset_name }} accuracy score: {{ $value }}"
+
+      # Duplicate Records High
+      - alert: HighDuplicateRecords
+        expr: (duplicate_records_count / total_records_count) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "High duplicate record percentage"
+          description: "Dataset {{ $labels.dataset_name }} has {{ $value }}% duplicate records"
+
+      # Anomaly Detection Alert
+      - alert: DataAnomalyDetected
+        expr: data_anomaly_score > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Data anomaly detected"
+          description: "Anomaly detected in {{ $labels.dataset_name }} with score {{ $value }}"
+
+  # Advanced Security Rules
+  - name: advanced-security.rules
+    interval: 15s
+    rules:
+      # DLP Violations
+      - alert: DLPViolation
+        expr: increase(dlp_violations_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Data Loss Prevention violation"
+          description: "DLP violation detected: {{ $labels.violation_type }}"
+
+      # Compliance Framework Violation
+      - alert: ComplianceViolation
+        expr: increase(compliance_violations_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Compliance framework violation"
+          description: "{{ $labels.framework }} compliance violation: {{ $labels.violation_details }}"
+
+      # Zero Trust Policy Violation
+      - alert: ZeroTrustPolicyViolation
+        expr: increase(zero_trust_policy_violations_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: high
+          component: security
+        annotations:
+          summary: "Zero Trust policy violation"
+          description: "Zero Trust violation: {{ $labels.policy_name }}"
+
+      # Threat Detection Alert
+      - alert: ThreatDetected
+        expr: increase(threats_detected_total[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Security threat detected"
+          description: "Threat detected: {{ $labels.threat_type }} from {{ $labels.source_ip }}"
+
+      # Suspicious User Behavior
+      - alert: SuspiciousUserBehavior
+        expr: user_behavior_anomaly_score > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Suspicious user behavior detected"
+          description: "User {{ $labels.user_id }} behavior anomaly score: {{ $value }}"
+
+  # Enterprise SLO Rules
+  - name: slo.rules
+    interval: 60s
+    rules:
+      # API Availability SLO
+      - alert: APIAvailabilitySLOBreach
+        expr: (rate(http_requests_total{status=~"2.."}[5m]) / rate(http_requests_total[5m])) * 100 < 99.5
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+        annotations:
+          summary: "API availability SLO breach"
+          description: "API availability {{ $value }}% below 99.5% SLO"
+
+      # ETL Processing SLO
+      - alert: ETLProcessingSLOBreach
+        expr: histogram_quantile(0.95, rate(etl_processing_duration_seconds_bucket[30m])) > 3600
+        for: 15m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "ETL processing SLO breach"
+          description: "95th percentile ETL processing time {{ $value }}s exceeds 1 hour SLO"
+
+      # Data Freshness SLO
+      - alert: DataFreshnessSLOBreach
+        expr: (time() - data_last_updated_timestamp) / 3600 > 4
+        for: 15m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Data freshness SLO breach"
+          description: "Data is {{ $value }} hours old, exceeding 4 hour freshness SLO"
+
+  # Cost and Resource Optimization
+  - name: advanced-cost-optimization.rules
+    interval: 300s
+    rules:
+      # High Cloud Costs
+      - alert: HighCloudCosts
+        expr: daily_cloud_spend > 1000
+        for: 1h
+        labels:
+          severity: warning
+          component: cost-optimization
+        annotations:
+          summary: "Daily cloud costs are high"
+          description: "Daily cloud spend is ${{ $value }}, exceeding budget threshold"
+
+      # Inefficient Resource Usage
+      - alert: InefficientResourceUsage
+        expr: (cpu_usage_percentage < 30) and (memory_usage_percentage < 50)
+        for: 4h
+        labels:
+          severity: info
+          component: cost-optimization
+        annotations:
+          summary: "Inefficient resource usage detected"
+          description: "Instance {{ $labels.instance }} has low utilization: CPU {{ $labels.cpu_usage_percentage }}%, Memory {{ $labels.memory_usage_percentage }}%"
+
+      # Auto-scaling Opportunity
+      - alert: AutoScalingOpportunity
+        expr: (avg_over_time(cpu_usage_percentage[1h]) > 80) and (auto_scaling_enabled == 0)
+        for: 30m
+        labels:
+          severity: info
+          component: cost-optimization
+        annotations:
+          summary: "Auto-scaling opportunity identified"
+          description: "High sustained CPU usage on {{ $labels.instance }} without auto-scaling enabled"
+
+  # Business Intelligence Rules
+  - name: business-intelligence.rules
+    interval: 300s
+    rules:
+      # KPI Threshold Breach
+      - alert: BusinessKPIThresholdBreach
+        expr: business_kpi_value{kpi_name="customer_satisfaction"} < 0.8
+        for: 1h
+        labels:
+          severity: warning
+          component: business-intelligence
+        annotations:
+          summary: "Business KPI below threshold"
+          description: "{{ $labels.kpi_name }} is {{ $value }}, below target threshold"
+
+      # Revenue Trend Anomaly
+      - alert: RevenueTrendAnomaly
+        expr: abs(rate(revenue_total[1h]) - rate(revenue_total[1h] offset 168h)) / rate(revenue_total[1h] offset 168h) > 0.3
+        for: 2h
+        labels:
+          severity: warning
+          component: business-intelligence
+        annotations:
+          summary: "Revenue trend anomaly detected"
+          description: "Revenue pattern {{ $value }}% different from last week"
+
+      # Customer Churn Rate High
+      - alert: HighCustomerChurnRate
+        expr: customer_churn_rate > 0.05
+        for: 24h
+        labels:
+          severity: warning
+          component: business-intelligence
+        annotations:
+          summary: "High customer churn rate"
+          description: "Customer churn rate is {{ $value }}, above 5% threshold"

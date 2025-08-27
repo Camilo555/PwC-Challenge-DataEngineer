@@ -1,0 +1,575 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "streaming-monitoring",
+    "title": "Real-time Streaming Pipeline Monitoring",
+    "description": "Comprehensive monitoring for streaming data pipelines including Kafka, real-time processing, and data quality",
+    "tags": ["streaming", "kafka", "realtime", "pipeline", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Kafka Message Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(kafka_messages_produced_total[5m])",
+            "legendFormat": "Produced - {{topic}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(kafka_messages_consumed_total[5m])",
+            "legendFormat": "Consumed - {{topic}}",
+            "refId": "B",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Rate of messages produced and consumed per Kafka topic",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "mps",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Consumer Lag",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "kafka_consumer_lag_sum",
+            "legendFormat": "Consumer {{consumer_group}} - {{topic}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Consumer lag for each Kafka consumer group and topic",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "line"}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 100},
+                {"color": "red", "value": 1000}
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Stream Processing Latency",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(stream_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95 - {{stream_name}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(stream_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50 - {{stream_name}}",
+            "refId": "B",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Processing latency percentiles for streaming pipelines",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "line"}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 30}
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Stream Processing Errors",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(stream_processing_errors_total[5m])",
+            "legendFormat": "Errors - {{stream_name}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Error rate for stream processing pipelines",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "eps",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "line"}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Real-time Data Delay",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+        "targets": [
+          {
+            "expr": "realtime_processing_delay_seconds",
+            "legendFormat": "{{stream_name}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Current delay in real-time data processing",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "min": 0,
+            "max": 60,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 30}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 6,
+        "title": "Kafka Topics Status",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "kafka_topic_partitions",
+            "legendFormat": "{{topic}}",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "kafka_topic_messages_rate",
+            "legendFormat": "{{topic}}",
+            "refId": "B",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "description": "Overview of Kafka topics with partition count and message rates",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto",
+              "inspect": false
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 80}
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Message Rate"
+            }
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "Schema Evolution Events",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "increase(schema_evolution_events_total[5m])",
+            "legendFormat": "{{stream_name}} - {{event_type}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Schema evolution events over time",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "bars",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 1,
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "normal", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "none"},
+          "legend": {"displayMode": "visible", "placement": "bottom", "calcs": []},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Stream Health Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "count(stream_processing_health_status == 1) / count(stream_processing_health_status) * 100",
+            "legendFormat": "Healthy Streams %",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Percentage of healthy streaming pipelines",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 80},
+                {"color": "green", "value": 95}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Total Messages Processed",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(stream_messages_processed_total)",
+            "legendFormat": "Total Messages",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Total number of messages processed across all streams",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "blue", "value": null}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 10,
+        "title": "Avg Processing Throughput",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "avg(rate(stream_messages_processed_total[5m]))",
+            "legendFormat": "Avg Throughput",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Average message processing throughput across all streams",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "mps",
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 100},
+                {"color": "green", "value": 1000}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 11,
+        "title": "Dead Letter Queue Size",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(dead_letter_queue_messages)",
+            "legendFormat": "DLQ Messages",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Total number of messages in dead letter queues",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 100}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s",
+    "schemaVersion": 30,
+    "version": 1,
+    "editable": true,
+    "templating": {
+      "list": [
+        {
+          "name": "stream_name",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(stream_processing_health_status, stream_name)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true,
+          "options": [],
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "hide": 0,
+          "label": "Stream",
+          "definition": "label_values(stream_processing_health_status, stream_name)"
+        },
+        {
+          "name": "consumer_group",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(kafka_consumer_lag_sum, consumer_group)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true,
+          "options": [],
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "hide": 0,
+          "label": "Consumer Group",
+          "definition": "label_values(kafka_consumer_lag_sum, consumer_group)"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "links": []
+  },
+  "folderId": null,
+  "overwrite": true
+}

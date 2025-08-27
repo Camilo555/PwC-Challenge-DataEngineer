@@ -1,0 +1,90 @@
+apiVersion: 1
+
+providers:
+  # Executive dashboards
+  - name: 'executive'
+    orgId: 1
+    folder: 'Executive'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/executive
+
+  # Operations dashboards
+  - name: 'operations'
+    orgId: 1
+    folder: 'Operations'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/operations
+
+  # Infrastructure dashboards
+  - name: 'infrastructure'
+    orgId: 1
+    folder: 'Infrastructure'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/infrastructure
+
+  # Security dashboards
+  - name: 'security'
+    orgId: 1
+    folder: 'Security'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/security
+
+  # ML and Analytics dashboards
+  - name: 'ml-analytics'
+    orgId: 1
+    folder: 'ML & Analytics'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/ml-analytics
+
+  # Business dashboards
+  - name: 'business'
+    orgId: 1
+    folder: 'Business'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/business
+
+  # Data Quality dashboards
+  - name: 'data-quality'
+    orgId: 1
+    folder: 'Data Quality'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/data-quality
+
+  # Streaming dashboards
+  - name: 'streaming'
+    orgId: 1
+    folder: 'Streaming'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/streaming

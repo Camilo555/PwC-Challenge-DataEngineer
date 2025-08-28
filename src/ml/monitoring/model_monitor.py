@@ -1,17 +1,19 @@
 """
-ML Model Monitoring and Drift Detection
+Enhanced ML Model Monitoring and Drift Detection
 
 Comprehensive monitoring system for ML models in production with
-automated drift detection, performance tracking, and alerting.
+automated drift detection, performance tracking, alerting, and enterprise infrastructure integration
+including Redis caching, RabbitMQ messaging, and Kafka streaming.
 """
 
+import hashlib
 import logging
 import asyncio
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple, Union
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from abc import ABC, abstractmethod
 from enum import Enum
 import json
@@ -24,14 +26,13 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import plotly.graph_objects as go
 import plotly.express as px
 
-from core.config import get_settings
-from core.logging import get_logger
-from monitoring.metrics_collector import get_metrics_collector
-from monitoring.alerting import get_alert_manager
-from monitoring.enterprise_observability import get_observability_platform
-from monitoring.prometheus_metrics import get_prometheus_collector
-from data_access.supabase_client import get_supabase_client
-from core.caching.redis_cache import get_redis_client
+from src.core.config import get_settings
+from src.core.logging import get_logger
+from src.core.monitoring.metrics import MetricsCollector
+from src.core.caching.redis_cache_manager import get_cache_manager
+from src.messaging.enterprise_rabbitmq_manager import get_rabbitmq_manager, EnterpriseMessage, QueueType, MessagePriority
+from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.data_access.supabase_client import get_supabase_client
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -55,7 +56,7 @@ class AlertSeverity(Enum):
 
 @dataclass
 class DriftConfig:
-    """Configuration for drift detection."""
+    """Enhanced configuration for drift detection with infrastructure integration."""
     
     # Thresholds
     feature_drift_threshold: float = 0.1
@@ -74,6 +75,24 @@ class DriftConfig:
     # Alerting
     enable_alerts: bool = True
     alert_channels: List[str] = field(default_factory=lambda: ["email", "slack"])
+    
+    # Infrastructure integration
+    enable_caching: bool = True
+    cache_model_metrics: bool = True
+    cache_drift_data: bool = True
+    cache_ttl_seconds: int = 3600  # 1 hour
+    
+    enable_messaging: bool = True
+    publish_drift_alerts: bool = True
+    publish_performance_alerts: bool = True
+    
+    enable_streaming: bool = True
+    stream_real_time_metrics: bool = True
+    stream_drift_detection: bool = True
+    
+    # Real-time monitoring
+    enable_real_time_monitoring: bool = True
+    real_time_drift_threshold: float = 0.05  # More sensitive for real-time
 
 
 @dataclass
@@ -425,17 +444,13 @@ class PredictionDriftDetector(BaseDriftDetector):
 
 
 class ModelMonitor:
-    """Comprehensive ML model monitoring system."""
+    """Enhanced comprehensive ML model monitoring system with infrastructure integration."""
     
     def __init__(self, model_id: str, config: DriftConfig):
         self.model_id = model_id
         self.config = config
         self.supabase = get_supabase_client()
-        self.redis_client = get_redis_client()
-        self.metrics_collector = get_metrics_collector()
-        self.prometheus_collector = get_prometheus_collector()
-        self.observability_platform = get_observability_platform()
-        self.alert_manager = get_alert_manager()
+        self.metrics_collector = MetricsCollector()
         
         # Initialize detectors
         self.feature_drift_detector = FeatureDriftDetector(config)
@@ -445,6 +460,305 @@ class ModelMonitor:
         self.reference_data: Optional[pd.DataFrame] = None
         self.reference_predictions: Optional[pd.Series] = None
         self.reference_labels: Optional[pd.Series] = None
+        
+        # Infrastructure integration
+        self.cache_manager = None
+        self.rabbitmq_manager = None
+        self.kafka_manager = None
+        
+        # Initialize infrastructure
+        self._initialize_infrastructure()
+    
+    def _initialize_infrastructure(self):
+        """Initialize infrastructure components asynchronously."""
+        asyncio.create_task(self._async_initialize_infrastructure())
+    
+    async def _async_initialize_infrastructure(self):
+        """Async initialization of infrastructure components."""
+        try:
+            # Initialize cache manager
+            if self.config.enable_caching:
+                self.cache_manager = await get_cache_manager()
+                logger.info(f"Cache manager initialized for model monitor {self.model_id}")
+            
+            # Initialize messaging
+            if self.config.enable_messaging:
+                self.rabbitmq_manager = get_rabbitmq_manager()
+                logger.info(f"RabbitMQ manager initialized for model monitor {self.model_id}")
+            
+            # Initialize streaming
+            if self.config.enable_streaming:
+                self.kafka_manager = KafkaManager()
+                logger.info(f"Kafka manager initialized for model monitor {self.model_id}")
+            
+        except Exception as e:
+            logger.error(f"Error initializing infrastructure for model {self.model_id}: {e}")
+    
+    async def _publish_drift_alert(self, drift_result: DriftResult):
+        """Publish drift alert to RabbitMQ."""
+        if not self.rabbitmq_manager or not self.config.enable_messaging or not self.config.publish_drift_alerts:
+            return
+        
+        try:
+            message = EnterpriseMessage(
+                queue_type=QueueType.ML_MONITORING,
+                message_type="drift_detected",
+                payload={
+                    "model_id": self.model_id,
+                    "drift_type": drift_result.drift_type.value,
+                    "feature_name": drift_result.feature_name,
+                    "drift_score": drift_result.drift_score,
+                    "p_value": drift_result.p_value,
+                    "threshold": drift_result.threshold,
+                    "severity": drift_result.severity.value,
+                    "timestamp": drift_result.timestamp.isoformat(),
+                    "reference_stats": drift_result.reference_stats,
+                    "current_stats": drift_result.current_stats
+                }
+            )
+            
+            # Set priority based on severity
+            if drift_result.severity == AlertSeverity.CRITICAL:
+                message.metadata.priority = MessagePriority.CRITICAL
+            elif drift_result.severity == AlertSeverity.HIGH:
+                message.metadata.priority = MessagePriority.HIGH
+            else:
+                message.metadata.priority = MessagePriority.NORMAL
+            
+            message.metadata.source_service = "model_monitor"
+            
+            await self.rabbitmq_manager.publish_message_async(message)
+            logger.debug(f"Drift alert published for model {self.model_id}: {drift_result.drift_type.value}")
+            
+        except Exception as e:
+            logger.error(f"Error publishing drift alert: {e}")
+    
+    async def _publish_performance_alert(self, metrics: 'ModelPerformanceMetrics', alert_type: str, alert_data: Dict[str, Any]):
+        """Publish performance alert to RabbitMQ."""
+        if not self.rabbitmq_manager or not self.config.enable_messaging or not self.config.publish_performance_alerts:
+            return
+        
+        try:
+            message = EnterpriseMessage(
+                queue_type=QueueType.ML_MONITORING,
+                message_type="performance_alert",
+                payload={
+                    "model_id": self.model_id,
+                    "alert_type": alert_type,
+                    "alert_data": alert_data,
+                    "timestamp": metrics.timestamp.isoformat(),
+                    "sample_size": metrics.sample_size,
+                    "metrics": {
+                        "accuracy": metrics.accuracy,
+                        "precision": metrics.precision,
+                        "recall": metrics.recall,
+                        "f1_score": metrics.f1_score,
+                        "rmse": metrics.rmse,
+                        "mae": metrics.mae,
+                        "r2_score": metrics.r2_score,
+                        "custom_metrics": metrics.custom_metrics
+                    }
+                }
+            )
+            message.metadata.priority = MessagePriority.HIGH
+            message.metadata.source_service = "model_monitor"
+            
+            await self.rabbitmq_manager.publish_message_async(message)
+            logger.debug(f"Performance alert published for model {self.model_id}: {alert_type}")
+            
+        except Exception as e:
+            logger.error(f"Error publishing performance alert: {e}")
+    
+    async def _stream_drift_detection(self, drift_result: DriftResult):
+        """Stream drift detection results to Kafka."""
+        if not self.kafka_manager or not self.config.enable_streaming or not self.config.stream_drift_detection:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message={
+                    "event_type": "ml_drift_detected",
+                    "model_id": self.model_id,
+                    "drift_type": drift_result.drift_type.value,
+                    "feature_name": drift_result.feature_name,
+                    "drift_score": drift_result.drift_score,
+                    "p_value": drift_result.p_value,
+                    "threshold": drift_result.threshold,
+                    "is_drift_detected": drift_result.is_drift_detected,
+                    "severity": drift_result.severity.value,
+                    "timestamp": drift_result.timestamp.isoformat(),
+                    "reference_stats": drift_result.reference_stats,
+                    "current_stats": drift_result.current_stats
+                },
+                key=f"{self.model_id}_{drift_result.feature_name or 'global'}"
+            )
+            
+            if success:
+                logger.debug(f"Drift detection streamed for model {self.model_id}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming drift detection: {e}")
+    
+    async def _stream_real_time_metrics(self, metrics_data: Dict[str, Any]):
+        """Stream real-time metrics to Kafka."""
+        if not self.kafka_manager or not self.config.enable_streaming or not self.config.stream_real_time_metrics:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message={
+                    "event_type": "ml_real_time_metrics",
+                    "model_id": self.model_id,
+                    "metrics": metrics_data,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=self.model_id
+            )
+            
+            if success:
+                logger.debug(f"Real-time metrics streamed for model {self.model_id}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming real-time metrics: {e}")
+    
+    async def _cache_model_metrics(self, metrics: 'ModelPerformanceMetrics'):
+        """Cache model performance metrics."""
+        if not self.cache_manager or not self.config.enable_caching or not self.config.cache_model_metrics:
+            return
+        
+        try:
+            cache_key = f"model_metrics:{self.model_id}"
+            
+            metrics_data = {
+                "model_id": metrics.model_id,
+                "timestamp": metrics.timestamp.isoformat(),
+                "sample_size": metrics.sample_size,
+                "accuracy": metrics.accuracy,
+                "precision": metrics.precision,
+                "recall": metrics.recall,
+                "f1_score": metrics.f1_score,
+                "rmse": metrics.rmse,
+                "mae": metrics.mae,
+                "r2_score": metrics.r2_score,
+                "custom_metrics": metrics.custom_metrics
+            }
+            
+            await self.cache_manager.set(
+                cache_key,
+                metrics_data,
+                ttl=self.config.cache_ttl_seconds,
+                namespace="ml_monitoring"
+            )
+            
+            # Also maintain a list of recent metrics
+            recent_metrics_key = f"model_metrics_recent:{self.model_id}"
+            await self.cache_manager.lpush(recent_metrics_key, metrics_data, namespace="ml_monitoring")
+            await self.cache_manager.ltrim(recent_metrics_key, 0, 99, namespace="ml_monitoring")  # Keep last 100
+            
+            logger.debug(f"Model metrics cached for model {self.model_id}")
+            
+        except Exception as e:
+            logger.error(f"Error caching model metrics: {e}")
+    
+    async def _cache_drift_data(self, drift_results: List[DriftResult]):
+        """Cache drift detection data."""
+        if not self.cache_manager or not self.config.enable_caching or not self.config.cache_drift_data:
+            return
+        
+        try:
+            cache_key = f"model_drift:{self.model_id}"
+            
+            drift_data = []
+            for result in drift_results:
+                drift_data.append({
+                    "drift_type": result.drift_type.value,
+                    "feature_name": result.feature_name,
+                    "drift_score": result.drift_score,
+                    "p_value": result.p_value,
+                    "threshold": result.threshold,
+                    "is_drift_detected": result.is_drift_detected,
+                    "severity": result.severity.value,
+                    "timestamp": result.timestamp.isoformat(),
+                    "reference_stats": result.reference_stats,
+                    "current_stats": result.current_stats
+                })
+            
+            await self.cache_manager.set(
+                cache_key,
+                drift_data,
+                ttl=self.config.cache_ttl_seconds,
+                namespace="ml_monitoring"
+            )
+            
+            logger.debug(f"Drift data cached for model {self.model_id}")
+            
+        except Exception as e:
+            logger.error(f"Error caching drift data: {e}")
+    
+    async def _check_performance_degradation(self, current_metrics: 'ModelPerformanceMetrics', problem_type: str):
+        """Check for performance degradation and publish alerts."""
+        try:
+            # Get recent metrics from cache for comparison
+            if not self.cache_manager:
+                return
+            
+            recent_metrics_key = f"model_metrics_recent:{self.model_id}"
+            recent_metrics_data = await self.cache_manager.lrange(recent_metrics_key, 1, 10, namespace="ml_monitoring")  # Skip current, get last 10
+            
+            if not recent_metrics_data or len(recent_metrics_data) < 3:
+                return  # Need at least 3 historical points
+            
+            # Calculate baseline performance
+            if problem_type == "classification":
+                if current_metrics.accuracy is None:
+                    return
+                
+                historical_accuracies = [m.get("accuracy") for m in recent_metrics_data if m.get("accuracy") is not None]
+                if not historical_accuracies:
+                    return
+                
+                baseline_accuracy = sum(historical_accuracies) / len(historical_accuracies)
+                
+                # Check for significant degradation (more than 5% relative decrease)
+                if current_metrics.accuracy < baseline_accuracy * 0.95:
+                    await self._publish_performance_alert(
+                        current_metrics,
+                        "performance_degradation",
+                        {
+                            "metric": "accuracy",
+                            "current_value": current_metrics.accuracy,
+                            "baseline_value": baseline_accuracy,
+                            "degradation_percent": ((baseline_accuracy - current_metrics.accuracy) / baseline_accuracy) * 100
+                        }
+                    )
+            
+            else:  # regression
+                if current_metrics.r2_score is None:
+                    return
+                
+                historical_r2_scores = [m.get("r2_score") for m in recent_metrics_data if m.get("r2_score") is not None]
+                if not historical_r2_scores:
+                    return
+                
+                baseline_r2 = sum(historical_r2_scores) / len(historical_r2_scores)
+                
+                # Check for significant degradation
+                if current_metrics.r2_score < baseline_r2 * 0.95:
+                    await self._publish_performance_alert(
+                        current_metrics,
+                        "performance_degradation",
+                        {
+                            "metric": "r2_score",
+                            "current_value": current_metrics.r2_score,
+                            "baseline_value": baseline_r2,
+                            "degradation_percent": ((baseline_r2 - current_metrics.r2_score) / baseline_r2) * 100
+                        }
+                    )
+            
+        except Exception as e:
+            logger.error(f"Error checking performance degradation: {e}")
         
     async def set_reference_data(self, features: pd.DataFrame, 
                                predictions: Optional[pd.Series] = None,
@@ -519,8 +833,27 @@ class ModelMonitor:
             # Store results
             await self._store_drift_results(drift_results)
             
+            # Cache drift data
+            await self._cache_drift_data(drift_results)
+            
             # Generate alerts for significant drift
             await self._process_drift_alerts(drift_results)
+            
+            # Publish drift alerts and stream detection results
+            for drift_result in drift_results:
+                if drift_result.is_drift_detected:
+                    await self._publish_drift_alert(drift_result)
+                    await self._stream_drift_detection(drift_result)
+            
+            # Stream real-time drift metrics
+            drift_metrics = {
+                "total_features_checked": len(drift_results),
+                "drift_detected_count": sum(1 for r in drift_results if r.is_drift_detected),
+                "avg_drift_score": sum(r.drift_score for r in drift_results) / len(drift_results) if drift_results else 0,
+                "critical_alerts": sum(1 for r in drift_results if r.severity == AlertSeverity.CRITICAL),
+                "high_alerts": sum(1 for r in drift_results if r.severity == AlertSeverity.HIGH)
+            }
+            await self._stream_real_time_metrics(drift_metrics)
             
             # Update metrics
             await self._update_drift_metrics(drift_results)
@@ -573,7 +906,35 @@ class ModelMonitor:
             
             self.supabase.table('model_performance_metrics').insert(metrics_data).execute()
             
-            # Update real-time metrics in Redis
+            # Cache model metrics
+            await self._cache_model_metrics(metrics)
+            
+            # Check for performance degradation and publish alerts
+            await self._check_performance_degradation(metrics, problem_type)
+            
+            # Stream performance metrics
+            performance_metrics_data = {
+                "sample_size": metrics.sample_size,
+                "problem_type": problem_type
+            }
+            
+            if problem_type == "classification":
+                performance_metrics_data.update({
+                    "accuracy": metrics.accuracy,
+                    "precision": metrics.precision,
+                    "recall": metrics.recall,
+                    "f1_score": metrics.f1_score
+                })
+            else:
+                performance_metrics_data.update({
+                    "rmse": metrics.rmse,
+                    "mae": metrics.mae,
+                    "r2_score": metrics.r2_score
+                })
+            
+            await self._stream_real_time_metrics(performance_metrics_data)
+            
+            # Update real-time metrics
             await self._update_performance_metrics(metrics, problem_type)
             
             return metrics

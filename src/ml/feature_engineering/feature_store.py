@@ -1,8 +1,9 @@
 """
-Feature Store Implementation
+Enhanced Feature Store Implementation
 
 Centralized feature store for managing, versioning, and serving features
-across ML pipelines with real-time and batch capabilities.
+across ML pipelines with real-time and batch capabilities, and enterprise infrastructure integration
+including Redis caching, RabbitMQ messaging, and Kafka streaming.
 """
 
 import logging
@@ -24,7 +25,9 @@ import uuid
 from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.data_access.supabase_client import get_supabase_client
-from src.core.caching.redis_cache import get_redis_client
+from src.core.caching.redis_cache_manager import get_cache_manager
+from src.messaging.enterprise_rabbitmq_manager import get_rabbitmq_manager, EnterpriseMessage, QueueType, MessagePriority
+from src.streaming.kafka_manager import KafkaManager, StreamingTopic
 from src.core.monitoring.metrics import MetricsCollector
 
 logger = get_logger(__name__)
@@ -70,13 +73,188 @@ class FeatureGroup:
 
 
 class FeatureStore:
-    """Centralized feature store with versioning and serving capabilities."""
+    """Enhanced centralized feature store with versioning, serving capabilities, and infrastructure integration."""
     
     def __init__(self):
         self.supabase = get_supabase_client()
-        self.redis_client = get_redis_client()
         self.metrics_collector = MetricsCollector()
+        
+        # Infrastructure integration
+        self.cache_manager = None
+        self.rabbitmq_manager = None
+        self.kafka_manager = None
+        
+        # Configuration
+        self.enable_caching = True
+        self.enable_messaging = True
+        self.enable_streaming = True
+        self.cache_ttl_seconds = 300  # 5 minutes
+        
         self._initialize_tables()
+        self._initialize_infrastructure()
+    
+    def _initialize_infrastructure(self):
+        """Initialize infrastructure components asynchronously."""
+        asyncio.create_task(self._async_initialize_infrastructure())
+    
+    async def _async_initialize_infrastructure(self):
+        """Async initialization of infrastructure components."""
+        try:
+            # Initialize cache manager
+            if self.enable_caching:
+                self.cache_manager = await get_cache_manager()
+                logger.info("Cache manager initialized for feature store")
+            
+            # Initialize messaging
+            if self.enable_messaging:
+                self.rabbitmq_manager = get_rabbitmq_manager()
+                logger.info("RabbitMQ manager initialized for feature store")
+            
+            # Initialize streaming
+            if self.enable_streaming:
+                self.kafka_manager = KafkaManager()
+                logger.info("Kafka manager initialized for feature store")
+            
+        except Exception as e:
+            logger.error(f"Error initializing infrastructure for feature store: {e}")
+    
+    async def _publish_feature_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Publish feature store events to RabbitMQ."""
+        if not self.rabbitmq_manager or not self.enable_messaging:
+            return
+        
+        try:
+            message = EnterpriseMessage(
+                queue_type=QueueType.FEATURE_PIPELINE,
+                message_type=f"feature_{event_type}",
+                payload=event_data
+            )
+            message.metadata.priority = MessagePriority.NORMAL
+            message.metadata.source_service = "feature_store"
+            
+            await self.rabbitmq_manager.publish_message_async(message)
+            logger.debug(f"Feature {event_type} event published")
+            
+        except Exception as e:
+            logger.error(f"Error publishing feature event: {e}")
+    
+    async def _stream_feature_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Stream feature store events to Kafka."""
+        if not self.kafka_manager or not self.enable_streaming:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.EVENTS,
+                message={
+                    "event_type": f"feature_store_{event_type}",
+                    "event_data": event_data,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=event_data.get("feature_group_name", "global")
+            )
+            
+            if success:
+                logger.debug(f"Feature {event_type} event streamed")
+            
+        except Exception as e:
+            logger.error(f"Error streaming feature event: {e}")
+    
+    async def _cache_feature_group_metadata(self, feature_group: FeatureGroup, feature_group_id: str):
+        """Cache feature group metadata."""
+        if not self.cache_manager or not self.enable_caching:
+            return
+        
+        try:
+            cache_key = f"feature_group_metadata:{feature_group.name}:{feature_group.version}"
+            
+            metadata = {
+                "id": feature_group_id,
+                "name": feature_group.name,
+                "version": feature_group.version,
+                "description": feature_group.description,
+                "entity_keys": feature_group.entity_keys,
+                "source_table": feature_group.source_table,
+                "transformation_logic": feature_group.transformation_logic,
+                "refresh_interval": feature_group.refresh_interval,
+                "tags": feature_group.tags,
+                "owner": feature_group.owner,
+                "features": [
+                    {
+                        "name": f.name,
+                        "version": f.version,
+                        "description": f.description,
+                        "feature_type": f.feature_type,
+                        "data_type": f.data_type,
+                        "nullable": f.nullable,
+                        "default_value": f.default_value,
+                        "categories": f.categories
+                    } for f in feature_group.features
+                ]
+            }
+            
+            await self.cache_manager.set(
+                cache_key,
+                metadata,
+                ttl=3600,  # 1 hour for metadata
+                namespace="feature_store"
+            )
+            
+            logger.debug(f"Feature group metadata cached: {feature_group.name}")
+            
+        except Exception as e:
+            logger.error(f"Error caching feature group metadata: {e}")
+    
+    async def _cache_features(self, feature_group_name: str, version: str, entity_keys: Dict[str, Any], features: Dict[str, Any]):
+        """Cache feature values for fast retrieval."""
+        if not self.cache_manager or not self.enable_caching:
+            return
+        
+        try:
+            cache_key = self._generate_cache_key(feature_group_name, version, entity_keys)
+            
+            cache_data = {
+                "features": features,
+                "timestamp": datetime.utcnow().isoformat(),
+                "cached_at": datetime.utcnow().isoformat()
+            }
+            
+            await self.cache_manager.set(
+                cache_key,
+                cache_data,
+                ttl=self.cache_ttl_seconds,
+                namespace="feature_store"
+            )
+            
+            logger.debug(f"Features cached for {feature_group_name}")
+            
+        except Exception as e:
+            logger.error(f"Error caching features: {e}")
+    
+    async def _stream_feature_update(self, feature_group_name: str, version: str, entity_keys: Dict[str, Any], features: Dict[str, Any]):
+        """Stream feature updates to Kafka for real-time consumption."""
+        if not self.kafka_manager or not self.enable_streaming:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.FEATURES,
+                message={
+                    "event_type": "feature_update",
+                    "feature_group_name": feature_group_name,
+                    "version": version,
+                    "entity_keys": entity_keys,
+                    "features": features,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=f"{feature_group_name}_{hash(str(entity_keys))}"
+            )
+            
+            if success:
+                logger.debug(f"Feature update streamed for {feature_group_name}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming feature update: {e}")
         
     def _initialize_tables(self):
         """Initialize feature store tables."""
@@ -125,7 +303,31 @@ class FeatureStore:
             for feature in feature_group.features:
                 await self._register_feature_schema(feature, feature_group_id)
             
+            # Cache feature group metadata
+            await self._cache_feature_group_metadata(feature_group, feature_group_id)
+            
             logger.info(f"Registered feature group: {feature_group.name} v{feature_group.version}")
+            
+            # Publish feature group registration event
+            await self._publish_feature_event("group_registered", {
+                "feature_group_id": feature_group_id,
+                "name": feature_group.name,
+                "version": feature_group.version,
+                "description": feature_group.description,
+                "entity_keys": feature_group.entity_keys,
+                "feature_count": len(feature_group.features),
+                "owner": feature_group.owner,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            # Stream feature group registration
+            await self._stream_feature_event("group_registered", {
+                "feature_group_id": feature_group_id,
+                "name": feature_group.name,
+                "version": feature_group.version,
+                "entity_keys": feature_group.entity_keys,
+                "feature_count": len(feature_group.features)
+            })
             
             self.metrics_collector.increment_counter(
                 "feature_store_feature_groups_registered_total",
@@ -198,6 +400,21 @@ class FeatureStore:
             # Cache latest features for real-time serving
             await self._cache_latest_features(feature_group_name, version, features_df)
             
+            # Stream feature updates for real-time consumption
+            for _, row in features_df.iterrows():
+                entity_keys = {key: row.get(key) for key in feature_group['entity_keys']}
+                features = {k: v for k, v in row.to_dict().items() if k not in feature_group['entity_keys']}
+                await self._stream_feature_update(feature_group_name, version, entity_keys, features)
+            
+            # Publish feature ingestion event
+            await self._publish_feature_event("features_ingested", {
+                "feature_group_name": feature_group_name,
+                "version": version,
+                "batch_id": batch_id,
+                "record_count": len(features_df),
+                "timestamp": timestamp.isoformat()
+            })
+            
             duration = (datetime.utcnow() - start_time).total_seconds()
             logger.info(f"Ingested {len(features_df)} feature records in {duration:.2f}s")
             
@@ -226,14 +443,16 @@ class FeatureStore:
                           timestamp: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
         """Get features for specific entities."""
         try:
-            # Try cache first for real-time serving
+            # Try enhanced cache first for real-time serving
             cache_key = self._generate_cache_key(feature_group_name, version, entity_keys)
-            cached_features = await self.redis_client.get(cache_key)
             
-            if cached_features:
-                cached_data = json.loads(cached_features)
-                if not timestamp or datetime.fromisoformat(cached_data['timestamp']) >= timestamp:
-                    return cached_data['features']
+            if self.cache_manager and self.enable_caching:
+                cached_data = await self.cache_manager.get(cache_key, namespace="feature_store")
+                
+                if cached_data:
+                    if not timestamp or datetime.fromisoformat(cached_data['timestamp']) >= timestamp:
+                        logger.debug(f"Features retrieved from cache for {feature_group_name}")
+                        return cached_data['features']
             
             # Query from database
             query = self.supabase.table('feature_values').select('*')
@@ -258,16 +477,8 @@ class FeatureStore:
                 if features:
                     feature_data = {k: v for k, v in feature_data.items() if k in features}
                 
-                # Cache for future requests
-                cache_data = {
-                    'features': feature_data,
-                    'timestamp': record['timestamp']
-                }
-                await self.redis_client.setex(
-                    cache_key, 
-                    300,  # 5 minutes TTL
-                    json.dumps(cache_data, default=str)
-                )
+                # Cache for future requests using enhanced cache
+                await self._cache_features(feature_group_name, version, entity_keys, feature_data)
                 
                 return feature_data
             

@@ -1,10 +1,12 @@
 """
-Real-time ML Model Serving Infrastructure
+Enhanced Real-time ML Model Serving Infrastructure
 
 High-performance model serving system with load balancing, caching,
-and automatic scaling capabilities.
+automatic scaling capabilities, and enterprise infrastructure integration
+including Redis caching, RabbitMQ messaging, and Kafka streaming.
 """
 
+import hashlib
 import logging
 import asyncio
 import pandas as pd
@@ -28,7 +30,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.core.monitoring.metrics import MetricsCollector
-from src.core.caching.redis_cache import get_redis_client
+from src.core.caching.redis_cache_manager import get_cache_manager
+from src.messaging.enterprise_rabbitmq_manager import get_rabbitmq_manager, EnterpriseMessage, QueueType, MessagePriority
+from src.streaming.kafka_manager import KafkaManager, StreamingTopic
 from src.ml.feature_engineering.feature_pipeline import FeatureEngineeringPipeline
 from src.ml.feature_engineering.feature_store import FeatureStore, FeatureStoreClient
 
@@ -38,7 +42,7 @@ settings = get_settings()
 
 @dataclass
 class ModelMetadata:
-    """Model metadata for serving."""
+    """Enhanced model metadata for serving with infrastructure integration."""
     
     model_id: str
     model_name: str
@@ -54,14 +58,53 @@ class ModelMetadata:
     usage_count: int = 0
     avg_latency_ms: float = 0.0
     
+    # Infrastructure integration
+    enable_prediction_cache: bool = True
+    prediction_cache_ttl: int = 300  # 5 minutes
+    enable_deployment_notifications: bool = True
+    enable_prediction_streaming: bool = True
+    ab_test_enabled: bool = False
+    ab_test_variant: Optional[str] = None
+    
+    def to_cache_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for caching."""
+        return {
+            "model_id": self.model_id,
+            "model_name": self.model_name,
+            "model_type": self.model_type,
+            "version": self.version,
+            "problem_type": self.problem_type,
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "feature_pipeline_path": self.feature_pipeline_path,
+            "model_path": self.model_path,
+            "created_at": self.created_at.isoformat(),
+            "last_used": self.last_used.isoformat(),
+            "usage_count": self.usage_count,
+            "avg_latency_ms": self.avg_latency_ms,
+            "enable_prediction_cache": self.enable_prediction_cache,
+            "prediction_cache_ttl": self.prediction_cache_ttl,
+            "enable_deployment_notifications": self.enable_deployment_notifications,
+            "enable_prediction_streaming": self.enable_prediction_streaming,
+            "ab_test_enabled": self.ab_test_enabled,
+            "ab_test_variant": self.ab_test_variant
+        }
+    
     
 class PredictionRequest(BaseModel):
-    """Request model for predictions."""
+    """Enhanced request model for predictions."""
     
     model_id: str
     features: Dict[str, Any]
     return_probabilities: bool = False
     return_feature_importance: bool = False
+    
+    # Infrastructure integration
+    cache_prediction: bool = True
+    request_id: Optional[str] = None
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ab_test_context: Optional[Dict[str, Any]] = None
     
 
 class BatchPredictionRequest(BaseModel):
@@ -74,7 +117,7 @@ class BatchPredictionRequest(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """Response model for predictions."""
+    """Enhanced response model for predictions."""
     
     prediction: Union[float, int, str, List[Union[float, int, str]]]
     probabilities: Optional[Dict[str, float]] = None
@@ -83,43 +126,74 @@ class PredictionResponse(BaseModel):
     model_version: str
     timestamp: datetime
     latency_ms: float
+    
+    # Infrastructure integration
+    from_cache: bool = False
+    cache_key: Optional[str] = None
+    request_id: Optional[str] = None
+    ab_test_variant: Optional[str] = None
 
 
 class ModelRegistry:
-    """Registry for managing deployed models."""
+    """Enhanced registry for managing deployed models with infrastructure integration."""
     
     def __init__(self):
         self.models: Dict[str, ModelMetadata] = {}
         self.loaded_models: Dict[str, Any] = {}
         self.feature_pipelines: Dict[str, FeatureEngineeringPipeline] = {}
-        self.redis_client = get_redis_client()
         self.metrics_collector = MetricsCollector()
         
+        # Infrastructure integration
+        self.cache_manager = None
+        self.rabbitmq_manager = None
+        self.kafka_manager = None
+        
+        # Initialize infrastructure
+        self._initialize_infrastructure()
+    
+    def _initialize_infrastructure(self):
+        """Initialize infrastructure components asynchronously."""
+        asyncio.create_task(self._async_initialize_infrastructure())
+    
+    async def _async_initialize_infrastructure(self):
+        """Async initialization of infrastructure components."""
+        try:
+            # Initialize cache manager
+            self.cache_manager = await get_cache_manager()
+            logger.info("Cache manager initialized for model registry")
+            
+            # Initialize messaging
+            self.rabbitmq_manager = get_rabbitmq_manager()
+            logger.info("RabbitMQ manager initialized for model registry")
+            
+            # Initialize streaming
+            self.kafka_manager = KafkaManager()
+            logger.info("Kafka manager initialized for model registry")
+            
+        except Exception as e:
+            logger.error(f"Error initializing infrastructure: {e}")
+        
     async def register_model(self, metadata: ModelMetadata) -> bool:
-        """Register a model in the registry."""
+        """Register a model in the registry with infrastructure integration."""
         try:
             self.models[metadata.model_id] = metadata
             
-            # Store in Redis for persistence
-            model_data = {
-                "model_id": metadata.model_id,
-                "model_name": metadata.model_name,
-                "model_type": metadata.model_type,
-                "version": metadata.version,
-                "problem_type": metadata.problem_type,
-                "input_schema": metadata.input_schema,
-                "output_schema": metadata.output_schema,
-                "model_path": metadata.model_path,
-                "feature_pipeline_path": metadata.feature_pipeline_path,
-                "created_at": metadata.created_at.isoformat()
-            }
-            
-            await self.redis_client.hset(
-                f"model_registry:{metadata.model_id}",
-                mapping={k: json.dumps(v, default=str) for k, v in model_data.items()}
-            )
+            # Store in enhanced cache
+            if self.cache_manager:
+                await self.cache_manager.set(
+                    f"model_registry:{metadata.model_id}",
+                    metadata.to_cache_dict(),
+                    ttl=0,  # No expiration for model registry
+                    namespace="ml_models"
+                )
             
             logger.info(f"Model registered: {metadata.model_name} v{metadata.version}")
+            
+            # Publish model registration event
+            await self._publish_model_event(metadata, "registered")
+            
+            # Stream model registration
+            await self._stream_model_event(metadata, "model_registered")
             
             self.metrics_collector.increment_counter(
                 "model_registry_models_registered_total",
@@ -132,29 +206,99 @@ class ModelRegistry:
             logger.error(f"Error registering model: {str(e)}")
             return False
     
+    async def _publish_model_event(self, metadata: ModelMetadata, event_type: str):
+        """Publish model lifecycle events to RabbitMQ."""
+        if not self.rabbitmq_manager or not metadata.enable_deployment_notifications:
+            return
+        
+        try:
+            message = EnterpriseMessage(
+                queue_type=QueueType.ML_MODEL_DEPLOYMENT,
+                message_type=f"model_{event_type}",
+                payload={
+                    "model_id": metadata.model_id,
+                    "model_name": metadata.model_name,
+                    "model_type": metadata.model_type,
+                    "version": metadata.version,
+                    "problem_type": metadata.problem_type,
+                    "event_type": event_type,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+            message.metadata.priority = MessagePriority.HIGH
+            message.metadata.source_service = "model_server"
+            
+            await self.rabbitmq_manager.publish_message_async(message)
+            logger.debug(f"Model {event_type} event published for: {metadata.model_name}")
+            
+        except Exception as e:
+            logger.error(f"Error publishing model event: {e}")
+    
+    async def _stream_model_event(self, metadata: ModelMetadata, event_type: str):
+        """Stream model lifecycle events to Kafka."""
+        if not self.kafka_manager or not metadata.enable_prediction_streaming:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message={
+                    "model_id": metadata.model_id,
+                    "model_name": metadata.model_name,
+                    "model_type": metadata.model_type,
+                    "version": metadata.version,
+                    "problem_type": metadata.problem_type,
+                    "event_type": event_type,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=metadata.model_id
+            )
+            
+            if success:
+                logger.debug(f"Model event streamed: {event_type} for {metadata.model_name}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming model event: {e}")
+    
     async def load_model(self, model_id: str) -> bool:
-        """Load model into memory for serving."""
+        """Load model into memory for serving with infrastructure integration."""
         try:
             if model_id not in self.models:
-                # Try to load from Redis
-                model_data = await self.redis_client.hgetall(f"model_registry:{model_id}")
-                if not model_data:
+                # Try to load from enhanced cache
+                if self.cache_manager:
+                    cached_data = await self.cache_manager.get(
+                        f"model_registry:{model_id}",
+                        namespace="ml_models"
+                    )
+                    
+                    if cached_data:
+                        # Reconstruct metadata from cached data
+                        metadata = ModelMetadata(
+                            model_id=cached_data["model_id"],
+                            model_name=cached_data["model_name"],
+                            model_type=cached_data["model_type"],
+                            version=cached_data["version"],
+                            problem_type=cached_data["problem_type"],
+                            input_schema=cached_data["input_schema"],
+                            output_schema=cached_data["output_schema"],
+                            model_path=cached_data["model_path"],
+                            feature_pipeline_path=cached_data.get("feature_pipeline_path"),
+                            created_at=datetime.fromisoformat(cached_data["created_at"]),
+                            last_used=datetime.fromisoformat(cached_data.get("last_used", cached_data["created_at"])),
+                            usage_count=cached_data.get("usage_count", 0),
+                            avg_latency_ms=cached_data.get("avg_latency_ms", 0.0),
+                            enable_prediction_cache=cached_data.get("enable_prediction_cache", True),
+                            prediction_cache_ttl=cached_data.get("prediction_cache_ttl", 300),
+                            enable_deployment_notifications=cached_data.get("enable_deployment_notifications", True),
+                            enable_prediction_streaming=cached_data.get("enable_prediction_streaming", True),
+                            ab_test_enabled=cached_data.get("ab_test_enabled", False),
+                            ab_test_variant=cached_data.get("ab_test_variant")
+                        )
+                        self.models[model_id] = metadata
+                    else:
+                        return False
+                else:
                     return False
-                
-                # Reconstruct metadata
-                metadata = ModelMetadata(
-                    model_id=json.loads(model_data[b'model_id'].decode()),
-                    model_name=json.loads(model_data[b'model_name'].decode()),
-                    model_type=json.loads(model_data[b'model_type'].decode()),
-                    version=json.loads(model_data[b'version'].decode()),
-                    problem_type=json.loads(model_data[b'problem_type'].decode()),
-                    input_schema=json.loads(model_data[b'input_schema'].decode()),
-                    output_schema=json.loads(model_data[b'output_schema'].decode()),
-                    model_path=json.loads(model_data[b'model_path'].decode()),
-                    feature_pipeline_path=json.loads(model_data[b'feature_pipeline_path'].decode()) if b'feature_pipeline_path' in model_data else None,
-                    created_at=datetime.fromisoformat(json.loads(model_data[b'created_at'].decode()))
-                )
-                self.models[model_id] = metadata
             
             metadata = self.models[model_id]
             
@@ -180,6 +324,12 @@ class ModelRegistry:
                         self.feature_pipelines[model_id] = pipeline
                 
                 logger.info(f"Model loaded into memory: {metadata.model_name}")
+                
+                # Publish model loading event
+                await self._publish_model_event(metadata, "loaded")
+                
+                # Stream model loading
+                await self._stream_model_event(metadata, "model_loaded")
                 
                 self.metrics_collector.increment_counter(
                     "model_registry_models_loaded_total",
@@ -241,7 +391,7 @@ class ModelRegistry:
 
 
 class ModelServer:
-    """High-performance model serving server."""
+    """Enhanced high-performance model serving server with infrastructure integration."""
     
     def __init__(self, registry: ModelRegistry, feature_store: Optional[FeatureStore] = None):
         self.registry = registry
@@ -250,9 +400,39 @@ class ModelServer:
         self.executor = ThreadPoolExecutor(max_workers=4)
         self.metrics_collector = MetricsCollector()
         
+        # Infrastructure integration
+        self.cache_manager = registry.cache_manager
+        self.rabbitmq_manager = registry.rabbitmq_manager
+        self.kafka_manager = registry.kafka_manager
+    
+    async def _stream_prediction_event(self, request_id: str, model_id: str, event_data: Dict[str, Any]):
+        """Stream prediction events to Kafka."""
+        if not self.kafka_manager:
+            return
+        
+        try:
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message={
+                    "request_id": request_id,
+                    "model_id": model_id,
+                    "event_type": "prediction",
+                    "event_data": event_data,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=request_id
+            )
+            
+            if success:
+                logger.debug(f"Prediction event streamed for request: {request_id}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming prediction event: {e}")
+        
     async def predict(self, request: PredictionRequest) -> PredictionResponse:
-        """Make single prediction."""
+        """Make single prediction with infrastructure integration."""
         start_time = datetime.utcnow()
+        request_id = request.request_id or f"pred_{datetime.utcnow().strftime('%Y%m%d_%H%M%S%f')}"
         
         try:
             # Ensure model is loaded
@@ -265,6 +445,43 @@ class ModelServer:
             
             if not model or not metadata:
                 raise HTTPException(status_code=404, detail="Model not found")
+            
+            # Check prediction cache first
+            cache_key = None
+            cached_prediction = None
+            from_cache = False
+            
+            if request.cache_prediction and metadata.enable_prediction_cache and self.cache_manager:
+                # Create cache key from features hash
+                features_hash = hashlib.sha256(str(sorted(request.features.items())).encode()).hexdigest()
+                cache_key = f"prediction:{request.model_id}:{features_hash}"
+                
+                cached_prediction = await self.cache_manager.get(cache_key, namespace="ml_predictions")
+                
+                if cached_prediction:
+                    from_cache = True
+                    latency = (datetime.utcnow() - start_time).total_seconds() * 1000
+                    
+                    # Stream cached prediction event
+                    await self._stream_prediction_event(request_id, request.model_id, {
+                        "from_cache": True,
+                        "cache_hit": True,
+                        "latency_ms": latency
+                    })
+                    
+                    return PredictionResponse(
+                        prediction=cached_prediction["prediction"],
+                        probabilities=cached_prediction.get("probabilities"),
+                        feature_importance=cached_prediction.get("feature_importance"),
+                        model_id=request.model_id,
+                        model_version=metadata.version,
+                        timestamp=datetime.utcnow(),
+                        latency_ms=latency,
+                        from_cache=True,
+                        cache_key=cache_key,
+                        request_id=request_id,
+                        ab_test_variant=metadata.ab_test_variant
+                    )
             
             # Prepare features
             features_df = pd.DataFrame([request.features])

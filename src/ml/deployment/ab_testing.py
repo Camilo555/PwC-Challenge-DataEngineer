@@ -1,10 +1,12 @@
 """
-A/B Testing Framework for ML Models
+Enhanced A/B Testing Framework for ML Models
 
 Comprehensive A/B testing system for evaluating model performance
-in production with statistical significance testing.
+in production with statistical significance testing, and enterprise infrastructure integration
+including Redis caching, RabbitMQ messaging, and Kafka streaming.
 """
 
+import hashlib
 import logging
 import asyncio
 import pandas as pd
@@ -23,7 +25,9 @@ import aioredis
 from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.core.monitoring.metrics import MetricsCollector
-from src.core.caching.redis_cache import get_redis_client
+from src.core.caching.redis_cache_manager import get_cache_manager
+from src.messaging.enterprise_rabbitmq_manager import get_rabbitmq_manager, EnterpriseMessage, QueueType, MessagePriority
+from src.streaming.kafka_manager import KafkaManager, StreamingTopic
 from src.data_access.supabase_client import get_supabase_client
 
 logger = get_logger(__name__)
@@ -49,7 +53,7 @@ class SplitStrategy(Enum):
 
 @dataclass
 class ExperimentConfig:
-    """Configuration for A/B test experiment."""
+    """Enhanced configuration for A/B test experiment with infrastructure integration."""
     
     experiment_id: str
     name: str
@@ -76,10 +80,56 @@ class ExperimentConfig:
     check_frequency_hours: int = 24
     early_stopping_enabled: bool = True
     
+    # Infrastructure integration
+    enable_caching: bool = True
+    cache_experiment_state: bool = True
+    cache_ttl_seconds: int = 3600  # 1 hour
+    
+    enable_messaging: bool = True
+    publish_experiment_events: bool = True
+    publish_assignment_events: bool = True
+    
+    enable_streaming: bool = True
+    stream_experiment_metrics: bool = True
+    stream_real_time_results: bool = True
+    
     # Metadata
     owner: str = "system"
     tags: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
+    
+    def to_cache_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for caching."""
+        return {
+            "experiment_id": self.experiment_id,
+            "name": self.name,
+            "description": self.description,
+            "start_date": self.start_date.isoformat(),
+            "end_date": self.end_date.isoformat(),
+            "control_model_id": self.control_model_id,
+            "treatment_model_ids": self.treatment_model_ids,
+            "split_strategy": self.split_strategy.value,
+            "traffic_allocation": self.traffic_allocation,
+            "primary_metric": self.primary_metric,
+            "secondary_metrics": self.secondary_metrics,
+            "significance_level": self.significance_level,
+            "minimum_sample_size": self.minimum_sample_size,
+            "minimum_effect_size": self.minimum_effect_size,
+            "check_frequency_hours": self.check_frequency_hours,
+            "early_stopping_enabled": self.early_stopping_enabled,
+            "enable_caching": self.enable_caching,
+            "cache_experiment_state": self.cache_experiment_state,
+            "cache_ttl_seconds": self.cache_ttl_seconds,
+            "enable_messaging": self.enable_messaging,
+            "publish_experiment_events": self.publish_experiment_events,
+            "publish_assignment_events": self.publish_assignment_events,
+            "enable_streaming": self.enable_streaming,
+            "stream_experiment_metrics": self.stream_experiment_metrics,
+            "stream_real_time_results": self.stream_real_time_results,
+            "owner": self.owner,
+            "tags": self.tags,
+            "created_at": self.created_at.isoformat()
+        }
 
 
 @dataclass
@@ -317,53 +367,210 @@ class StatisticalAnalyzer:
 
 
 class ExperimentManager:
-    """Manager for A/B test experiments."""
+    """Enhanced manager for A/B test experiments with infrastructure integration."""
     
     def __init__(self):
         self.supabase = get_supabase_client()
-        self.redis_client = get_redis_client()
         self.metrics_collector = MetricsCollector()
         self.experiments: Dict[str, ExperimentConfig] = {}
         self.analyzers: Dict[str, StatisticalAnalyzer] = {}
         
+        # Infrastructure integration
+        self.cache_manager = None
+        self.rabbitmq_manager = None
+        self.kafka_manager = None
+        
+        # Initialize infrastructure
+        self._initialize_infrastructure()
+    
+    def _initialize_infrastructure(self):
+        """Initialize infrastructure components asynchronously."""
+        asyncio.create_task(self._async_initialize_infrastructure())
+    
+    async def _async_initialize_infrastructure(self):
+        """Async initialization of infrastructure components."""
+        try:
+            # Initialize cache manager
+            self.cache_manager = await get_cache_manager()
+            logger.info("Cache manager initialized for A/B testing")
+            
+            # Initialize messaging
+            self.rabbitmq_manager = get_rabbitmq_manager()
+            logger.info("RabbitMQ manager initialized for A/B testing")
+            
+            # Initialize streaming
+            self.kafka_manager = KafkaManager()
+            logger.info("Kafka manager initialized for A/B testing")
+            
+        except Exception as e:
+            logger.error(f"Error initializing infrastructure: {e}")
+    
+    async def _publish_experiment_event(self, config: ExperimentConfig, event_type: str, event_data: Optional[Dict[str, Any]] = None):
+        """Publish experiment lifecycle events to RabbitMQ."""
+        if not self.rabbitmq_manager or not config.enable_messaging or not config.publish_experiment_events:
+            return
+        
+        try:
+            payload = {
+                "experiment_id": config.experiment_id,
+                "experiment_name": config.name,
+                "event_type": event_type,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            if event_data:
+                payload.update(event_data)
+            
+            message = EnterpriseMessage(
+                queue_type=QueueType.ML_AB_TESTING,
+                message_type=f"experiment_{event_type}",
+                payload=payload
+            )
+            message.metadata.priority = MessagePriority.NORMAL
+            message.metadata.source_service = "ab_testing"
+            
+            await self.rabbitmq_manager.publish_message_async(message)
+            logger.debug(f"Experiment {event_type} event published for: {config.name}")
+            
+        except Exception as e:
+            logger.error(f"Error publishing experiment event: {e}")
+    
+    async def _stream_experiment_event(self, config: ExperimentConfig, event_type: str, event_data: Optional[Dict[str, Any]] = None):
+        """Stream experiment events to Kafka."""
+        if not self.kafka_manager or not config.enable_streaming or not config.stream_experiment_metrics:
+            return
+        
+        try:
+            payload = {
+                "experiment_id": config.experiment_id,
+                "experiment_name": config.name,
+                "event_type": event_type,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            if event_data:
+                payload.update(event_data)
+            
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message=payload,
+                key=config.experiment_id
+            )
+            
+            if success:
+                logger.debug(f"Experiment event streamed: {event_type} for {config.name}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming experiment event: {e}")
+    
+    async def _cache_experiment_state(self, config: ExperimentConfig):
+        """Cache experiment state in Redis."""
+        if not self.cache_manager or not config.enable_caching or not config.cache_experiment_state:
+            return
+        
+        try:
+            cache_key = f"experiment_state:{config.experiment_id}"
+            
+            await self.cache_manager.set(
+                cache_key,
+                config.to_cache_dict(),
+                ttl=config.cache_ttl_seconds,
+                namespace="ab_testing"
+            )
+            
+            logger.debug(f"Experiment state cached: {config.experiment_id}")
+            
+        except Exception as e:
+            logger.error(f"Error caching experiment state: {e}")
+    
+    async def _stream_assignment_event(self, experiment_id: str, assignment_data: Dict[str, Any]):
+        """Stream assignment events to Kafka."""
+        if not self.kafka_manager:
+            return
+        
+        try:
+            config = self.experiments.get(experiment_id)
+            if not config or not config.enable_streaming or not config.publish_assignment_events:
+                return
+            
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.EVENTS,
+                message={
+                    "event_type": "ab_test_assignment",
+                    "experiment_id": experiment_id,
+                    "assignment_data": assignment_data,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=f"{experiment_id}_{assignment_data.get('user_id', assignment_data.get('session_id', 'unknown'))}"
+            )
+            
+            if success:
+                logger.debug(f"Assignment event streamed for experiment: {experiment_id}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming assignment event: {e}")
+    
+    async def _stream_metrics_real_time(self, experiment_id: str, variant: str, metric: str, value: float):
+        """Stream real-time metrics to Kafka."""
+        if not self.kafka_manager:
+            return
+        
+        try:
+            config = self.experiments.get(experiment_id)
+            if not config or not config.enable_streaming or not config.stream_real_time_results:
+                return
+            
+            success = self.kafka_manager.produce_message(
+                topic=StreamingTopic.METRICS,
+                message={
+                    "event_type": "ab_test_metric",
+                    "experiment_id": experiment_id,
+                    "variant": variant,
+                    "metric": metric,
+                    "value": value,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                key=f"{experiment_id}_{variant}_{metric}"
+            )
+            
+            if success:
+                logger.debug(f"Real-time metric streamed: {metric} for {experiment_id}/{variant}")
+            
+        except Exception as e:
+            logger.error(f"Error streaming real-time metric: {e}")
+        
     async def create_experiment(self, config: ExperimentConfig) -> bool:
-        """Create a new A/B test experiment."""
+        """Create a new A/B test experiment with infrastructure integration."""
         try:
             # Store experiment configuration
-            experiment_data = {
-                "experiment_id": config.experiment_id,
-                "name": config.name,
-                "description": config.description,
-                "start_date": config.start_date.isoformat(),
-                "end_date": config.end_date.isoformat(),
-                "control_model_id": config.control_model_id,
-                "treatment_model_ids": config.treatment_model_ids,
-                "split_strategy": config.split_strategy.value,
-                "traffic_allocation": config.traffic_allocation,
-                "primary_metric": config.primary_metric,
-                "secondary_metrics": config.secondary_metrics,
-                "significance_level": config.significance_level,
-                "minimum_sample_size": config.minimum_sample_size,
-                "minimum_effect_size": config.minimum_effect_size,
-                "status": ExperimentStatus.DRAFT.value,
-                "owner": config.owner,
-                "tags": config.tags,
-                "created_at": config.created_at.isoformat()
-            }
+            experiment_data = config.to_cache_dict()
+            experiment_data["status"] = ExperimentStatus.DRAFT.value
             
             # Store in database
             result = self.supabase.table('ab_experiments').insert(experiment_data).execute()
             
-            # Cache in memory and Redis
+            # Cache in memory and enhanced cache
             self.experiments[config.experiment_id] = config
             self.analyzers[config.experiment_id] = StatisticalAnalyzer(config.significance_level)
             
-            await self.redis_client.hset(
-                f"experiment:{config.experiment_id}",
-                mapping={k: json.dumps(v, default=str) for k, v in experiment_data.items()}
-            )
+            # Cache experiment state
+            await self._cache_experiment_state(config)
             
             logger.info(f"Experiment created: {config.name} ({config.experiment_id})")
+            
+            # Publish experiment creation event
+            await self._publish_experiment_event(config, "created", {
+                "control_model_id": config.control_model_id,
+                "treatment_model_ids": config.treatment_model_ids,
+                "primary_metric": config.primary_metric,
+                "minimum_sample_size": config.minimum_sample_size
+            })
+            
+            # Stream experiment creation
+            await self._stream_experiment_event(config, "experiment_created", {
+                "traffic_allocation": config.traffic_allocation,
+                "duration_days": (config.end_date - config.start_date).days
+            })
             
             self.metrics_collector.increment_counter(
                 "ab_testing_experiments_created_total",
@@ -489,7 +696,7 @@ class ExperimentManager:
     
     async def record_event(self, experiment_id: str, user_context: Dict[str, Any],
                           event_type: str, event_value: float) -> bool:
-        """Record an event for experiment analysis."""
+        """Record an event for experiment analysis with infrastructure integration."""
         try:
             # Get user's variant assignment
             variant = await self._get_user_variant(experiment_id, user_context)
@@ -510,10 +717,14 @@ class ExperimentManager:
             
             self.supabase.table('ab_events').insert(event_data).execute()
             
-            # Update real-time metrics in Redis
-            redis_key = f"experiment_metrics:{experiment_id}:{variant}:{event_type}"
-            await self.redis_client.lpush(redis_key, event_value)
-            await self.redis_client.expire(redis_key, 86400 * 7)  # 7 days TTL
+            # Update real-time metrics in enhanced cache
+            if self.cache_manager:
+                cache_key = f"experiment_metrics:{experiment_id}:{variant}:{event_type}"
+                await self.cache_manager.lpush(cache_key, event_value, namespace="ab_testing")
+                await self.cache_manager.expire(cache_key, 86400 * 7, namespace="ab_testing")  # 7 days TTL
+            
+            # Stream real-time metric
+            await self._stream_metrics_real_time(experiment_id, variant, event_type, event_value)
             
             self.metrics_collector.increment_counter(
                 "ab_testing_events_recorded_total",

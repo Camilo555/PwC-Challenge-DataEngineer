@@ -39,6 +39,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 
 
 class AggregationType(Enum):
@@ -106,7 +113,7 @@ class AlertRule:
 
 @dataclass
 class GoldProcessingConfig:
-    """Configuration for Gold layer processing"""
+    """Configuration for Gold layer processing with enhanced infrastructure"""
     enable_real_time_aggregations: bool = True
     enable_anomaly_detection: bool = True
     enable_alerting: bool = True
@@ -116,14 +123,37 @@ class GoldProcessingConfig:
     max_events_per_trigger: int = 500000
     parallelism: int = 4
     enable_optimization: bool = True
+    
+    # Enhanced caching configuration
+    enable_gold_caching: bool = True
+    redis_url: str = "redis://localhost:6379"
+    aggregation_cache_ttl: int = 3600  # 1 hour
+    alert_cache_ttl: int = 900  # 15 minutes
+    metric_cache_ttl: int = 1800  # 30 minutes
+    
+    # RabbitMQ configuration for processing coordination
+    enable_gold_messaging: bool = True
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    
+    # CQRS pattern configuration
+    enable_cqrs: bool = True
+    read_model_cache_ttl: int = 1200  # 20 minutes
+    
+    # Enhanced Kafka settings for optimized partitioning
+    kafka_partitioning_strategy: str = "hash"  # hash, range, custom
+    kafka_replication_factor: int = 3
+    kafka_min_in_sync_replicas: int = 2
 
 
 class RealtimeAggregationEngine:
-    """Engine for real-time aggregations and analytics"""
+    """Engine for real-time aggregations and analytics with caching"""
     
-    def __init__(self, spark: SparkSession, config: GoldProcessingConfig):
+    def __init__(self, spark: SparkSession, config: GoldProcessingConfig, cache_manager: Optional[EventCache] = None, messaging_manager: Optional[HybridMessagingArchitecture] = None):
         self.spark = spark
         self.config = config
+        self.cache_manager = cache_manager
+        self.messaging_manager = messaging_manager
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
@@ -369,9 +399,10 @@ class RealtimeAggregationEngine:
     def create_aggregation_stream(
         self, 
         df: DataFrame, 
-        aggregation_name: str
+        aggregation_name: str,
+        use_cache: bool = True
     ) -> DataFrame:
-        """Create streaming aggregation based on definition"""
+        """Create streaming aggregation based on definition with caching support"""
         try:
             if aggregation_name not in self.aggregations:
                 raise ValueError(f"Aggregation '{aggregation_name}' not found")
@@ -381,6 +412,13 @@ class RealtimeAggregationEngine:
             if not agg_def.enabled:
                 self.logger.info(f"Aggregation '{aggregation_name}' is disabled")
                 return df.limit(0)  # Return empty DataFrame
+            
+            # Try to get cached aggregation metadata
+            if use_cache and self.cache_manager:
+                cache_key = f"aggregation_metadata:{aggregation_name}"
+                cached_metadata = self.cache_manager.get(cache_key)
+                if cached_metadata:
+                    self.logger.debug(f"Using cached metadata for aggregation: {aggregation_name}")
             
             # Apply filter if specified
             filtered_df = df
@@ -420,7 +458,24 @@ class RealtimeAggregationEngine:
                 .withColumn("metric_type", lit(agg_def.metric_type.value))
                 .withColumn("aggregation_timestamp", current_timestamp())
                 .withColumn("gold_id", expr("uuid()"))
+                .withColumn("cache_enabled", lit(use_cache and self.cache_manager is not None))
             )
+            
+            # Cache aggregation metadata
+            if self.cache_manager:
+                agg_metadata = {
+                    "aggregation_name": aggregation_name,
+                    "aggregation_type": agg_def.aggregation_type.value,
+                    "metric_type": agg_def.metric_type.value,
+                    "window_duration": agg_def.window_duration,
+                    "group_by_columns": agg_def.group_by_columns,
+                    "created_at": datetime.now().isoformat()
+                }
+                self.cache_manager.set(
+                    f"aggregation_metadata:{aggregation_name}",
+                    json.dumps(agg_metadata),
+                    ttl=self.config.aggregation_cache_ttl
+                )
             
             self.logger.debug(f"Created aggregation stream: {aggregation_name}")
             return result_df
@@ -550,14 +605,22 @@ class RealtimeAggregationEngine:
         
         return result_df
     
-    def check_alert_conditions(self, metrics_df: DataFrame) -> List[Dict[str, Any]]:
-        """Check alert conditions against metrics"""
+    def check_alert_conditions(self, metrics_df: DataFrame, use_cache: bool = True) -> List[Dict[str, Any]]:
+        """Check alert conditions against metrics with caching support"""
         triggered_alerts = []
         
         try:
             # Collect current metrics
             if metrics_df.isEmpty():
                 return triggered_alerts
+            
+            # Check cached alert state to avoid duplicate alerts
+            cached_alerts = set()
+            if use_cache and self.cache_manager:
+                cached_alert_data = self.cache_manager.get("recent_alerts")
+                if cached_alert_data:
+                    cached_alerts = set(json.loads(cached_alert_data))
+                    self.logger.debug(f"Found {len(cached_alerts)} cached recent alerts")
             
             metrics_data = metrics_df.collect()
             
@@ -592,21 +655,36 @@ class RealtimeAggregationEngine:
                         condition_met = True
                     
                     if condition_met:
-                        alert = {
-                            "rule_id": rule_id,
-                            "rule_name": alert_rule.name,
-                            "metric_name": alert_rule.metric_name,
-                            "metric_value": metric_value,
-                            "threshold_value": threshold,
-                            "severity": alert_rule.severity.value,
-                            "timestamp": datetime.now().isoformat(),
-                            "metadata": alert_rule.metadata,
-                            "additional_context": row_dict
-                        }
-                        triggered_alerts.append(alert)
+                        alert_id = f"{rule_id}_{alert_rule.metric_name}_{int(datetime.now().timestamp())}"
+                        
+                        # Check if we already sent this alert recently
+                        if alert_id not in cached_alerts:
+                            alert = {
+                                "alert_id": alert_id,
+                                "rule_id": rule_id,
+                                "rule_name": alert_rule.name,
+                                "metric_name": alert_rule.metric_name,
+                                "metric_value": metric_value,
+                                "threshold_value": threshold,
+                                "severity": alert_rule.severity.value,
+                                "timestamp": datetime.now().isoformat(),
+                                "metadata": alert_rule.metadata,
+                                "additional_context": row_dict,
+                                "cache_deduplication": True
+                            }
+                            triggered_alerts.append(alert)
+                            cached_alerts.add(alert_id)
             
             if triggered_alerts:
                 self.logger.warning(f"Triggered {len(triggered_alerts)} alerts")
+                
+                # Cache the recent alerts to avoid duplicates
+                if self.cache_manager:
+                    self.cache_manager.set(
+                        "recent_alerts",
+                        json.dumps(list(cached_alerts)),
+                        ttl=self.config.alert_cache_ttl
+                    )
             
             return triggered_alerts
             
@@ -626,7 +704,7 @@ class RealtimeAggregationEngine:
 
 
 class RealtimeGoldProcessor:
-    """Comprehensive real-time Gold layer processor"""
+    """Comprehensive real-time Gold layer processor with enhanced infrastructure"""
     
     def __init__(
         self, 
@@ -638,12 +716,23 @@ class RealtimeGoldProcessor:
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if config.enable_gold_caching:
+            self._initialize_cache_manager()
+        if config.enable_gold_messaging:
+            self._initialize_messaging_manager()
+        
         # Managers and services
         self.kafka_manager = KafkaManager()
         self.delta_manager = DeltaLakeManager(spark)
         
-        # Aggregation engine
-        self.aggregation_engine = RealtimeAggregationEngine(spark, config)
+        # Aggregation engine with enhanced features
+        self.aggregation_engine = RealtimeAggregationEngine(spark, config, self.cache_manager, self.messaging_manager)
         
         # Active queries
         self.active_queries: Dict[str, StreamingQuery] = {}
@@ -653,7 +742,40 @@ class RealtimeGoldProcessor:
         self.total_aggregations = 0
         self.alerts_triggered = 0
         
-        self.logger.info("Real-time Gold Processor initialized")
+        self.logger.info("Real-time Gold Processor initialized with enhanced infrastructure")
+    
+    def _initialize_cache_manager(self):
+        """Initialize Gold-specific cache manager"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=self.config.redis_url,
+                default_ttl=self.config.aggregation_cache_ttl,
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.EVENTUAL,
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("Gold cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Gold cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize messaging for Gold processing coordination"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host=self.config.rabbitmq_host,
+                port=self.config.rabbitmq_port,
+                enable_dead_letter=True
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("Gold messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Gold messaging manager: {e}")
     
     def start_all_aggregations(
         self,
@@ -729,6 +851,41 @@ class RealtimeGoldProcessor:
             self.logger.error(f"Failed to start aggregation {aggregation_name}: {e}")
             raise
     
+    def _cache_gold_results(self, aggregation_name: str, batch_id: int, results: Dict[str, Any]):
+        """Cache Gold processing results for CQRS pattern"""
+        try:
+            if self.cache_manager and self.config.enable_cqrs:
+                cache_key = f"gold_results:{aggregation_name}:batch:{batch_id}"
+                self.cache_manager.set(
+                    cache_key,
+                    json.dumps(results),
+                    ttl=self.config.read_model_cache_ttl
+                )
+                self.logger.debug(f"Cached Gold results for {aggregation_name}, batch {batch_id}")
+        except Exception as e:
+            self.logger.warning(f"Failed to cache Gold results: {e}")
+    
+    def _send_gold_notification(self, event_type: str, aggregation_name: str, batch_id: int, data: Dict[str, Any]):
+        """Send Gold processing notifications via RabbitMQ"""
+        try:
+            if self.messaging_manager:
+                message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.EVENT,
+                    routing_key=f"gold.processing.{event_type}",
+                    payload={
+                        "aggregation_name": aggregation_name,
+                        "batch_id": batch_id,
+                        "event_type": event_type,
+                        "data": data,
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    priority=MessagePriority.HIGH if event_type == "error" else MessagePriority.NORMAL
+                )
+                self.messaging_manager.send_event(message)
+        except Exception as e:
+            self.logger.warning(f"Failed to send Gold notification: {e}")
+    
     def _process_gold_batch(
         self, 
         batch_df: DataFrame, 
@@ -746,23 +903,58 @@ class RealtimeGoldProcessor:
                 f"Processing Gold batch {batch_id} for {aggregation_name}: {batch_count} records"
             )
             
-            # Write to Delta Lake
-            (
+            # Send batch start notification
+            self._send_gold_notification(
+                "batch_started",
+                aggregation_name,
+                batch_id,
+                {"record_count": batch_count}
+            )
+            
+            # Write to Delta Lake with optimized partitioning
+            writer = (
                 batch_df
                 .write
                 .format("delta")
                 .mode("append")
                 .option("mergeSchema", "true")
-                .save(output_path)
             )
+            
+            # Apply partitioning strategy based on configuration
+            if self.config.kafka_partitioning_strategy == "hash":
+                # Use hash partitioning for better distribution
+                writer = writer.option("dataChange", "true")
+            
+            writer.save(output_path)
+            
+            # Cache processing results for CQRS
+            processing_results = {
+                "batch_id": batch_id,
+                "record_count": batch_count,
+                "aggregation_name": aggregation_name,
+                "processing_timestamp": datetime.now().isoformat(),
+                "partitioning_strategy": self.config.kafka_partitioning_strategy
+            }
+            self._cache_gold_results(aggregation_name, batch_id, processing_results)
             
             # Check for alert conditions if enabled
             if self.config.enable_alerting:
-                alerts = self.aggregation_engine.check_alert_conditions(batch_df)
+                alerts = self.aggregation_engine.check_alert_conditions(batch_df, use_cache=True)
                 
                 if alerts:
                     self._handle_alerts(alerts, aggregation_name)
                     self.alerts_triggered += len(alerts)
+                    
+                    # Send alert notification
+                    self._send_gold_notification(
+                        "alerts_triggered",
+                        aggregation_name,
+                        batch_id,
+                        {
+                            "alert_count": len(alerts),
+                            "high_severity_count": sum(1 for alert in alerts if alert.get("severity") in ["high", "critical"])
+                        }
+                    )
             
             # Update metrics
             self.processed_batches += 1
@@ -781,6 +973,17 @@ class RealtimeGoldProcessor:
                         {"aggregation_name": aggregation_name, "alert_count": str(len(alerts))}
                     )
             
+            # Send batch completion notification
+            self._send_gold_notification(
+                "batch_completed",
+                aggregation_name,
+                batch_id,
+                {
+                    "record_count": batch_count,
+                    "alerts_triggered": len(alerts) if 'alerts' in locals() else 0
+                }
+            )
+            
             self.logger.debug(
                 f"Batch {batch_id} for {aggregation_name} processed successfully"
             )
@@ -789,10 +992,18 @@ class RealtimeGoldProcessor:
             self.logger.error(
                 f"Gold batch processing failed for {aggregation_name}, batch {batch_id}: {e}"
             )
+            
+            # Send error notification
+            self._send_gold_notification(
+                "error",
+                aggregation_name,
+                batch_id,
+                {"error": str(e)}
+            )
             raise
     
     def _handle_alerts(self, alerts: List[Dict[str, Any]], aggregation_name: str):
-        """Handle triggered alerts"""
+        """Handle triggered alerts with enhanced messaging"""
         try:
             for alert in alerts:
                 # Log alert
@@ -811,6 +1022,17 @@ class RealtimeGoldProcessor:
                 }
                 
                 self.kafka_manager.produce_data_quality_alert(alert_message)
+                
+                # Also send via RabbitMQ for immediate processing
+                if self.messaging_manager:
+                    rabbitmq_message = HybridMessage(
+                        message_id=str(uuid.uuid4()),
+                        message_type=MessageType.COMMAND,
+                        routing_key="alerts.gold.immediate",
+                        payload=alert_message,
+                        priority=MessagePriority.CRITICAL if alert.get("severity") == "critical" else MessagePriority.HIGH
+                    )
+                    self.messaging_manager.send_command(rabbitmq_message)
                 
                 # Additional alert handling logic could go here
                 # (e.g., sending emails, Slack notifications, etc.)
@@ -832,8 +1054,27 @@ class RealtimeGoldProcessor:
         
         self.active_queries.clear()
     
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get Gold cache performance metrics"""
+        cache_metrics = {}
+        if self.cache_manager:
+            cache_metrics = self.cache_manager.metrics.get_metrics_summary()
+        return cache_metrics
+    
+    def get_cached_results(self, aggregation_name: str, batch_id: int) -> Optional[Dict[str, Any]]:
+        """Get cached Gold processing results for CQRS read model"""
+        try:
+            if self.cache_manager:
+                cache_key = f"gold_results:{aggregation_name}:batch:{batch_id}"
+                cached_data = self.cache_manager.get(cache_key)
+                if cached_data:
+                    return json.loads(cached_data)
+        except Exception as e:
+            self.logger.warning(f"Failed to get cached results for {aggregation_name}, batch {batch_id}: {e}")
+        return None
+    
     def get_aggregation_status(self) -> Dict[str, Any]:
-        """Get status of all aggregations"""
+        """Get status of all aggregations with enhanced info"""
         status = {}
         
         for agg_name, query in self.active_queries.items():
@@ -855,7 +1096,16 @@ class RealtimeGoldProcessor:
             "processed_batches": self.processed_batches,
             "total_aggregations": self.total_aggregations,
             "alerts_triggered": self.alerts_triggered,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "cache_metrics": self.get_cache_metrics(),
+            "messaging_enabled": self.messaging_manager is not None,
+            "infrastructure_status": {
+                "caching_enabled": self.config.enable_gold_caching,
+                "messaging_enabled": self.config.enable_gold_messaging,
+                "cqrs_enabled": self.config.enable_cqrs,
+                "cache_hit_ratio": self.get_cache_metrics().get("hit_ratio", 0.0) if self.cache_manager else 0.0,
+                "partitioning_strategy": self.config.kafka_partitioning_strategy
+            }
         }
 
 

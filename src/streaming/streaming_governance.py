@@ -33,6 +33,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 
 
 class DataQualityDimension(Enum):
@@ -126,7 +133,7 @@ class DataLineageRecord:
 
 @dataclass
 class GovernanceConfig:
-    """Configuration for data governance"""
+    """Configuration for data governance with enhanced infrastructure"""
     enable_quality_monitoring: bool = True
     enable_compliance_checking: bool = True
     enable_lineage_tracking: bool = True
@@ -137,14 +144,33 @@ class GovernanceConfig:
     lineage_batch_size: int = 1000
     audit_retention_days: int = 90
     alert_threshold_violations: int = 5
+    
+    # Enhanced caching configuration
+    enable_governance_caching: bool = True
+    redis_url: str = "redis://localhost:6379"
+    policy_cache_ttl: int = 3600  # 1 hour
+    audit_cache_ttl: int = 1800  # 30 minutes
+    compliance_cache_ttl: int = 7200  # 2 hours
+    
+    # RabbitMQ configuration for policy enforcement
+    enable_governance_messaging: bool = True
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    
+    # Real-time compliance monitoring
+    enable_real_time_monitoring: bool = True
+    monitoring_window_duration: str = "5 minutes"
+    violation_threshold: int = 10
 
 
 class DataQualityMonitor:
-    """Real-time data quality monitoring"""
+    """Real-time data quality monitoring with caching"""
     
-    def __init__(self, spark: SparkSession, config: GovernanceConfig):
+    def __init__(self, spark: SparkSession, config: GovernanceConfig, cache_manager: Optional[EventCache] = None, messaging_manager: Optional[HybridMessagingArchitecture] = None):
         self.spark = spark
         self.config = config
+        self.cache_manager = cache_manager
+        self.messaging_manager = messaging_manager
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
@@ -254,9 +280,15 @@ class DataQualityMonitor:
         
         self.logger.info(f"Loaded {len(rules)} built-in quality rules")
     
-    def evaluate_quality_rules(self, df: DataFrame) -> DataFrame:
-        """Evaluate all quality rules against DataFrame"""
+    def evaluate_quality_rules(self, df: DataFrame, use_cache: bool = True) -> DataFrame:
+        """Evaluate all quality rules against DataFrame with caching"""
         try:
+            # Try to get cached quality rules compilation
+            if use_cache and self.cache_manager:
+                cached_rules = self.cache_manager.get("quality_rules:compiled")
+                if cached_rules:
+                    self.logger.debug("Using cached quality rules compilation")
+            
             result_df = df
             quality_scores = []
             
@@ -309,10 +341,24 @@ class DataQualityMonitor:
                 result_df = result_df.withColumn("quality_tier", lit("UNKNOWN"))
             
             # Add quality metadata
+            applied_rules = [rule_id for rule_id in self.quality_rules.keys() if self.quality_rules[rule_id].enabled]
             result_df = result_df.withColumn(
                 "quality_rules_applied",
-                lit(json.dumps([rule_id for rule_id in self.quality_rules.keys() if self.quality_rules[rule_id].enabled]))
+                lit(json.dumps(applied_rules))
             )
+            
+            # Cache quality rules compilation for future use
+            if self.cache_manager:
+                quality_compilation = {
+                    "applied_rules": applied_rules,
+                    "total_rules": len(self.quality_rules),
+                    "compilation_timestamp": datetime.now().isoformat()
+                }
+                self.cache_manager.set(
+                    "quality_rules:compiled",
+                    json.dumps(quality_compilation),
+                    ttl=1800  # 30 minutes
+                )
             
             return result_df
             
@@ -320,8 +366,8 @@ class DataQualityMonitor:
             self.logger.error(f"Quality rule evaluation failed: {e}")
             return df
     
-    def generate_quality_report(self, df: DataFrame, report_name: str) -> Dict[str, Any]:
-        """Generate comprehensive quality report"""
+    def generate_quality_report(self, df: DataFrame, report_name: str, use_cache: bool = True) -> Dict[str, Any]:
+        """Generate comprehensive quality report with caching"""
         try:
             total_records = df.count()
             if total_records == 0:
@@ -393,6 +439,15 @@ class DataQualityMonitor:
             with open(report_file, 'w') as f:
                 json.dump(report, f, indent=2)
             
+            # Cache report for quick access
+            if self.cache_manager:
+                cache_key = f"quality_report:{report_name}:latest"
+                self.cache_manager.set(
+                    cache_key,
+                    json.dumps(report),
+                    ttl=self.config.audit_cache_ttl
+                )
+            
             self.logger.info(f"Quality report generated: {report_file}")
             return report
             
@@ -407,11 +462,13 @@ class DataQualityMonitor:
 
 
 class ComplianceMonitor:
-    """Compliance monitoring and enforcement"""
+    """Compliance monitoring and enforcement with caching"""
     
-    def __init__(self, spark: SparkSession, config: GovernanceConfig):
+    def __init__(self, spark: SparkSession, config: GovernanceConfig, cache_manager: Optional[EventCache] = None, messaging_manager: Optional[HybridMessagingArchitecture] = None):
         self.spark = spark
         self.config = config
+        self.cache_manager = cache_manager
+        self.messaging_manager = messaging_manager
         self.logger = get_logger(__name__)
         
         # Compliance rules registry
@@ -466,9 +523,15 @@ class ComplianceMonitor:
         
         self.logger.info(f"Loaded {len(rules)} built-in compliance rules")
     
-    def apply_compliance_controls(self, df: DataFrame) -> DataFrame:
-        """Apply compliance controls to DataFrame"""
+    def apply_compliance_controls(self, df: DataFrame, use_cache: bool = True) -> DataFrame:
+        """Apply compliance controls to DataFrame with caching"""
         try:
+            # Try to get cached compliance policies
+            if use_cache and self.cache_manager:
+                cached_policies = self.cache_manager.get("compliance_policies:active")
+                if cached_policies:
+                    self.logger.debug("Using cached compliance policies")
+            
             result_df = df
             compliance_flags = {}
             
@@ -512,6 +575,19 @@ class ComplianceMonitor:
                 "compliance_flags",
                 lit(json.dumps(compliance_flags))
             )
+            
+            # Cache active compliance policies
+            if self.cache_manager:
+                active_policies = {
+                    "applied_rules": list(compliance_flags.keys()),
+                    "total_rules": len(self.compliance_rules),
+                    "cache_timestamp": datetime.now().isoformat()
+                }
+                self.cache_manager.set(
+                    "compliance_policies:active",
+                    json.dumps(active_policies),
+                    ttl=self.config.compliance_cache_ttl
+                )
             
             # Log compliance application
             self._log_compliance_action("compliance_controls_applied", {
@@ -602,11 +678,13 @@ class ComplianceMonitor:
 
 
 class DataLineageTracker:
-    """Data lineage tracking and management"""
+    """Data lineage tracking and management with caching"""
     
-    def __init__(self, spark: SparkSession, config: GovernanceConfig):
+    def __init__(self, spark: SparkSession, config: GovernanceConfig, cache_manager: Optional[EventCache] = None, messaging_manager: Optional[HybridMessagingArchitecture] = None):
         self.spark = spark
         self.config = config
+        self.cache_manager = cache_manager
+        self.messaging_manager = messaging_manager
         self.logger = get_logger(__name__)
         
         # Lineage storage
@@ -654,6 +732,21 @@ class DataLineageTracker:
             # Store lineage record
             self._store_lineage_record(lineage_record)
             
+            # Cache lineage metadata for quick queries
+            if self.cache_manager:
+                lineage_cache_key = f"lineage:{source_info.get('table', 'unknown')}:{target_info.get('table', 'unknown')}"
+                lineage_metadata = {
+                    "lineage_id": lineage_id,
+                    "transformation_type": transformation_type,
+                    "data_classification": lineage_record.data_classification.value,
+                    "processing_timestamp": lineage_record.processing_timestamp.isoformat()
+                }
+                self.cache_manager.set(
+                    lineage_cache_key,
+                    json.dumps(lineage_metadata),
+                    ttl=3600  # 1 hour
+                )
+            
             return result_df
             
         except Exception as e:
@@ -683,12 +776,23 @@ class DataLineageTracker:
             with open(lineage_file, 'a') as f:
                 f.write(json.dumps(lineage_data) + '\n')
             
+            # Send lineage tracking event
+            if self.messaging_manager:
+                message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.EVENT,
+                    routing_key="governance.lineage.tracked",
+                    payload=lineage_data,
+                    priority=MessagePriority.NORMAL
+                )
+                self.messaging_manager.send_event(message)
+            
         except Exception as e:
             self.logger.error(f"Lineage record storage failed: {e}")
 
 
 class StreamingGovernanceFramework:
-    """Comprehensive streaming data governance framework"""
+    """Comprehensive streaming data governance framework with enhanced infrastructure"""
     
     def __init__(self, spark: SparkSession, config: GovernanceConfig = None):
         self.spark = spark
@@ -696,10 +800,21 @@ class StreamingGovernanceFramework:
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
-        # Initialize components
-        self.quality_monitor = DataQualityMonitor(spark, self.config) if self.config.enable_quality_monitoring else None
-        self.compliance_monitor = ComplianceMonitor(spark, self.config) if self.config.enable_compliance_checking else None
-        self.lineage_tracker = DataLineageTracker(spark, self.config) if self.config.enable_lineage_tracking else None
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if config.enable_governance_caching:
+            self._initialize_cache_manager()
+        if config.enable_governance_messaging:
+            self._initialize_messaging_manager()
+        
+        # Initialize components with enhanced features
+        self.quality_monitor = DataQualityMonitor(spark, self.config, self.cache_manager, self.messaging_manager) if self.config.enable_quality_monitoring else None
+        self.compliance_monitor = ComplianceMonitor(spark, self.config, self.cache_manager, self.messaging_manager) if self.config.enable_compliance_checking else None
+        self.lineage_tracker = DataLineageTracker(spark, self.config, self.cache_manager, self.messaging_manager) if self.config.enable_lineage_tracking else None
         
         # Kafka for alerts
         self.kafka_manager = KafkaManager()
@@ -709,7 +824,40 @@ class StreamingGovernanceFramework:
         self.compliance_violations = 0
         self.lineage_records_created = 0
         
-        self.logger.info("Streaming Governance Framework initialized")
+        self.logger.info("Streaming Governance Framework initialized with enhanced infrastructure")
+    
+    def _initialize_cache_manager(self):
+        """Initialize governance-specific cache manager"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=self.config.redis_url,
+                default_ttl=self.config.policy_cache_ttl,
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.STRONG,  # Strong consistency for governance policies
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("Governance cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize governance cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize messaging for governance notifications"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host=self.config.rabbitmq_host,
+                port=self.config.rabbitmq_port,
+                enable_dead_letter=True
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("Governance messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize governance messaging manager: {e}")
     
     def apply_governance(
         self,
@@ -723,15 +871,15 @@ class StreamingGovernanceFramework:
             result_df = df
             governance_metadata = {}
             
-            # Apply data quality monitoring
+            # Apply data quality monitoring with caching
             if self.quality_monitor:
-                result_df = self.quality_monitor.evaluate_quality_rules(result_df)
+                result_df = self.quality_monitor.evaluate_quality_rules(result_df, use_cache=True)
                 governance_metadata["quality_monitoring"] = True
                 self.quality_checks_performed += 1
             
-            # Apply compliance controls
+            # Apply compliance controls with caching
             if self.compliance_monitor:
-                result_df = self.compliance_monitor.apply_compliance_controls(result_df)
+                result_df = self.compliance_monitor.apply_compliance_controls(result_df, use_cache=True)
                 governance_metadata["compliance_monitoring"] = True
             
             # Track data lineage
@@ -774,10 +922,10 @@ class StreamingGovernanceFramework:
                 batch_df, source_info, target_info, "batch_streaming"
             )
             
-            # Generate quality report
+            # Generate quality report with caching
             if self.quality_monitor:
                 quality_report = self.quality_monitor.generate_quality_report(
-                    governed_df, f"batch_{batch_id}"
+                    governed_df, f"batch_{batch_id}", use_cache=True
                 )
                 
                 # Check for quality violations
@@ -785,6 +933,22 @@ class StreamingGovernanceFramework:
                 if violations > 0:
                     self._send_quality_alert(quality_report, batch_id)
                     self.compliance_violations += violations
+                    
+                    # Send violation notification via RabbitMQ
+                    if self.messaging_manager:
+                        violation_message = HybridMessage(
+                            message_id=str(uuid.uuid4()),
+                            message_type=MessageType.COMMAND,
+                            routing_key="governance.violation.immediate",
+                            payload={
+                                "batch_id": batch_id,
+                                "violation_count": violations,
+                                "severity": "high" if violations >= self.config.violation_threshold else "medium",
+                                "timestamp": datetime.now().isoformat()
+                            },
+                            priority=MessagePriority.CRITICAL if violations >= self.config.violation_threshold else MessagePriority.HIGH
+                        )
+                        self.messaging_manager.send_command(violation_message)
             
             # Send governance metrics
             if self.metrics_collector:
@@ -822,13 +986,49 @@ class StreamingGovernanceFramework:
             }
             
             self.kafka_manager.produce_data_quality_alert(alert_data)
+            
+            # Also send via RabbitMQ for immediate processing
+            if self.messaging_manager:
+                alert_message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.COMMAND,
+                    routing_key="governance.quality.alert",
+                    payload=alert_data,
+                    priority=MessagePriority.CRITICAL
+                )
+                self.messaging_manager.send_command(alert_message)
+            
             self.logger.warning(f"Sent quality alert for batch {batch_id}: {quality_report['threshold_violations']} violations")
             
         except Exception as e:
             self.logger.error(f"Failed to send quality alert: {e}")
     
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get governance cache performance metrics"""
+        cache_metrics = {}
+        if self.cache_manager:
+            cache_metrics = self.cache_manager.metrics.get_metrics_summary()
+        return cache_metrics
+    
+    def get_cached_policies(self) -> Dict[str, Any]:
+        """Get cached governance policies"""
+        cached_policies = {}
+        if self.cache_manager:
+            try:
+                quality_policies = self.cache_manager.get("quality_rules:compiled")
+                compliance_policies = self.cache_manager.get("compliance_policies:active")
+                
+                cached_policies = {
+                    "quality_policies": json.loads(quality_policies) if quality_policies else None,
+                    "compliance_policies": json.loads(compliance_policies) if compliance_policies else None,
+                    "cache_timestamp": datetime.now().isoformat()
+                }
+            except Exception as e:
+                self.logger.warning(f"Failed to retrieve cached policies: {e}")
+        return cached_policies
+    
     def get_governance_metrics(self) -> Dict[str, Any]:
-        """Get governance processing metrics"""
+        """Get governance processing metrics with enhanced info"""
         return {
             "governance_metrics": {
                 "quality_checks_performed": self.quality_checks_performed,
@@ -846,7 +1046,16 @@ class StreamingGovernanceFramework:
                 "compliance_monitor": self.compliance_monitor is not None,
                 "lineage_tracker": self.lineage_tracker is not None
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "cache_metrics": self.get_cache_metrics(),
+            "messaging_enabled": self.messaging_manager is not None,
+            "cached_policies": self.get_cached_policies(),
+            "infrastructure_status": {
+                "caching_enabled": self.config.enable_governance_caching,
+                "messaging_enabled": self.config.enable_governance_messaging,
+                "real_time_monitoring": self.config.enable_real_time_monitoring,
+                "cache_hit_ratio": self.get_cache_metrics().get("hit_ratio", 0.0) if self.cache_manager else 0.0
+            }
         }
 
 

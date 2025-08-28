@@ -31,6 +31,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 
 
 class CompatibilityType(Enum):
@@ -395,27 +402,127 @@ class SchemaEvolutionEngine:
 
 
 class StreamingSchemaManager:
-    """Manager for streaming schema evolution"""
+    """Manager for streaming schema evolution with distributed caching"""
     
-    def __init__(self, spark: SparkSession, registry_path: str = "./schema_registry"):
+    def __init__(self, spark: SparkSession, registry_path: str = "./schema_registry", enable_distributed_caching: bool = True, redis_url: str = "redis://localhost:6379", enable_messaging: bool = True):
         self.spark = spark
         self.logger = get_logger(__name__)
         self.registry_path = Path(registry_path)
         self.registry_path.mkdir(parents=True, exist_ok=True)
+        
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if enable_distributed_caching:
+            self._initialize_cache_manager(redis_url)
+        if enable_messaging:
+            self._initialize_messaging_manager()
         
         # Components
         self.evolution_engine = SchemaEvolutionEngine(spark)
         self.kafka_manager = KafkaManager()
         self.metrics_collector = get_metrics_collector()
         
-        # Schema registries
+        # Schema registries with caching
         self.registries: Dict[str, SchemaRegistry] = {}
+        self.cached_schemas: Dict[str, str] = {}  # schema_name -> cache_key mapping
         
         # Load existing registries
         self._load_registries()
         
+        self.logger.info("Streaming Schema Manager initialized with distributed caching")
+    
+    def _initialize_cache_manager(self, redis_url: str):
+        """Initialize distributed cache manager for schema data"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=redis_url,
+                default_ttl=3600,  # 1 hour for schema data
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.STRONG,  # Strong consistency for schema data
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("Schema cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize schema cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize messaging for schema change notifications"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host="localhost",
+                port=5672,
+                enable_dead_letter=True
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("Schema messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize schema messaging manager: {e}")
+        
+    def _cache_schema_registry(self, registry_name: str, registry_data: Dict[str, Any]):
+        """Cache schema registry data"""
+        try:
+            if self.cache_manager:
+                cache_key = f"schema_registry:{registry_name}"
+                self.cache_manager.set(
+                    cache_key,
+                    json.dumps(registry_data),
+                    ttl=7200  # 2 hours for registry data
+                )
+                self.cached_schemas[registry_name] = cache_key
+                self.logger.debug(f"Cached schema registry: {registry_name}")
+        except Exception as e:
+            self.logger.warning(f"Failed to cache schema registry {registry_name}: {e}")
+    
+    def _get_cached_schema_registry(self, registry_name: str) -> Optional[Dict[str, Any]]:
+        """Get cached schema registry data"""
+        try:
+            if self.cache_manager and registry_name in self.cached_schemas:
+                cache_key = self.cached_schemas[registry_name]
+                cached_data = self.cache_manager.get(cache_key)
+                if cached_data:
+                    return json.loads(cached_data)
+        except Exception as e:
+            self.logger.warning(f"Failed to get cached schema registry {registry_name}: {e}")
+        return None
+    
+    def _invalidate_schema_cache(self, registry_name: str, version_id: str = None):
+        """Invalidate cached schema data"""
+        try:
+            if self.cache_manager:
+                # Invalidate registry cache
+                registry_cache_key = f"schema_registry:{registry_name}"
+                # In a real implementation, you'd use Redis pattern deletion
+                self.logger.debug(f"Invalidating schema cache for registry: {registry_name}")
+                
+                # Send cache invalidation event
+                if self.messaging_manager:
+                    message = HybridMessage(
+                        message_id=str(uuid.uuid4()),
+                        message_type=MessageType.EVENT,
+                        routing_key="schema.cache.invalidate",
+                        payload={
+                            "registry_name": registry_name,
+                            "version_id": version_id,
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        priority=MessagePriority.HIGH
+                    )
+                    self.messaging_manager.send_event(message)
+        except Exception as e:
+            self.logger.warning(f"Failed to invalidate schema cache: {e}")
+    
     def _load_registries(self):
-        """Load existing schema registries"""
+        """Load existing schema registries with caching support"""
         try:
             registry_files = list(self.registry_path.glob("*.json"))
             
@@ -452,6 +559,17 @@ class StreamingSchemaManager:
                 self.registries[registry_name] = registry
             
             self.logger.info(f"Loaded {len(self.registries)} schema registries")
+            
+            # Cache loaded registries
+            for registry_name, registry in self.registries.items():
+                registry_data = {
+                    "registry_name": registry.registry_name,
+                    "active_version": registry.active_version,
+                    "compatibility_mode": registry.compatibility_mode.value,
+                    "total_versions": len(registry.schemas),
+                    "loaded_at": datetime.now().isoformat()
+                }
+                self._cache_schema_registry(registry_name, registry_data)
             
         except Exception as e:
             self.logger.error(f"Failed to load registries: {e}")
@@ -494,9 +612,10 @@ class StreamingSchemaManager:
         schema_name: str,
         schema: StructType,
         compatibility_type: CompatibilityType = CompatibilityType.BACKWARD,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
+        use_cache: bool = True
     ) -> str:
-        """Register a new schema version"""
+        """Register a new schema version with caching support"""
         try:
             # Create registry if it doesn't exist
             if schema_name not in self.registries:
@@ -510,8 +629,17 @@ class StreamingSchemaManager:
             # Calculate schema hash
             schema_hash = self.evolution_engine._calculate_schema_hash(schema)
             
-            # Check if this schema already exists
-            existing_version = self._find_version_by_hash(schema_name, schema_hash)
+            # Check if this schema already exists (with cache check first)
+            existing_version = None
+            if use_cache and self.cache_manager:
+                cached_version = self.cache_manager.get(f"schema_hash:{schema_hash}")
+                if cached_version:
+                    existing_version = json.loads(cached_version).get("version_id")
+                    self.logger.debug(f"Found cached schema version: {existing_version}")
+            
+            if not existing_version:
+                existing_version = self._find_version_by_hash(schema_name, schema_hash)
+            
             if existing_version:
                 self.logger.info(f"Schema version already exists: {existing_version}")
                 return existing_version
@@ -548,8 +676,37 @@ class StreamingSchemaManager:
             # Save registry
             self._save_registry(schema_name)
             
-            # Send notification
-            self._notify_schema_registration(schema_name, version_id)
+            # Cache the new schema version
+            if self.cache_manager:
+                schema_cache_data = {
+                    "version_id": version_id,
+                    "schema_name": schema_name,
+                    "schema_hash": schema_hash,
+                    "created_at": datetime.now().isoformat()
+                }
+                self.cache_manager.set(
+                    f"schema_hash:{schema_hash}",
+                    json.dumps(schema_cache_data),
+                    ttl=3600  # 1 hour
+                )
+                
+                # Cache schema definition for fast retrieval
+                self.cache_manager.set(
+                    f"schema_definition:{schema_name}:{version_id}",
+                    json.dumps(schema.jsonValue()),
+                    ttl=7200  # 2 hours
+                )
+            
+            # Invalidate related caches
+            self._invalidate_schema_cache(schema_name, version_id)
+            
+            # Send enhanced notification
+            self._notify_schema_registration(schema_name, version_id, {
+                "cached": self.cache_manager is not None,
+                "compatibility_type": compatibility_type.value,
+                "field_count": len(schema.fields),
+                "metadata": metadata
+            })
             
             self.logger.info(f"Registered new schema version: {schema_name} v{version_id}")
             return version_id
@@ -623,9 +780,25 @@ class StreamingSchemaManager:
             self.logger.error(f"Schema evolution failed: {e}")
             raise
     
-    def get_schema(self, schema_name: str, version_id: str = None) -> Optional[StructType]:
-        """Get schema by name and version"""
+    def get_schema(self, schema_name: str, version_id: str = None, use_cache: bool = True) -> Optional[StructType]:
+        """Get schema by name and version with caching support"""
         try:
+            # Try cache first
+            if use_cache and self.cache_manager:
+                if version_id is None:
+                    # Get active version from cache
+                    cached_registry = self._get_cached_schema_registry(schema_name)
+                    if cached_registry:
+                        version_id = cached_registry.get("active_version")
+                
+                if version_id:
+                    cache_key = f"schema_definition:{schema_name}:{version_id}"
+                    cached_schema = self.cache_manager.get(cache_key)
+                    if cached_schema:
+                        schema_json = json.loads(cached_schema)
+                        self.logger.debug(f"Using cached schema for {schema_name}:{version_id}")
+                        return StructType.fromJson(schema_json)
+            
             if schema_name not in self.registries:
                 return None
             
@@ -635,7 +808,17 @@ class StreamingSchemaManager:
                 version_id = registry.active_version
             
             if version_id and version_id in registry.schemas:
-                return registry.schemas[version_id].schema_definition
+                schema = registry.schemas[version_id].schema_definition
+                
+                # Cache the schema definition for faster future access
+                if self.cache_manager:
+                    self.cache_manager.set(
+                        f"schema_definition:{schema_name}:{version_id}",
+                        json.dumps(schema.jsonValue()),
+                        ttl=7200  # 2 hours
+                    )
+                
+                return schema
             
             return None
             
@@ -705,59 +888,88 @@ class StreamingSchemaManager:
             self.logger.error(f"Auto-evolution failed: {e}")
             return False
     
-    def _notify_schema_registration(self, schema_name: str, version_id: str):
-        """Send schema registration notification"""
+    def _notify_schema_registration(self, schema_name: str, version_id: str, additional_data: Dict[str, Any] = None):
+        """Send enhanced schema registration notification"""
         try:
             notification = {
                 "event_type": "schema_registration",
                 "schema_name": schema_name,
                 "version_id": version_id,
                 "timestamp": datetime.now().isoformat(),
-                "registry_path": str(self.registry_path)
+                "registry_path": str(self.registry_path),
+                "cached": self.cache_manager is not None,
+                "additional_data": additional_data or {}
             }
             
+            # Send via Kafka
             self.kafka_manager.produce_message(
                 StreamingTopic.SYSTEM_EVENTS,
                 notification,
                 key=f"schema_{schema_name}"
             )
             
+            # Also send via RabbitMQ for immediate processing
+            if self.messaging_manager:
+                message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.EVENT,
+                    routing_key=f"schema.registration.{schema_name}",
+                    payload=notification,
+                    priority=MessagePriority.HIGH
+                )
+                self.messaging_manager.send_event(message)
+            
         except Exception as e:
             self.logger.warning(f"Failed to send schema notification: {e}")
     
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get schema cache performance metrics"""
+        cache_metrics = {}
+        if self.cache_manager:
+            cache_metrics = self.cache_manager.metrics.get_metrics_summary()
+        return cache_metrics
+    
     def get_registry_status(self, schema_name: str = None) -> Dict[str, Any]:
-        """Get status of schema registries"""
+        """Get status of schema registries with caching info"""
         try:
             if schema_name:
                 if schema_name not in self.registries:
                     return {"error": f"Registry '{schema_name}' not found"}
                 
                 registry = self.registries[schema_name]
-                return {
+                status = {
                     "registry_name": registry.registry_name,
                     "active_version": registry.active_version,
                     "total_versions": len(registry.schemas),
                     "compatibility_mode": registry.compatibility_mode.value,
                     "version_history": registry.version_history,
+                    "cached": self.cache_manager is not None,
+                    "cache_metrics": self.get_cache_metrics(),
                     "schemas": {
                         v_id: {
                             "version_id": version.version_id,
                             "schema_hash": version.schema_hash,
                             "created_at": version.created_at.isoformat(),
                             "is_active": version.is_active,
-                            "field_count": len(version.schema_definition.fields)
+                            "field_count": len(version.schema_definition.fields),
+                            "cached": self.cache_manager.get(f"schema_definition:{schema_name}:{v_id}") is not None if self.cache_manager else False
                         }
                         for v_id, version in registry.schemas.items()
                     }
                 }
+                return status
             else:
                 return {
                     "total_registries": len(self.registries),
+                    "cache_enabled": self.cache_manager is not None,
+                    "messaging_enabled": self.messaging_manager is not None,
+                    "cache_metrics": self.get_cache_metrics(),
                     "registries": {
                         name: {
                             "active_version": registry.active_version,
                             "total_versions": len(registry.schemas),
-                            "compatibility_mode": registry.compatibility_mode.value
+                            "compatibility_mode": registry.compatibility_mode.value,
+                            "cached": name in self.cached_schemas
                         }
                         for name, registry in self.registries.items()
                     }

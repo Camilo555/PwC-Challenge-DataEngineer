@@ -4,15 +4,28 @@ Provides comprehensive Kafka integration for real-time data processing
 """
 import json
 import uuid
+import asyncio
+import threading
+import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional, Set, Union
+import hashlib
+import gzip
+import avro.schema
+import avro.io
+import redis
+import pika
 
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.admin import ConfigResource, ConfigResourceType, KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
+from kafka.structs import TopicPartition
+from confluent_kafka import Producer as ConfluentProducer, Consumer as ConfluentConsumer
+from confluent_kafka.avro import AvroProducer, AvroConsumer, CachedSchemaRegistryClient
+from confluent_kafka.admin import AdminClient as ConfluentAdminClient
 
 from core.config.unified_config import get_unified_config
 from core.logging import get_logger
@@ -24,6 +37,38 @@ class MessageFormat(Enum):
     AVRO = "avro"
     PROTOBUF = "protobuf"
     PLAINTEXT = "plaintext"
+
+
+class PartitionStrategy(Enum):
+    """Partition assignment strategies"""
+    ROUND_ROBIN = "round_robin"
+    HASH_KEY = "hash_key"
+    RANDOM = "random"
+    CUSTOM = "custom"
+
+
+class CompressionType(Enum):
+    """Compression types for Kafka messages"""
+    NONE = "none"
+    GZIP = "gzip"
+    SNAPPY = "snappy"
+    LZ4 = "lz4"
+    ZSTD = "zstd"
+
+
+class DeliveryGuarantee(Enum):
+    """Message delivery guarantees"""
+    AT_MOST_ONCE = "at_most_once"      # acks=0
+    AT_LEAST_ONCE = "at_least_once"    # acks=1
+    EXACTLY_ONCE = "exactly_once"      # acks=all, idempotent=true
+
+
+class ConsumerStrategy(Enum):
+    """Consumer processing strategies"""
+    LATEST = "latest"
+    EARLIEST = "earliest"
+    SPECIFIC_OFFSET = "specific_offset"
+    TIMESTAMP = "timestamp"
 
 
 class StreamingTopic(Enum):
@@ -62,32 +107,184 @@ class StreamingMessage:
 
 
 @dataclass
-class ProducerConfig:
-    """Kafka producer configuration"""
-    bootstrap_servers: list[str]
-    acks: str = "all"
-    retries: int = 3
-    batch_size: int = 16384
-    linger_ms: int = 1
-    buffer_memory: int = 33554432
-    compression_type: str = "gzip"
-    max_request_size: int = 1048576
+class AdvancedProducerConfig:
+    """Advanced Kafka producer configuration for enterprise use"""
+    bootstrap_servers: List[str]
+    
+    # Reliability settings
+    acks: str = "all"  # all, 1, 0
+    retries: int = int(1e9)  # Retry essentially forever
+    retry_backoff_ms: int = 100
+    delivery_timeout_ms: int = 300000  # 5 minutes
+    request_timeout_ms: int = 30000
+    
+    # Performance settings
+    batch_size: int = 65536  # 64KB for better throughput
+    linger_ms: int = 10  # Wait up to 10ms to batch
+    buffer_memory: int = 134217728  # 128MB
+    max_in_flight_requests_per_connection: int = 1  # For ordering guarantee
+    
+    # Compression settings
+    compression_type: CompressionType = CompressionType.ZSTD
+    
+    # Message settings
+    max_request_size: int = 10485760  # 10MB
+    send_buffer_bytes: int = 131072  # 128KB
+    receive_buffer_bytes: int = 65536  # 64KB
+    
+    # Idempotent producer settings
+    enable_idempotence: bool = True
+    transactional_id: Optional[str] = None
+    
+    # Security settings
     security_protocol: str = "PLAINTEXT"
+    ssl_cafile: Optional[str] = None
+    ssl_certfile: Optional[str] = None
+    ssl_keyfile: Optional[str] = None
+    sasl_mechanism: Optional[str] = None
+    sasl_username: Optional[str] = None
+    sasl_password: Optional[str] = None
+    
+    # Schema registry settings
+    schema_registry_url: Optional[str] = None
+    schema_registry_auth: Optional[tuple] = None
+    
+    # Custom partitioner
+    partitioner: Optional[Callable] = None
+    partition_strategy: PartitionStrategy = PartitionStrategy.HASH_KEY
+    
+    # Monitoring
+    enable_metrics: bool = True
+    metrics_reporters: List[str] = field(default_factory=list)
+    
+    def to_kafka_config(self) -> Dict[str, Any]:
+        """Convert to Kafka client configuration"""
+        config = {
+            'bootstrap.servers': ','.join(self.bootstrap_servers),
+            'acks': self.acks,
+            'retries': self.retries,
+            'retry.backoff.ms': self.retry_backoff_ms,
+            'delivery.timeout.ms': self.delivery_timeout_ms,
+            'request.timeout.ms': self.request_timeout_ms,
+            'batch.size': self.batch_size,
+            'linger.ms': self.linger_ms,
+            'buffer.memory': self.buffer_memory,
+            'max.in.flight.requests.per.connection': self.max_in_flight_requests_per_connection,
+            'compression.type': self.compression_type.value,
+            'max.request.size': self.max_request_size,
+            'send.buffer.bytes': self.send_buffer_bytes,
+            'receive.buffer.bytes': self.receive_buffer_bytes,
+            'enable.idempotence': self.enable_idempotence,
+            'security.protocol': self.security_protocol
+        }
+        
+        if self.transactional_id:
+            config['transactional.id'] = self.transactional_id
+            
+        if self.ssl_cafile:
+            config.update({
+                'ssl.ca.location': self.ssl_cafile,
+                'ssl.certificate.location': self.ssl_certfile,
+                'ssl.key.location': self.ssl_keyfile
+            })
+            
+        if self.sasl_mechanism:
+            config.update({
+                'sasl.mechanism': self.sasl_mechanism,
+                'sasl.username': self.sasl_username,
+                'sasl.password': self.sasl_password
+            })
+            
+        return config
 
 
 @dataclass
-class ConsumerConfig:
-    """Kafka consumer configuration"""
-    bootstrap_servers: list[str]
+class AdvancedConsumerConfig:
+    """Advanced Kafka consumer configuration for enterprise use"""
+    bootstrap_servers: List[str]
     group_id: str
-    auto_offset_reset: str = "earliest"
-    enable_auto_commit: bool = True
-    auto_commit_interval_ms: int = 1000
-    max_poll_records: int = 500
-    max_poll_interval_ms: int = 300000
-    session_timeout_ms: int = 10000
-    heartbeat_interval_ms: int = 3000
+    
+    # Offset management
+    auto_offset_reset: ConsumerStrategy = ConsumerStrategy.EARLIEST
+    enable_auto_commit: bool = False  # Manual commit for better control
+    auto_commit_interval_ms: int = 5000
+    
+    # Performance settings  
+    max_poll_records: int = 1000
+    max_poll_interval_ms: int = 300000  # 5 minutes
+    fetch_min_bytes: int = 1024  # 1KB
+    fetch_max_wait_ms: int = 500
+    max_partition_fetch_bytes: int = 10485760  # 10MB
+    
+    # Session management
+    session_timeout_ms: int = 30000  # 30 seconds
+    heartbeat_interval_ms: int = 10000  # 10 seconds
+    
+    # Network settings
+    request_timeout_ms: int = 30000
+    connections_max_idle_ms: int = 300000  # 5 minutes
+    
+    # Security settings  
     security_protocol: str = "PLAINTEXT"
+    ssl_cafile: Optional[str] = None
+    ssl_certfile: Optional[str] = None
+    ssl_keyfile: Optional[str] = None
+    sasl_mechanism: Optional[str] = None
+    sasl_username: Optional[str] = None
+    sasl_password: Optional[str] = None
+    
+    # Consumer group settings
+    partition_assignment_strategy: str = "range"  # range, roundrobin, sticky, cooperative-sticky
+    
+    # Schema registry settings
+    schema_registry_url: Optional[str] = None
+    schema_registry_auth: Optional[tuple] = None
+    
+    # Processing settings
+    enable_exactly_once: bool = False
+    isolation_level: str = "read_uncommitted"  # read_committed, read_uncommitted
+    
+    # Monitoring
+    enable_metrics: bool = True
+    metrics_reporters: List[str] = field(default_factory=list)
+    
+    def to_kafka_config(self) -> Dict[str, Any]:
+        """Convert to Kafka client configuration"""
+        config = {
+            'bootstrap.servers': ','.join(self.bootstrap_servers),
+            'group.id': self.group_id,
+            'auto.offset.reset': self.auto_offset_reset.value,
+            'enable.auto.commit': self.enable_auto_commit,
+            'auto.commit.interval.ms': self.auto_commit_interval_ms,
+            'max.poll.records': self.max_poll_records,
+            'max.poll.interval.ms': self.max_poll_interval_ms,
+            'fetch.min.bytes': self.fetch_min_bytes,
+            'fetch.max.wait.ms': self.fetch_max_wait_ms,
+            'max.partition.fetch.bytes': self.max_partition_fetch_bytes,
+            'session.timeout.ms': self.session_timeout_ms,
+            'heartbeat.interval.ms': self.heartbeat_interval_ms,
+            'request.timeout.ms': self.request_timeout_ms,
+            'connections.max.idle.ms': self.connections_max_idle_ms,
+            'security.protocol': self.security_protocol,
+            'partition.assignment.strategy': [self.partition_assignment_strategy],
+            'isolation.level': self.isolation_level
+        }
+        
+        if self.ssl_cafile:
+            config.update({
+                'ssl.ca.location': self.ssl_cafile,
+                'ssl.certificate.location': self.ssl_certfile,
+                'ssl.key.location': self.ssl_keyfile
+            })
+            
+        if self.sasl_mechanism:
+            config.update({
+                'sasl.mechanism': self.sasl_mechanism,
+                'sasl.username': self.sasl_username,
+                'sasl.password': self.sasl_password
+            })
+            
+        return config
 
 
 class KafkaManager:

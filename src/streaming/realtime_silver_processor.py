@@ -40,6 +40,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 
 
 class DataQualityLevel(Enum):
@@ -101,7 +108,7 @@ class EnrichmentRule:
 
 @dataclass
 class SilverProcessingConfig:
-    """Configuration for Silver layer processing"""
+    """Configuration for Silver layer processing with enhanced infrastructure"""
     enable_data_cleaning: bool = True
     enable_enrichment: bool = True
     enable_business_rules: bool = True
@@ -115,6 +122,22 @@ class SilverProcessingConfig:
     checkpoint_interval: str = "30 seconds"
     state_timeout: str = "1 hour"
     max_records_per_batch: int = 100000
+    
+    # Enhanced caching configuration
+    enable_silver_caching: bool = True
+    redis_url: str = "redis://localhost:6379"
+    processing_cache_ttl: int = 1800  # 30 minutes
+    quality_cache_ttl: int = 3600  # 1 hour
+    reference_data_cache_ttl: int = 7200  # 2 hours
+    
+    # RabbitMQ configuration for processing coordination
+    enable_silver_messaging: bool = True
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    
+    # CQRS pattern configuration
+    enable_cqrs: bool = True
+    read_model_cache_ttl: int = 900  # 15 minutes
 
 
 class DataQualityEngine:
@@ -583,7 +606,7 @@ class DeduplicationEngine:
 
 
 class RealtimeSilverProcessor:
-    """Comprehensive real-time Silver layer processor"""
+    """Comprehensive real-time Silver layer processor with enhanced infrastructure"""
     
     def __init__(
         self, 
@@ -595,9 +618,20 @@ class RealtimeSilverProcessor:
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
-        # Initialize processing engines
-        self.quality_engine = DataQualityEngine(spark)
-        self.enrichment_engine = DataEnrichmentEngine(spark)
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if config.enable_silver_caching:
+            self._initialize_cache_manager()
+        if config.enable_silver_messaging:
+            self._initialize_messaging_manager()
+        
+        # Initialize processing engines with enhanced features
+        self.quality_engine = DataQualityEngine(spark, self.cache_manager)
+        self.enrichment_engine = DataEnrichmentEngine(spark, self.cache_manager)
         self.deduplication_engine = DeduplicationEngine(
             spark, self.config.duplicate_detection_columns
         )
@@ -612,7 +646,40 @@ class RealtimeSilverProcessor:
         self.quality_improvements = 0
         self.duplicates_removed = 0
         
-        self.logger.info("Real-time Silver Processor initialized")
+        self.logger.info("Real-time Silver Processor initialized with enhanced infrastructure")
+    
+    def _initialize_cache_manager(self):
+        """Initialize Silver-specific cache manager"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=self.config.redis_url,
+                default_ttl=self.config.processing_cache_ttl,
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.EVENTUAL,
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("Silver cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Silver cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize messaging for Silver processing coordination"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host=self.config.rabbitmq_host,
+                port=self.config.rabbitmq_port,
+                enable_dead_letter=True
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("Silver messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Silver messaging manager: {e}")
     
     def process_streaming_data(
         self,
@@ -900,8 +967,15 @@ class RealtimeSilverProcessor:
         except Exception as e:
             self.logger.error(f"Failed to send quality alert: {e}")
     
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get Silver cache performance metrics"""
+        cache_metrics = {}
+        if self.cache_manager:
+            cache_metrics = self.cache_manager.metrics.get_metrics_summary()
+        return cache_metrics
+    
     def get_processing_metrics(self) -> Dict[str, Any]:
-        """Get Silver processing metrics"""
+        """Get Silver processing metrics with enhanced info"""
         return {
             "silver_metrics": {
                 "processed_batches": self.processed_batches,
@@ -917,7 +991,14 @@ class RealtimeSilverProcessor:
                 "enable_business_rules": self.config.enable_business_rules,
                 "enable_deduplication": self.config.enable_deduplication
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "cache_metrics": self.get_cache_metrics(),
+            "messaging_enabled": self.messaging_manager is not None,
+            "infrastructure_status": {
+                "caching_enabled": self.config.enable_silver_caching,
+                "messaging_enabled": self.config.enable_silver_messaging,
+                "cache_hit_ratio": self.get_cache_metrics().get("hit_ratio", 0.0) if self.cache_manager else 0.0
+            }
         }
 
 

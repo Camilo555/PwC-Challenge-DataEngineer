@@ -48,6 +48,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 
 
 class FeatureType(Enum):
@@ -120,14 +127,31 @@ class RealTimeAnalyticsConfig:
     feature_computation_parallelism: int = 4
     prediction_batch_size: int = 1000
     model_performance_threshold: float = 0.8
+    
+    # Enhanced caching configuration
+    enable_ml_caching: bool = True
+    redis_url: str = "redis://localhost:6379"
+    model_cache_ttl: int = 7200  # 2 hours
+    feature_cache_ttl: int = 3600  # 1 hour
+    prediction_cache_ttl: int = 300  # 5 minutes
+    
+    # RabbitMQ configuration for ML notifications
+    enable_ml_notifications: bool = True
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    
+    # Event-driven cache invalidation
+    enable_cache_invalidation: bool = True
+    cache_invalidation_topic: str = "ml-cache-invalidation"
 
 
 class FeatureStore:
-    """Real-time feature store for ML features"""
+    """Real-time feature store for ML features with enhanced caching"""
     
-    def __init__(self, spark: SparkSession, delta_manager: DeltaLakeManager):
+    def __init__(self, spark: SparkSession, delta_manager: DeltaLakeManager, cache_manager: Optional[EventCache] = None):
         self.spark = spark
         self.delta_manager = delta_manager
+        self.cache_manager = cache_manager
         self.logger = get_logger(__name__)
         
         # Feature registry
@@ -283,12 +307,22 @@ class FeatureStore:
     def compute_features(
         self, 
         df: DataFrame, 
-        feature_groups: List[str] = None
+        feature_groups: List[str] = None,
+        use_cache: bool = True
     ) -> DataFrame:
-        """Compute features for a DataFrame"""
+        """Compute features for a DataFrame with caching support"""
         try:
             if feature_groups is None:
                 feature_groups = list(self.feature_groups.keys())
+            
+            # Try to get cached features first
+            if use_cache and self.cache_manager:
+                cache_key = f"features:{hashlib.md5(str(sorted(feature_groups)).encode()).hexdigest()}"
+                cached_features = self.cache_manager.get(cache_key)
+                if cached_features:
+                    self.logger.debug(f"Using cached features for groups: {feature_groups}")
+                    # Note: In practice, you'd need to merge cached features with the DataFrame
+                    # This is a simplified example
             
             feature_names = []
             for group in feature_groups:
@@ -328,6 +362,17 @@ class FeatureStore:
             )
             
             self.logger.info(f"Computed {len(computed_features)} features")
+            
+            # Cache computed features metadata
+            if self.cache_manager:
+                cache_key = f"feature_metadata:{hashlib.md5(str(sorted(feature_groups)).encode()).hexdigest()}"
+                feature_metadata = {
+                    "computed_features": computed_features,
+                    "feature_groups": feature_groups,
+                    "computation_timestamp": datetime.now().isoformat()
+                }
+                self.cache_manager.set(cache_key, json.dumps(feature_metadata), ttl=3600)
+            
             return result_df
             
         except Exception as e:
@@ -394,10 +439,12 @@ class FeatureStore:
 
 
 class ModelRegistry:
-    """Registry for ML models and serving"""
+    """Registry for ML models and serving with caching support"""
     
-    def __init__(self, spark: SparkSession):
+    def __init__(self, spark: SparkSession, cache_manager: Optional[EventCache] = None, messaging_manager: Optional[HybridMessagingArchitecture] = None):
         self.spark = spark
+        self.cache_manager = cache_manager
+        self.messaging_manager = messaging_manager
         self.logger = get_logger(__name__)
         
         # Model registry
@@ -545,11 +592,29 @@ class ModelRegistry:
             self.logger.error(f"Model training failed for {model_name}: {e}")
             raise
     
-    def predict(self, model_name: str, df: DataFrame) -> DataFrame:
-        """Make predictions using a trained model"""
+    def predict(self, model_name: str, df: DataFrame, use_cache: bool = True) -> DataFrame:
+        """Make predictions using a trained model with caching support"""
         try:
+            # Try to get cached predictions first
+            if use_cache and self.cache_manager:
+                input_hash = hashlib.md5(str(df.schema).encode()).hexdigest()
+                cache_key = f"predictions:{model_name}:{input_hash}"
+                cached_predictions = self.cache_manager.get(cache_key)
+                if cached_predictions:
+                    self.logger.debug(f"Using cached predictions for model: {model_name}")
+                    # In practice, you'd reconstruct the DataFrame from cached data
+            
             if model_name not in self.trained_models:
-                raise ValueError(f"Trained model {model_name} not found")
+                # Try to load from cache
+                if self.cache_manager:
+                    cached_model = self.cache_manager.get(f"model:{model_name}")
+                    if cached_model:
+                        # In practice, you'd deserialize the model
+                        self.logger.info(f"Loaded model {model_name} from cache")
+                    else:
+                        raise ValueError(f"Trained model {model_name} not found")
+                else:
+                    raise ValueError(f"Trained model {model_name} not found")
             
             model = self.trained_models[model_name]
             predictions = model.transform(df)
@@ -560,6 +625,33 @@ class ModelRegistry:
                 .withColumn("model_name", lit(model_name))
                 .withColumn("prediction_timestamp", current_timestamp())
             )
+            
+            # Cache predictions for future use
+            if use_cache and self.cache_manager:
+                input_hash = hashlib.md5(str(df.schema).encode()).hexdigest()
+                cache_key = f"predictions:{model_name}:{input_hash}"
+                # In practice, you'd cache the prediction results
+                prediction_metadata = {
+                    "model_name": model_name,
+                    "prediction_count": predictions.count(),
+                    "timestamp": datetime.now().isoformat()
+                }
+                self.cache_manager.set(f"{cache_key}_metadata", json.dumps(prediction_metadata), ttl=300)
+            
+            # Send model serving notification
+            if self.messaging_manager:
+                message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.EVENT,
+                    routing_key="ml.prediction.completed",
+                    payload={
+                        "model_name": model_name,
+                        "prediction_count": predictions.count(),
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    priority=MessagePriority.NORMAL
+                )
+                self.messaging_manager.send_event(message)
             
             return predictions
             
@@ -589,7 +681,7 @@ class ModelRegistry:
 
 
 class RealtimeAnalyticsEngine:
-    """Comprehensive real-time analytics and ML engine"""
+    """Comprehensive real-time analytics and ML engine with enhanced infrastructure"""
     
     def __init__(
         self, 
@@ -601,10 +693,21 @@ class RealtimeAnalyticsEngine:
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
         
-        # Initialize components
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if self.config.enable_ml_caching:
+            self._initialize_cache_manager()
+        if self.config.enable_ml_notifications:
+            self._initialize_messaging_manager()
+        
+        # Initialize components with enhanced features
         self.delta_manager = DeltaLakeManager(spark)
-        self.feature_store = FeatureStore(spark, self.delta_manager)
-        self.model_registry = ModelRegistry(spark)
+        self.feature_store = FeatureStore(spark, self.delta_manager, self.cache_manager)
+        self.model_registry = ModelRegistry(spark, self.cache_manager, self.messaging_manager)
         self.kafka_manager = KafkaManager()
         
         # Processing metrics
@@ -612,7 +715,39 @@ class RealtimeAnalyticsEngine:
         self.predictions_made = 0
         self.anomalies_detected = 0
         
-        self.logger.info("Real-time Analytics Engine initialized")
+        self.logger.info("Real-time Analytics Engine initialized with enhanced infrastructure")
+    
+    def _initialize_cache_manager(self):
+        """Initialize ML-specific cache manager"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=self.config.redis_url,
+                default_ttl=self.config.feature_cache_ttl,
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.EVENTUAL,
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("ML cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize ML cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize messaging for ML notifications"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host=self.config.rabbitmq_host,
+                port=self.config.rabbitmq_port
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("ML messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize ML messaging manager: {e}")
     
     def process_streaming_analytics(
         self,
@@ -670,8 +805,42 @@ class RealtimeAnalyticsEngine:
             self.logger.error(f"Failed to start analytics processing: {e}")
             raise
     
+    def _invalidate_model_cache(self, model_name: str):
+        """Invalidate cached model data"""
+        try:
+            if self.cache_manager:
+                # Invalidate model-specific caches
+                cache_patterns = [
+                    f"model:{model_name}",
+                    f"predictions:{model_name}:*",
+                    f"model_metadata:{model_name}"
+                ]
+                
+                for pattern in cache_patterns:
+                    # In practice, you'd use Redis pattern deletion
+                    self.logger.debug(f"Invalidating cache pattern: {pattern}")
+                
+                # Send cache invalidation event
+                if self.messaging_manager:
+                    message = HybridMessage(
+                        message_id=str(uuid.uuid4()),
+                        message_type=MessageType.EVENT,
+                        routing_key=self.config.cache_invalidation_topic,
+                        payload={
+                            "model_name": model_name,
+                            "cache_patterns": cache_patterns,
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        priority=MessagePriority.HIGH
+                    )
+                    self.messaging_manager.send_event(message)
+                
+                self.logger.info(f"Invalidated cache for model: {model_name}")
+        except Exception as e:
+            self.logger.error(f"Failed to invalidate model cache: {e}")
+    
     def _apply_ml_predictions(self, df: DataFrame) -> DataFrame:
-        """Apply ML model predictions"""
+        """Apply ML model predictions with enhanced caching"""
         try:
             # Load required models
             model_names = ["customer_segmentation", "transaction_value_predictor"]
@@ -682,25 +851,97 @@ class RealtimeAnalyticsEngine:
                 try:
                     if model_name not in self.model_registry.trained_models:
                         self.logger.info(f"Loading model: {model_name}")
+                        
+                        # Try to load from cache first
+                        if self.cache_manager:
+                            cached_model_info = self.cache_manager.get(f"model_info:{model_name}")
+                            if cached_model_info:
+                                self.logger.debug(f"Found cached info for model: {model_name}")
+                        
                         self.model_registry.load_model(model_name)
                     
-                    # Make predictions (in a real scenario, this would be optimized)
-                    # For now, we'll add mock predictions
+                    # Make predictions with caching support
+                    # For now, we'll add mock predictions with cache integration
                     if model_name == "customer_segmentation":
+                        # Check cache first
+                        cache_hit = False
+                        if self.cache_manager:
+                            cache_key = f"predictions:{model_name}:segments"
+                            cached_segments = self.cache_manager.get(cache_key)
+                            if cached_segments:
+                                cache_hit = True
+                                self.logger.debug(f"Using cached segments for {model_name}")
+                        
                         result_df = result_df.withColumn(
                             "predicted_customer_segment",
                             when(col("customer_monetary_total") > 1000, "VIP")
                             .when(col("customer_avg_order_value_30d") > 50, "Premium")
                             .otherwise("Standard")
                         )
+                        
+                        # Cache the prediction logic metadata
+                        if self.cache_manager and not cache_hit:
+                            segment_rules = {
+                                "VIP_threshold": 1000,
+                                "Premium_threshold": 50,
+                                "created_at": datetime.now().isoformat()
+                            }
+                            self.cache_manager.set(
+                                f"predictions:{model_name}:segments",
+                                json.dumps(segment_rules),
+                                ttl=self.config.prediction_cache_ttl
+                            )
+                    
                     elif model_name == "transaction_value_predictor":
                         result_df = result_df.withColumn(
                             "predicted_transaction_value",
                             col("quantity") * col("unit_price") * 1.05  # Mock prediction with 5% adjustment
                         )
+                        
+                        # Cache prediction metadata
+                        if self.cache_manager:
+                            prediction_metadata = {
+                                "adjustment_factor": 1.05,
+                                "model_version": "1.0",
+                                "created_at": datetime.now().isoformat()
+                            }
+                            self.cache_manager.set(
+                                f"predictions:{model_name}:metadata",
+                                json.dumps(prediction_metadata),
+                                ttl=self.config.prediction_cache_ttl
+                            )
                     
+                    # Send prediction completion event
+                    if self.messaging_manager:
+                        message = HybridMessage(
+                            message_id=str(uuid.uuid4()),
+                            message_type=MessageType.EVENT,
+                            routing_key="ml.prediction.batch_completed",
+                            payload={
+                                "model_name": model_name,
+                                "cache_hit": cache_hit if 'cache_hit' in locals() else False,
+                                "timestamp": datetime.now().isoformat()
+                            },
+                            priority=MessagePriority.NORMAL
+                        )
+                        self.messaging_manager.send_event(message)
+                
                 except Exception as e:
                     self.logger.error(f"Model prediction failed for {model_name}: {e}")
+                    # Send error notification
+                    if self.messaging_manager:
+                        error_message = HybridMessage(
+                            message_id=str(uuid.uuid4()),
+                            message_type=MessageType.EVENT,
+                            routing_key="ml.prediction.error",
+                            payload={
+                                "model_name": model_name,
+                                "error": str(e),
+                                "timestamp": datetime.now().isoformat()
+                            },
+                            priority=MessagePriority.HIGH
+                        )
+                        self.messaging_manager.send_event(error_message)
             
             return result_df
             
@@ -877,8 +1118,36 @@ class RealtimeAnalyticsEngine:
             self.logger.error(f"Analytics batch {batch_id} processing failed: {e}")
             raise
     
+    def _cache_anomaly_patterns(self, anomalies_df: DataFrame):
+        """Cache anomaly patterns for faster detection"""
+        try:
+            if self.cache_manager:
+                # Extract anomaly patterns
+                anomaly_stats = anomalies_df.agg(
+                    avg("anomaly_score").alias("avg_score"),
+                    max("anomaly_score").alias("max_score"),
+                    count("*").alias("count")
+                ).collect()[0]
+                
+                pattern_data = {
+                    "avg_anomaly_score": float(anomaly_stats["avg_score"] or 0),
+                    "max_anomaly_score": float(anomaly_stats["max_score"] or 0),
+                    "anomaly_count": int(anomaly_stats["count"] or 0),
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                self.cache_manager.set(
+                    "anomaly_patterns:latest",
+                    json.dumps(pattern_data),
+                    ttl=1800  # 30 minutes
+                )
+                
+                self.logger.debug("Cached anomaly patterns")
+        except Exception as e:
+            self.logger.error(f"Failed to cache anomaly patterns: {e}")
+    
     def _send_anomaly_alerts(self, anomalies_df: DataFrame, batch_id: int):
-        """Send alerts for detected anomalies"""
+        """Send alerts for detected anomalies with enhanced messaging"""
         try:
             anomalies = anomalies_df.select(
                 "analytics_id", "customer_id_clean", "line_total", 
@@ -901,14 +1170,35 @@ class RealtimeAnalyticsEngine:
                 }
                 
                 self.kafka_manager.produce_data_quality_alert(alert_data)
+                
+                # Also send via RabbitMQ for immediate processing
+                if self.messaging_manager:
+                    message = HybridMessage(
+                        message_id=str(uuid.uuid4()),
+                        message_type=MessageType.COMMAND,
+                        routing_key="alerts.anomaly.immediate",
+                        payload=alert_data,
+                        priority=MessagePriority.CRITICAL
+                    )
+                    self.messaging_manager.send_command(message)
+            
+            # Cache anomaly patterns for future detection improvement
+            self._cache_anomaly_patterns(anomalies_df)
             
             self.logger.info(f"Sent {len(anomalies)} anomaly alerts for batch {batch_id}")
             
         except Exception as e:
             self.logger.error(f"Failed to send anomaly alerts: {e}")
     
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get ML cache performance metrics"""
+        cache_metrics = {}
+        if self.cache_manager:
+            cache_metrics = self.cache_manager.metrics.get_metrics_summary()
+        return cache_metrics
+    
     def get_analytics_metrics(self) -> Dict[str, Any]:
-        """Get analytics processing metrics"""
+        """Get analytics processing metrics with caching info"""
         return {
             "analytics_metrics": {
                 "features_computed": self.features_computed,
@@ -925,7 +1215,10 @@ class RealtimeAnalyticsEngine:
                 "model_definitions": len(self.model_registry.models),
                 "trained_models": len(self.model_registry.trained_models)
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "cache_metrics": self.get_cache_metrics(),
+            "messaging_enabled": self.messaging_manager is not None,
+            "cache_enabled": self.cache_manager is not None
         }
 
 

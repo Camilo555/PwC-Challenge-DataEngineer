@@ -27,6 +27,13 @@ from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
 from src.streaming.kafka_manager import KafkaManager, StreamingTopic
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig, 
+    HybridMessage, MessageType, MessagePriority
+)
+from src.streaming.event_sourcing_cache_integration import (
+    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+)
 from src.streaming.spark_structured_streaming import (
     create_spark_session, create_streaming_config,
     RealtimeBronzeProcessor, RealtimeSilverProcessor, RealtimeGoldProcessor
@@ -117,6 +124,26 @@ class PlatformConfig:
     max_retry_attempts: int = 3
     retry_delay_seconds: int = 60
     circuit_breaker_threshold: int = 5
+    
+    # Redis caching settings
+    redis_url: str = "redis://localhost:6379"
+    redis_max_connections: int = 100
+    enable_distributed_caching: bool = True
+    cache_ttl_seconds: int = 3600
+    
+    # RabbitMQ messaging settings
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_username: str = "guest"
+    rabbitmq_password: str = "guest"
+    enable_hybrid_messaging: bool = True
+    
+    # Enhanced Kafka settings
+    kafka_schema_registry_url: str = "http://localhost:8081"
+    kafka_enable_exactly_once: bool = True
+    kafka_batch_size: int = 16384
+    kafka_compression_type: str = "gzip"
+    kafka_acks: str = "all"
 
 
 @dataclass
@@ -136,12 +163,23 @@ class PlatformMetrics:
 
 
 class StreamingPipelineManager:
-    """Manages individual streaming pipelines"""
+    """Manages individual streaming pipelines with enhanced caching and messaging"""
     
     def __init__(self, spark: SparkSession, config: PlatformConfig):
         self.spark = spark
         self.config = config
         self.logger = get_logger(f"{__name__}.PipelineManager")
+        
+        # Enhanced infrastructure components
+        self.cache_manager: Optional[EventCache] = None
+        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
+        self.rabbitmq_manager: Optional[RabbitMQManager] = None
+        
+        # Initialize enhanced infrastructure
+        if config.enable_distributed_caching:
+            self._initialize_cache_manager()
+        if config.enable_hybrid_messaging:
+            self._initialize_messaging_manager()
         
         # Pipeline components
         self.active_pipelines: Dict[str, StreamingQuery] = {}
@@ -159,6 +197,43 @@ class StreamingPipelineManager:
         
         # Initialize components
         self._initialize_processors()
+    
+    def _initialize_cache_manager(self):
+        """Initialize distributed cache manager"""
+        try:
+            cache_config = CacheConfig(
+                redis_url=self.config.redis_url,
+                max_connections=self.config.redis_max_connections,
+                default_ttl=self.config.cache_ttl_seconds,
+                cache_strategy=CacheStrategy.CACHE_ASIDE,
+                consistency_level=ConsistencyLevel.EVENTUAL,
+                enable_cache_warming=True
+            )
+            self.cache_manager = EventCache(cache_config)
+            self.logger.info("Cache manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize cache manager: {e}")
+    
+    def _initialize_messaging_manager(self):
+        """Initialize hybrid messaging architecture"""
+        try:
+            rabbitmq_config = RabbitMQConfig(
+                host=self.config.rabbitmq_host,
+                port=self.config.rabbitmq_port,
+                username=self.config.rabbitmq_username,
+                password=self.config.rabbitmq_password,
+                confirm_delivery=True,
+                enable_dead_letter=True
+            )
+            self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
+            self.messaging_manager = HybridMessagingArchitecture(
+                kafka_manager=self.kafka_manager,
+                rabbitmq_manager=self.rabbitmq_manager,
+                cache_manager=self.cache_manager
+            )
+            self.logger.info("Messaging manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize messaging manager: {e}")
     
     def _initialize_processors(self):
         """Initialize all streaming processors"""
@@ -344,8 +419,54 @@ class StreamingPipelineManager:
         
         self.active_pipelines.clear()
     
+    def _cache_pipeline_state(self, pipeline_name: str, state: Dict[str, Any]):
+        """Cache pipeline state for resilience"""
+        try:
+            if self.cache_manager:
+                cache_key = f"pipeline_state:{pipeline_name}"
+                self.cache_manager.set(
+                    cache_key, 
+                    json.dumps(state), 
+                    ttl=self.config.cache_ttl_seconds
+                )
+                self.logger.debug(f"Cached state for pipeline: {pipeline_name}")
+        except Exception as e:
+            self.logger.warning(f"Failed to cache pipeline state: {e}")
+    
+    def _get_cached_pipeline_state(self, pipeline_name: str) -> Optional[Dict[str, Any]]:
+        """Retrieve cached pipeline state"""
+        try:
+            if self.cache_manager:
+                cache_key = f"pipeline_state:{pipeline_name}"
+                cached_data = self.cache_manager.get(cache_key)
+                if cached_data:
+                    return json.loads(cached_data)
+        except Exception as e:
+            self.logger.warning(f"Failed to retrieve cached pipeline state: {e}")
+        return None
+    
+    def _send_pipeline_notification(self, event_type: str, pipeline_name: str, data: Dict[str, Any]):
+        """Send pipeline notifications via RabbitMQ"""
+        try:
+            if self.messaging_manager:
+                message = HybridMessage(
+                    message_id=str(uuid.uuid4()),
+                    message_type=MessageType.EVENT,
+                    routing_key=f"pipeline.{event_type}",
+                    payload={
+                        "pipeline_name": pipeline_name,
+                        "event_type": event_type,
+                        "data": data,
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    priority=MessagePriority.HIGH if event_type == "error" else MessagePriority.NORMAL
+                )
+                self.messaging_manager.send_command(message)
+        except Exception as e:
+            self.logger.warning(f"Failed to send pipeline notification: {e}")
+    
     def get_pipeline_health(self) -> Dict[str, Any]:
-        """Get health status of all pipelines"""
+        """Get health status of all pipelines with caching support"""
         health_status = {}
         
         for pipeline_name, query in self.active_pipelines.items():
@@ -353,15 +474,25 @@ class StreamingPipelineManager:
                 is_active = query.isActive
                 last_progress = query.lastProgress
                 
-                health_status[pipeline_name] = {
+                pipeline_status = {
                     "active": is_active,
                     "healthy": self.pipeline_health.get(pipeline_name, False),
                     "query_id": query.id if is_active else None,
                     "batch_id": last_progress.get("batchId", -1) if last_progress else -1,
                     "input_rows_per_second": last_progress.get("inputRowsPerSecond", 0) if last_progress else 0,
                     "processed_rows_per_second": last_progress.get("processedRowsPerSecond", 0) if last_progress else 0,
-                    "last_update": last_progress.get("timestamp") if last_progress else None
+                    "last_update": last_progress.get("timestamp") if last_progress else None,
+                    "cached_state_available": self._get_cached_pipeline_state(pipeline_name) is not None
                 }
+                
+                health_status[pipeline_name] = pipeline_status
+                
+                # Cache the current state
+                self._cache_pipeline_state(pipeline_name, pipeline_status)
+                
+                # Send health notifications if there are issues
+                if not pipeline_status["healthy"] or not pipeline_status["active"]:
+                    self._send_pipeline_notification("health_alert", pipeline_name, pipeline_status)
         
         # Add CEP processor status
         if self.cep_processor:
@@ -649,7 +780,17 @@ class EnterpriseStreamingOrchestrator:
             ))
             
             # Initialize managers
+            # Initialize enhanced Kafka manager
             self.kafka_manager = KafkaManager()
+            # Configure enhanced Kafka settings
+            if hasattr(self.kafka_manager, 'configure_enhanced_settings'):
+                self.kafka_manager.configure_enhanced_settings({
+                    'bootstrap.servers': ','.join(self.config.kafka_bootstrap_servers),
+                    'enable.idempotence': self.config.kafka_enable_exactly_once,
+                    'batch.size': self.config.kafka_batch_size,
+                    'compression.type': self.config.kafka_compression_type,
+                    'acks': self.config.kafka_acks
+                })
             self.delta_manager = DeltaLakeManager(self.spark)
             self.pipeline_manager = StreamingPipelineManager(self.spark, self.config)
             self.platform_monitor = PlatformMonitor(self.config)

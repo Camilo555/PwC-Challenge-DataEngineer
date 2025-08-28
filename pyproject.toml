@@ -59,7 +59,7 @@ dbt-spark = {extras = ["PyHive"], version = "^1.7.4"}
 aiohttp = "^3.10.11"
 pyarrow = "^21.0.0"
 # GraphQL
-strawberry-graphql = {extras = ["fastapi"], version = "^0.254.1"}
+strawberry-graphql = {extras = ["fastapi"], version = "^0.281.0"}
 # Async processing - replaced with RabbitMQ/Kafka
 # celery = {extras = ["redis"], version = "^5.4.0"}  # Replaced with RabbitMQ
 # redis = "^5.2.1"  # Removed - replaced with RabbitMQ and Kafka

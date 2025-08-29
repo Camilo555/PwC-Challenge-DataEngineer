@@ -1,0 +1,32 @@
+# Network Performance Monitoring Configuration
+ad_identifiers:
+  - network
+
+init_config:
+  # Global network monitoring configuration
+  
+instances:
+  # Network interface monitoring
+  - collect_connection_state: true
+    excluded_interfaces:
+      - lo
+      - docker.*
+      - veth.*
+    tags:
+      - env:production
+      - service:network
+      - team:data-platform
+    # TCP connection monitoring
+    collect_count_metrics: true
+    collect_rate_metrics: true
+    # Custom network checks
+    custom_queries:
+      # Monitor network connections by state
+      - metric_prefix: network.connections
+        query: 'netstat -an | grep -E "(LISTEN|ESTABLISHED|TIME_WAIT)" | wc -l'
+      # Monitor network bandwidth usage
+      - metric_prefix: network.bandwidth
+        query: 'cat /proc/net/dev'
+    # SSL certificate monitoring
+    check_certificate_expiration: true
+    ssl_expire_days: 30

@@ -1,0 +1,737 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: datadog
+  labels:
+    name: datadog
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: datadog-agent
+  namespace: datadog
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: datadog-agent
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - events
+  - endpoints
+  - pods
+  - nodes
+  - componentstatuses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "quota.openshift.io"
+  resources:
+  - clusterresourcequotas
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - "autoscaling"
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  resourceNames:
+  - datadogtoken
+  - datadog-leader-election
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - update
+- nonResourceURLs:
+  - "/version"
+  - "/healthz"
+  - "/metrics"
+  verbs:
+  - get
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  - replicasets
+  - daemonsets
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "batch"
+  resources:
+  - jobs
+  - cronjobs
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: datadog-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: datadog-agent
+subjects:
+- kind: ServiceAccount
+  name: datadog-agent
+  namespace: datadog
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-config
+  namespace: datadog
+data:
+  datadog.yaml: |
+    api_key: <DD_API_KEY>
+    site: datadoghq.com
+    dd_url: https://app.datadoghq.com
+    
+    # Logging configuration
+    log_level: INFO
+    logs_enabled: true
+    logs_config:
+      container_collect_all: true
+      use_podman_logs: false
+      open_files_limit: 100
+      
+    # APM configuration
+    apm_config:
+      enabled: true
+      apm_dd_url: https://trace.agent.datadoghq.com
+      max_traces_per_second: 10
+      
+    # Process monitoring
+    process_config:
+      enabled: "true"
+      
+    # Network monitoring
+    network_config:
+      enabled: true
+      
+    # Container monitoring
+    container_lifecycle:
+      enabled: true
+      
+    # Kubernetes configuration
+    kubernetes_kubelet_host: ${DD_KUBERNETES_KUBELET_HOST}
+    kubernetes_http_kubelet_port: 10255
+    kubernetes_https_kubelet_port: 10250
+    kubelet_tls_verify: false
+    
+    # Tags
+    tags:
+      - environment:production
+      - platform:kubernetes
+      - product:enterprise-data-platform
+      - team:data-engineering
+      
+    # Compliance and security
+    compliance_config:
+      enabled: true
+      
+    # Custom checks
+    additional_checksd: /etc/datadog-agent/checks.d/
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: datadog-agent
+  namespace: datadog
+  labels:
+    app: datadog-agent
+spec:
+  selector:
+    matchLabels:
+      app: datadog-agent
+  template:
+    metadata:
+      labels:
+        app: datadog-agent
+      name: datadog-agent
+    spec:
+      serviceAccountName: datadog-agent
+      containers:
+      - image: gcr.io/datadoghq/agent:7.50.0
+        imagePullPolicy: Always
+        name: datadog-agent
+        ports:
+        - containerPort: 8125
+          name: dogstatsdport
+          protocol: UDP
+        - containerPort: 8126
+          name: traceport
+          protocol: TCP
+        env:
+        - name: DD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: api-key
+        - name: DD_SITE
+          value: "datadoghq.com"
+        - name: DD_CLUSTER_NAME
+          value: "enterprise-data-platform"
+        - name: DD_KUBERNETES_KUBELET_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_KUBERNETES_POD_LABELS_AS_TAGS
+          value: '{"app":"kube_app","version":"kube_version","component":"kube_component"}'
+        - name: DD_KUBERNETES_POD_ANNOTATIONS_AS_TAGS
+          value: '{"prometheus.io/scrape":"prometheus_scrape","prometheus.io/port":"prometheus_port"}'
+        - name: DD_COLLECT_KUBERNETES_EVENTS
+          value: "true"
+        - name: DD_LEADER_ELECTION
+          value: "true"
+        - name: DD_APM_ENABLED
+          value: "true"
+        - name: DD_APM_NON_LOCAL_TRAFFIC
+          value: "true"
+        - name: DD_PROCESS_AGENT_ENABLED
+          value: "true"
+        - name: DD_LOGS_ENABLED
+          value: "true"
+        - name: DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL
+          value: "true"
+        - name: DD_AC_EXCLUDE
+          value: "name:datadog-agent"
+        - name: DD_HEALTH_PORT
+          value: "5555"
+        - name: DD_DOGSTATSD_PORT
+          value: "8125"
+        - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
+          value: "true"
+        - name: DD_CLUSTER_CHECKS_ENABLED
+          value: "true"
+        - name: DD_EXTRA_CONFIG_PROVIDERS
+          value: "clusterchecks endpointschecks"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dockersocket
+          mountPath: /var/run/docker.sock
+        - name: procdir
+          mountPath: /host/proc
+          readOnly: true
+        - name: cgroups
+          mountPath: /host/sys/fs/cgroup
+          readOnly: true
+        - name: pointdir
+          mountPath: /opt/datadog-agent/run
+        - name: datadog-config
+          mountPath: /etc/datadog-agent/datadog.yaml
+          subPath: datadog.yaml
+        - name: custom-checks
+          mountPath: /etc/datadog-agent/checks.d/
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5555
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5555
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+      volumes:
+      - name: dockersocket
+        hostPath:
+          path: /var/run/docker.sock
+      - name: procdir
+        hostPath:
+          path: /proc
+      - name: cgroups
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: pointdir
+        emptyDir: {}
+      - name: datadog-config
+        configMap:
+          name: datadog-config
+      - name: custom-checks
+        configMap:
+          name: datadog-custom-checks
+      tolerations:
+      - operator: Exists
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-custom-checks
+  namespace: datadog
+data:
+  data_platform_health.py: |
+    from datadog_checks.base import AgentCheck
+    import requests
+    import subprocess
+    import os
+    
+    class DataPlatformHealthCheck(AgentCheck):
+        def check(self, instance):
+            # Custom health check for data platform components
+            self.check_etl_pipelines()
+            self.check_data_quality()
+            self.check_business_metrics()
+    
+        def check_etl_pipelines(self):
+            try:
+                # Check ETL pipeline status
+                # This would integrate with your ETL orchestrator
+                pipeline_status = self.get_pipeline_status()
+                
+                for pipeline, status in pipeline_status.items():
+                    self.gauge(
+                        'custom.etl.pipeline.status',
+                        1 if status == 'running' else 0,
+                        tags=[f'pipeline:{pipeline}']
+                    )
+            except Exception as e:
+                self.log.error(f"Error checking ETL pipelines: {e}")
+    
+        def check_data_quality(self):
+            try:
+                # Check data quality metrics
+                quality_score = self.get_data_quality_score()
+                self.gauge('custom.data_quality.score', quality_score)
+            except Exception as e:
+                self.log.error(f"Error checking data quality: {e}")
+    
+        def check_business_metrics(self):
+            try:
+                # Check business KPIs
+                daily_revenue = self.get_daily_revenue()
+                active_users = self.get_active_users()
+                
+                self.gauge('custom.business.revenue.daily', daily_revenue)
+                self.gauge('custom.business.users.active', active_users)
+            except Exception as e:
+                self.log.error(f"Error checking business metrics: {e}")
+    
+        def get_pipeline_status(self):
+            # Simulate pipeline status check
+            return {
+                'bronze_ingestion': 'running',
+                'silver_transformation': 'running', 
+                'gold_aggregation': 'completed'
+            }
+    
+        def get_data_quality_score(self):
+            # Simulate data quality score
+            return 98.2
+    
+        def get_daily_revenue(self):
+            # Simulate revenue metric
+            return 125000.0
+    
+        def get_active_users(self):
+            # Simulate active users metric
+            return 15420
+            
+  data_platform_health.yaml: |
+    init_config:
+    
+    instances:
+      - name: data_platform_health
+        interval: 300  # Run every 5 minutes
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: datadog-dashboard-setup
+  namespace: datadog
+spec:
+  template:
+    metadata:
+      labels:
+        app: datadog-dashboard-setup
+    spec:
+      containers:
+      - name: dashboard-setup
+        image: python:3.9-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install datadog
+          python /scripts/create_dashboards.py
+        env:
+        - name: DD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: api-key
+        - name: DD_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: app-key
+        volumeMounts:
+        - name: dashboard-scripts
+          mountPath: /scripts
+      volumes:
+      - name: dashboard-scripts
+        configMap:
+          name: datadog-dashboard-scripts
+      restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-dashboard-scripts
+  namespace: datadog
+data:
+  create_dashboards.py: |
+    import os
+    from datadog import initialize, api
+    
+    # Initialize DataDog
+    options = {
+        'api_key': os.environ['DD_API_KEY'],
+        'app_key': os.environ['DD_APP_KEY'],
+        'api_host': 'https://api.datadoghq.com'
+    }
+    initialize(**options)
+    
+    # Create Infrastructure Overview Dashboard
+    infrastructure_dashboard = {
+        "title": "Enterprise Data Platform - Infrastructure Overview",
+        "description": "Comprehensive infrastructure monitoring",
+        "layout_type": "ordered",
+        "widgets": [
+            {
+                "definition": {
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "q": "avg:kubernetes.cpu.usage.total{*} by {node}",
+                            "display_type": "line"
+                        }
+                    ],
+                    "title": "Kubernetes CPU Usage by Node"
+                }
+            },
+            {
+                "definition": {
+                    "type": "query_value",
+                    "requests": [
+                        {
+                            "q": "sum:kubernetes.pods.running{*}",
+                            "aggregator": "last"
+                        }
+                    ],
+                    "title": "Running Pods",
+                    "autoscale": True
+                }
+            },
+            {
+                "definition": {
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "q": "avg:postgresql.connections.active{*} by {database}",
+                            "display_type": "line"
+                        }
+                    ],
+                    "title": "Database Connections"
+                }
+            }
+        ]
+    }
+    
+    try:
+        response = api.Dashboard.create(infrastructure_dashboard)
+        print(f"Created Infrastructure Dashboard: {response['url']}")
+    except Exception as e:
+        print(f"Error creating dashboard: {e}")
+    
+    # Create Security Dashboard
+    security_dashboard = {
+        "title": "Enterprise Data Platform - Security & Compliance",
+        "description": "Security monitoring and compliance tracking",
+        "layout_type": "ordered",
+        "widgets": [
+            {
+                "definition": {
+                    "type": "query_value",
+                    "requests": [
+                        {
+                            "q": "sum:security.vulnerabilities.critical{*}",
+                            "aggregator": "last"
+                        }
+                    ],
+                    "title": "Critical Vulnerabilities",
+                    "conditional_formats": [
+                        {
+                            "comparator": ">",
+                            "value": 0,
+                            "palette": "red_on_white"
+                        }
+                    ]
+                }
+            },
+            {
+                "definition": {
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "q": "sum:security.authentication.failed_logins{*}",
+                            "display_type": "bars"
+                        }
+                    ],
+                    "title": "Failed Login Attempts"
+                }
+            }
+        ]
+    }
+    
+    try:
+        response = api.Dashboard.create(security_dashboard)
+        print(f"Created Security Dashboard: {response['url']}")
+    except Exception as e:
+        print(f"Error creating security dashboard: {e}")
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datadog-agent-service
+  namespace: datadog
+  labels:
+    app: datadog-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: datadog-agent
+  ports:
+  - port: 8125
+    targetPort: 8125
+    protocol: UDP
+    name: dogstatsd
+  - port: 8126
+    targetPort: 8126
+    protocol: TCP
+    name: trace
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: datadog-agent-netpol
+  namespace: datadog
+spec:
+  podSelector:
+    matchLabels:
+      app: datadog-agent
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []
+    ports:
+    - protocol: UDP
+      port: 8125
+    - protocol: TCP
+      port: 8126
+  egress:
+  - {}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-secret
+  namespace: datadog
+type: Opaque
+data:
+  # Replace with base64 encoded API keys
+  api-key: <BASE64_ENCODED_API_KEY>
+  app-key: <BASE64_ENCODED_APP_KEY>
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: datadog-agent-pdb
+  namespace: datadog
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: datadog-agent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-monitors
+  namespace: datadog
+data:
+  create_monitors.py: |
+    import os
+    import json
+    from datadog import initialize, api
+    
+    # Initialize DataDog
+    options = {
+        'api_key': os.environ['DD_API_KEY'],
+        'app_key': os.environ['DD_APP_KEY'],
+        'api_host': 'https://api.datadoghq.com'
+    }
+    initialize(**options)
+    
+    # Critical infrastructure monitors
+    monitors = [
+        {
+            "name": "Kubernetes Node CPU High",
+            "type": "metric alert",
+            "query": "avg(last_5m):avg:kubernetes.cpu.usage.total{*} by {node} > 90",
+            "message": "CPU usage is high on node {{node.name}}",
+            "tags": ["team:platform", "severity:warning"],
+            "options": {
+                "thresholds": {
+                    "critical": 90,
+                    "warning": 80
+                },
+                "notify_no_data": True,
+                "no_data_timeframe": 10
+            }
+        },
+        {
+            "name": "Database Connection Pool Exhaustion",
+            "type": "metric alert", 
+            "query": "avg(last_5m):avg:postgresql.connections.active{*} > 90",
+            "message": "Database connection pool is nearly exhausted",
+            "tags": ["team:data", "severity:critical"],
+            "options": {
+                "thresholds": {
+                    "critical": 90,
+                    "warning": 75
+                },
+                "notify_no_data": True
+            }
+        },
+        {
+            "name": "Security - Critical Vulnerabilities",
+            "type": "metric alert",
+            "query": "avg(last_10m):sum:security.vulnerabilities.critical{*} > 0",
+            "message": "Critical security vulnerabilities detected",
+            "tags": ["team:security", "severity:critical"],
+            "options": {
+                "thresholds": {
+                    "critical": 0
+                },
+                "notify_no_data": False
+            }
+        },
+        {
+            "name": "ETL Pipeline Failure",
+            "type": "metric alert",
+            "query": "avg(last_15m):sum:custom.etl.pipeline.status{*} by {pipeline} < 1",
+            "message": "ETL pipeline {{pipeline.name}} has failed",
+            "tags": ["team:data-engineering", "severity:critical"],
+            "options": {
+                "thresholds": {
+                    "critical": 1
+                },
+                "notify_no_data": True,
+                "no_data_timeframe": 20
+            }
+        }
+    ]
+    
+    created_monitors = []
+    for monitor_config in monitors:
+        try:
+            response = api.Monitor.create(**monitor_config)
+            created_monitors.append({
+                'name': monitor_config['name'],
+                'id': response['id'],
+                'url': f"https://app.datadoghq.com/monitors/{response['id']}"
+            })
+            print(f"Created monitor: {monitor_config['name']} (ID: {response['id']})")
+        except Exception as e:
+            print(f"Error creating monitor {monitor_config['name']}: {e}")
+    
+    # Save created monitor IDs for reference
+    with open('/tmp/created_monitors.json', 'w') as f:
+        json.dump(created_monitors, f, indent=2)
+    
+    print(f"Successfully created {len(created_monitors)} monitors")
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: datadog-monitors-setup
+  namespace: datadog
+spec:
+  template:
+    metadata:
+      labels:
+        app: datadog-monitors-setup
+    spec:
+      containers:
+      - name: monitors-setup
+        image: python:3.9-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install datadog
+          python /scripts/create_monitors.py
+        env:
+        - name: DD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: api-key
+        - name: DD_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: datadog-secret
+              key: app-key
+        volumeMounts:
+        - name: monitor-scripts
+          mountPath: /scripts
+      volumes:
+      - name: monitor-scripts
+        configMap:
+          name: datadog-monitors
+      restartPolicy: OnFailure

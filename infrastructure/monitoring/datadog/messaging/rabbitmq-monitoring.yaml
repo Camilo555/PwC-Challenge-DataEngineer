@@ -1,0 +1,80 @@
+# RabbitMQ Message Queue Monitoring Configuration
+ad_identifiers:
+  - rabbitmq
+
+init_config:
+  # Global RabbitMQ monitoring configuration
+  
+instances:
+  # RabbitMQ Management API endpoint
+  - rabbitmq_api_url: http://rabbitmq.data-platform.svc.cluster.local:15672/api/
+    rabbitmq_user: datadog
+    rabbitmq_pass: ENC[datadog_rabbitmq_password]
+    ssl_verify: false
+    tags:
+      - env:production
+      - service:rabbitmq
+      - team:data-platform
+      - cluster:message-queue
+    # Connection timeout
+    timeout: 10
+    # Queue monitoring configuration
+    queues:
+      - data_ingestion_queue
+      - data_processing_queue
+      - analytics_queue
+      - notifications_queue
+      - dead_letter_queue
+    # Exchange monitoring
+    exchanges:
+      - data_exchange
+      - analytics_exchange
+      - notification_exchange
+    # VHost monitoring
+    vhosts:
+      - /
+      - /data-platform
+      - /analytics
+    # Node monitoring
+    nodes:
+      - rabbit@rabbitmq-1
+      - rabbit@rabbitmq-2  
+      - rabbit@rabbitmq-3
+    # Collect queue family metrics
+    collect_queue_family_tag: true
+    # Custom queue regex patterns
+    queue_whitelist:
+      - "data\\..*"
+      - "analytics\\..*"
+      - "processing\\..*"
+    # Monitor federation and clustering
+    federation_upstream_set: all
+
+logs:
+  # RabbitMQ server logs
+  - type: file
+    path: "/var/log/rabbitmq/*.log"
+    service: rabbitmq
+    source: rabbitmq
+    sourcecategory: messaging
+    tags:
+      - env:production
+      - service:rabbitmq
+      - team:data-platform
+    log_processing_rules:
+      # Parse RabbitMQ log format
+      - type: multi_line
+        name: rabbitmq_multiline
+        pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+      # Extract error events
+      - type: include_at_match
+        name: rabbitmq_errors
+        pattern: '\s(ERROR|CRASH)\s'
+      # Monitor connection events
+      - type: include_at_match
+        name: rabbitmq_connections
+        pattern: 'connection|closing'
+      # Monitor clustering events  
+      - type: include_at_match
+        name: rabbitmq_cluster
+        pattern: 'Cluster|cluster'

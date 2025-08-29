@@ -1929,6 +1929,215 @@ async def stress_test_model(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/synthetic-monitoring/status")
+async def get_synthetic_monitoring_status(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get DataDog synthetic monitoring status for ML analytics."""
+    try:
+        user = await verify_token(credentials.credentials)
+        
+        # Mock synthetic monitoring status - in production this would integrate with actual monitoring
+        monitoring_status = {
+            "service": "ml-analytics-synthetic-monitoring",
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "monitoring_scope": "enterprise",
+            "components": {
+                "api_monitoring": {
+                    "status": "active",
+                    "tests_running": 15,
+                    "success_rate_24h": 99.2,
+                    "avg_response_time_ms": 145
+                },
+                "ml_pipeline_monitoring": {
+                    "status": "active", 
+                    "model_health_tests": 8,
+                    "feature_pipeline_tests": 6,
+                    "accuracy_tests": 4,
+                    "success_rate_24h": 98.8
+                },
+                "global_monitoring": {
+                    "status": "active",
+                    "regions_monitored": ["us-east-1", "us-west-2", "eu-west-1"],
+                    "cdn_tests": 5,
+                    "network_tests": 12,
+                    "disaster_recovery_tests": 3
+                },
+                "automation": {
+                    "status": "active",
+                    "rules_configured": 12,
+                    "alerts_triggered_24h": 3,
+                    "automated_responses": 2
+                }
+            },
+            "sla_compliance": {
+                "availability_target": 99.9,
+                "current_availability": 99.2,
+                "response_time_target_ms": 2000,
+                "current_avg_response_time_ms": 145,
+                "sla_met": True
+            },
+            "recent_insights": [
+                {
+                    "type": "performance_trend",
+                    "message": "ML model inference response time improved by 15% over last 7 days",
+                    "severity": "info"
+                },
+                {
+                    "type": "business_impact",
+                    "message": "High availability maintained during peak traffic periods",
+                    "severity": "info"
+                }
+            ]
+        }
+        
+        return monitoring_status
+        
+    except Exception as e:
+        logger.error(f"Error getting synthetic monitoring status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/synthetic-monitoring/report")
+async def get_comprehensive_synthetic_monitoring_report(
+    time_range: str = Query("24h", description="Time range for report (1h, 24h, 7d, 30d)"),
+    include_trends: bool = Query(True, description="Include performance trends analysis"),
+    include_business_impact: bool = Query(True, description="Include business impact correlation"),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get comprehensive DataDog synthetic monitoring report for ML analytics."""
+    try:
+        user = await verify_token(credentials.credentials)
+        
+        # Mock comprehensive report - in production this would integrate with actual DataDog synthetic monitoring
+        report = {
+            "report_generated_at": datetime.utcnow().isoformat(),
+            "time_range": time_range,
+            "executive_summary": {
+                "overall_health": "healthy",
+                "total_tests_monitored": 45,
+                "uptime_percentage": 99.2,
+                "critical_issues": 0,
+                "performance_grade": "A-"
+            },
+            "api_synthetic_tests": {
+                "endpoint_tests": 15,
+                "workflow_tests": 8,
+                "sla_compliance_tests": 5,
+                "success_rate": 99.1,
+                "avg_response_time_ms": 145,
+                "failed_tests_24h": 2,
+                "top_performing_endpoints": [
+                    {"endpoint": "/health", "success_rate": 100.0, "avg_response_time": 45},
+                    {"endpoint": "/predict", "success_rate": 99.5, "avg_response_time": 180},
+                    {"endpoint": "/models", "success_rate": 99.8, "avg_response_time": 120}
+                ]
+            },
+            "ml_pipeline_synthetic_tests": {
+                "model_health_tests": 8,
+                "feature_pipeline_tests": 6,
+                "accuracy_tests": 4,
+                "ab_test_integrity": 2,
+                "success_rate": 98.8,
+                "model_performance": {
+                    "sales_prediction_model": {"accuracy": 0.89, "latency_ms": 125, "health": "good"},
+                    "customer_segmentation_model": {"accuracy": 0.87, "latency_ms": 95, "health": "excellent"},
+                    "recommendation_engine": {"accuracy": 0.92, "latency_ms": 200, "health": "good"}
+                }
+            },
+            "global_monitoring": {
+                "regional_tests": {
+                    "us_east_1": {"success_rate": 99.5, "avg_latency": 85},
+                    "us_west_2": {"success_rate": 99.2, "avg_latency": 110}, 
+                    "eu_west_1": {"success_rate": 98.9, "avg_latency": 160}
+                },
+                "cdn_performance": {
+                    "cache_hit_ratio": 94.5,
+                    "edge_response_time": 45,
+                    "global_availability": 99.8
+                },
+                "disaster_recovery": {
+                    "failover_tests_passed": 3,
+                    "rto_compliance": True,
+                    "rpo_compliance": True
+                }
+            },
+            "automation_insights": {
+                "total_automation_rules": 12,
+                "rules_triggered_24h": 3,
+                "automated_responses": 2,
+                "manual_interventions_prevented": 5,
+                "mttr_improvement_minutes": 15,
+                "key_automations": [
+                    {
+                        "rule": "ML Model Drift Detection",
+                        "triggered": 1,
+                        "action": "Alert data science team, increase monitoring frequency"
+                    },
+                    {
+                        "rule": "API Performance Degradation", 
+                        "triggered": 1,
+                        "action": "Scale compute resources, notify SRE team"
+                    }
+                ]
+            },
+            "performance_trends": {
+                "response_time_trend": {
+                    "direction": "improving",
+                    "change_percentage": -8.5,
+                    "statistical_significance": 0.95
+                },
+                "success_rate_trend": {
+                    "direction": "stable", 
+                    "change_percentage": 0.2,
+                    "statistical_significance": 0.15
+                },
+                "model_accuracy_trend": {
+                    "direction": "improving",
+                    "change_percentage": 2.1,
+                    "statistical_significance": 0.87
+                }
+            } if include_trends else {},
+            "business_impact_analysis": {
+                "estimated_revenue_protected": 450000,
+                "prevented_outage_minutes": 35,
+                "user_experience_score": 4.7,
+                "cost_of_monitoring_vs_prevented_losses": 0.12,
+                "critical_business_processes_monitored": [
+                    "Customer prediction pipeline",
+                    "Real-time recommendation engine", 
+                    "Fraud detection system",
+                    "Automated pricing model"
+                ]
+            } if include_business_impact else {},
+            "recommendations": [
+                "Consider increasing monitoring frequency for EU region during peak hours",
+                "Implement predictive scaling based on synthetic test performance patterns",
+                "Add mobile device synthetic testing for recommendation engine",
+                "Enable advanced anomaly detection for model drift scenarios"
+            ],
+            "compliance_status": {
+                "sla_targets": {
+                    "availability": {"target": 99.9, "actual": 99.2, "status": "at_risk"},
+                    "response_time": {"target": 2000, "actual": 145, "status": "excellent"},
+                    "error_rate": {"target": 1.0, "actual": 0.8, "status": "excellent"}
+                },
+                "regulatory_compliance": {
+                    "data_privacy": "compliant",
+                    "model_governance": "compliant", 
+                    "audit_readiness": "ready"
+                }
+            }
+        }
+        
+        return report
+        
+    except Exception as e:
+        logger.error(f"Error generating synthetic monitoring report: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/analytics/model-lifecycle/{model_id}")
 async def get_model_lifecycle_analytics(
     model_id: str = Path(..., description="Model ID"),

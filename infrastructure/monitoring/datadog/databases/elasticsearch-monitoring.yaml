@@ -1,0 +1,161 @@
+# Elasticsearch Database Monitoring Configuration
+ad_identifiers:
+  - elasticsearch
+  - elastic
+
+init_config:
+  # Global Elasticsearch monitoring configuration
+  
+instances:
+  # Elasticsearch Master Node
+  - url: https://elasticsearch-master.data-platform.svc.cluster.local:9200
+    username: datadog
+    password: ENC[datadog_elasticsearch_password]
+    auth_type: basic
+    tls_verify: true
+    tls_ca_cert: /opt/datadog-agent/etc/ssl/ca.crt
+    tags:
+      - env:production
+      - role:master
+      - service:elasticsearch
+      - team:data-platform
+      - cluster:search-analytics
+    # Cluster health monitoring
+    cluster_stats: true
+    # Node statistics
+    node_stats: true
+    # Index statistics
+    index_stats: true
+    # Pending tasks monitoring
+    pending_task_stats: true
+    # Thread pool monitoring
+    pshard_stats: true
+    # Field data cache monitoring
+    slm_stats: true
+    # Request timeout
+    timeout: 5
+    
+  # Elasticsearch Data Nodes
+  - url: https://elasticsearch-data-1.data-platform.svc.cluster.local:9200
+    username: datadog
+    password: ENC[datadog_elasticsearch_password]
+    auth_type: basic
+    tls_verify: true
+    tls_ca_cert: /opt/datadog-agent/etc/ssl/ca.crt
+    tags:
+      - env:production
+      - role:data
+      - service:elasticsearch
+      - team:data-platform
+      - cluster:search-analytics
+      - node:data-1
+    cluster_stats: false
+    node_stats: true
+    index_stats: true
+    pending_task_stats: false
+    pshard_stats: true
+    slm_stats: false
+    timeout: 5
+    
+  - url: https://elasticsearch-data-2.data-platform.svc.cluster.local:9200
+    username: datadog
+    password: ENC[datadog_elasticsearch_password]
+    auth_type: basic
+    tls_verify: true
+    tls_ca_cert: /opt/datadog-agent/etc/ssl/ca.crt
+    tags:
+      - env:production
+      - role:data
+      - service:elasticsearch
+      - team:data-platform
+      - cluster:search-analytics
+      - node:data-2
+    cluster_stats: false
+    node_stats: true
+    index_stats: true
+    pending_task_stats: false
+    pshard_stats: true
+    slm_stats: false
+    timeout: 5
+    
+  # Elasticsearch Coordinating Node
+  - url: https://elasticsearch-coord.data-platform.svc.cluster.local:9200
+    username: datadog
+    password: ENC[datadog_elasticsearch_password]
+    auth_type: basic
+    tls_verify: true
+    tls_ca_cert: /opt/datadog-agent/etc/ssl/ca.crt
+    tags:
+      - env:production
+      - role:coordinating
+      - service:elasticsearch
+      - team:data-platform
+      - cluster:search-analytics
+    cluster_stats: false
+    node_stats: true
+    index_stats: false
+    pending_task_stats: false
+    pshard_stats: false
+    slm_stats: false
+    timeout: 5
+
+logs:
+  # Elasticsearch server logs
+  - type: file
+    path: "/var/log/elasticsearch/*.log"
+    service: elasticsearch
+    source: elasticsearch
+    sourcecategory: database
+    tags:
+      - env:production
+      - service:elasticsearch
+      - team:data-platform
+    log_processing_rules:
+      # Parse Elasticsearch JSON logs
+      - type: multi_line
+        name: elasticsearch_multiline
+        pattern: '^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'
+      # Extract important events
+      - type: include_at_match
+        name: elasticsearch_errors
+        pattern: '\[(WARN|ERROR|FATAL)\]'
+      # Monitor slow queries
+      - type: include_at_match
+        name: elasticsearch_slow_queries
+        pattern: 'slow_query'
+      # Monitor GC events
+      - type: include_at_match
+        name: elasticsearch_gc
+        pattern: '\[gc\]'
+        
+  # Elasticsearch slow query logs
+  - type: file
+    path: "/var/log/elasticsearch/*_index_search_slowlog.log"
+    service: elasticsearch-slow-queries
+    source: elasticsearch
+    sourcecategory: database
+    tags:
+      - env:production
+      - service:elasticsearch
+      - team:data-platform
+      - log_type:slow_queries
+    log_processing_rules:
+      - type: include_at_match
+        name: slow_search_queries
+        pattern: 'took_millis'
+        
+  # Elasticsearch audit logs
+  - type: file
+    path: "/var/log/elasticsearch/*_audit.log"
+    service: elasticsearch-audit
+    source: elasticsearch
+    sourcecategory: database
+    tags:
+      - env:production
+      - service:elasticsearch
+      - team:data-platform
+      - log_type:audit
+    log_processing_rules:
+      - type: include_at_match
+        name: security_events
+        pattern: '(authentication_failed|access_denied|tampered_request)'

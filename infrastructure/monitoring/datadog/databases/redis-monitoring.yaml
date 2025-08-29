@@ -1,0 +1,112 @@
+# Redis Database Monitoring Configuration
+ad_identifiers:
+  - redis
+
+init_config:
+  # Global Redis monitoring configuration
+  command_stats: true
+  
+instances:
+  # Redis Primary Instance
+  - host: redis-primary.data-platform.svc.cluster.local
+    port: 6379
+    password: ENC[datadog_redis_password]
+    db: 0
+    ssl: false
+    tags:
+      - env:production
+      - role:primary
+      - service:redis
+      - team:data-platform
+      - cluster:data-cache
+    # Connection configuration
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    # Performance monitoring
+    keys:
+      # Monitor specific key patterns
+      - cache:user:*
+      - cache:session:*
+      - cache:analytics:*
+      - queue:processing:*
+      - metrics:*
+    warn_on_missing_keys: false
+    
+  # Redis Sentinel Monitoring
+  - host: redis-sentinel.data-platform.svc.cluster.local
+    port: 26379
+    password: ENC[datadog_redis_password]
+    tags:
+      - env:production
+      - role:sentinel
+      - service:redis
+      - team:data-platform
+      - cluster:data-cache
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    
+  # Redis Cluster Nodes
+  - host: redis-cluster-1.data-platform.svc.cluster.local
+    port: 6379
+    password: ENC[datadog_redis_password]
+    tags:
+      - env:production
+      - role:cluster-node
+      - service:redis
+      - team:data-platform
+      - cluster:data-cache
+      - node:1
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    
+  - host: redis-cluster-2.data-platform.svc.cluster.local
+    port: 6379
+    password: ENC[datadog_redis_password]
+    tags:
+      - env:production
+      - role:cluster-node
+      - service:redis
+      - team:data-platform
+      - cluster:data-cache
+      - node:2
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    
+  - host: redis-cluster-3.data-platform.svc.cluster.local
+    port: 6379
+    password: ENC[datadog_redis_password]
+    tags:
+      - env:production
+      - role:cluster-node
+      - service:redis
+      - team:data-platform
+      - cluster:data-cache
+      - node:3
+    socket_timeout: 5
+    socket_connect_timeout: 5
+
+logs:
+  # Redis log collection
+  - type: file
+    path: "/var/log/redis/*.log"
+    service: redis
+    source: redis
+    sourcecategory: database
+    tags:
+      - env:production
+      - service:redis
+      - team:data-platform
+    log_processing_rules:
+      # Parse Redis log levels
+      - type: include_at_match
+        name: redis_errors
+        pattern: '# (WARNING|ERROR)'
+      # Monitor slow log entries
+      - type: include_at_match
+        name: redis_slow_log
+        pattern: 'Slow log'
+      # Mask authentication data
+      - type: mask_sequences
+        name: mask_auth
+        replace_placeholder: "[MASKED]"
+        pattern: "AUTH [^\s]+"

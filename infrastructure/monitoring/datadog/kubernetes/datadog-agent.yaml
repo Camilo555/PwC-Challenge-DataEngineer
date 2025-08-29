@@ -1,0 +1,339 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-secret
+  namespace: datadog
+type: Opaque
+data:
+  api-key: <base64-encoded-api-key>
+  app-key: <base64-encoded-app-key>
+---
+apiVersion: datadoghq.com/v2alpha1
+kind: DatadogAgent
+metadata:
+  name: datadog
+  namespace: datadog
+spec:
+  global:
+    credentials:
+      apiSecret:
+        secretName: datadog-secret
+        keyName: api-key
+      appSecret:
+        secretName: datadog-secret
+        keyName: app-key
+    site: datadoghq.com
+    registry: gcr.io/datadoghq
+    criSocketPath: /var/run/crio/crio.sock
+    clusterName: enterprise-data-platform
+    tags:
+      - environment:production
+      - platform:kubernetes
+      - product:data-platform
+      - team:data-engineering
+    logLevel: INFO
+  features:
+    admissionController:
+      enabled: true
+    npm:
+      enabled: true
+    apm:
+      enabled: true
+      hostPortEnabled: true
+      unixDomainSocketEnabled: true
+      portEnabled: true
+    logCollection:
+      enabled: true
+      containerCollectAll: true
+      containerLogsSource: kubernetes
+    kubernetesStateCoreCheck:
+      enabled: true
+    orchestratorExplorer:
+      enabled: true
+      scrubContainers: true
+    processDiscovery:
+      enabled: true
+    liveProcessCollection:
+      enabled: true
+    liveContainerCollection:
+      enabled: true
+    eventCollection:
+      collectKubernetesEvents: true
+    helmCheck:
+      enabled: true
+      collectEvents: true
+    prometheusScraping:
+      enabled: true
+      serviceEndpoints: true
+  override:
+    nodeAgent:
+      image:
+        tag: 7.50.0
+      env:
+        - name: DD_LOGS_INJECTION
+          value: "true"
+        - name: DD_TRACE_SAMPLE_RATE
+          value: "1"
+        - name: DD_RUNTIME_METRICS_ENABLED
+          value: "true"
+        - name: DD_PROFILING_ENABLED
+          value: "true"
+        - name: DD_KUBERNETES_COLLECT_METADATA_TAGS
+          value: "true"
+        - name: DD_KUBERNETES_POD_LABELS_AS_TAGS
+          value: '{"app":"kube_app","version":"kube_version"}'
+        - name: DD_KUBERNETES_POD_ANNOTATIONS_AS_TAGS
+          value: '{"prometheus.io/scrape":"prometheus_scrape"}'
+        - name: DD_CLUSTER_CHECKS_ENABLED
+          value: "true"
+        - name: DD_EXTRA_CONFIG_PROVIDERS
+          value: "clusterchecks endpointschecks"
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 200m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+      hostNetwork: true
+      hostPorts:
+        - containerPort: 8125
+          hostPort: 8125
+          name: dogstatsdport
+        - containerPort: 8126
+          hostPort: 8126
+          name: traceport
+      tolerations:
+        - operator: Exists
+    clusterAgent:
+      enabled: true
+      replicas: 2
+      image:
+        tag: 7.50.0
+      config:
+        admissionController:
+          enabled: true
+          mutateUnlabelled: false
+          serviceName: datadog-admission-controller
+        clusterChecks:
+          enabled: true
+        external_metrics:
+          enabled: true
+          port: 8443
+        metricsProvider:
+          enabled: true
+      env:
+        - name: DD_LEADER_ELECTION
+          value: "true"
+        - name: DD_COLLECT_KUBERNETES_EVENTS
+          value: "true"
+        - name: DD_CLUSTER_CHECKS_ENABLED
+          value: "true"
+        - name: DD_EXTRA_CONFIG_PROVIDERS
+          value: "clusterchecks endpointschecks"
+        - name: DD_EXTERNAL_METRICS_PROVIDER_ENABLED
+          value: "true"
+        - name: DD_EXTERNAL_METRICS_PROVIDER_PORT
+          value: "8443"
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 200m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+  extraConfd:
+    configDataMap:
+      kubernetes_apiserver.yaml: |-
+        ad_identifiers:
+          - kube-apiserver
+        init_config:
+        instances:
+          - prometheus_url: https://kubernetes.default/metrics
+            bearer_token_auth: true
+            ssl_verify: false
+            tags:
+              - component:apiserver
+      etcd.yaml: |-
+        cluster_check: true
+        init_config:
+        instances:
+          - prometheus_url: http://etcd:2379/metrics
+            tags:
+              - component:etcd
+      coredns.yaml: |-
+        cluster_check: true
+        init_config:
+        instances:
+          - prometheus_url: http://kube-dns:9153/metrics
+            tags:
+              - component:coredns
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-cluster-checks
+  namespace: datadog
+data:
+  postgres.yaml: |-
+    cluster_check: true
+    init_config:
+    instances:
+      - host: postgres-service
+        port: 5432
+        username: datadog
+        password: <postgres-password>
+        dbname: postgres
+        tags:
+          - db:postgresql
+          - env:production
+          - service:data-warehouse
+  redis.yaml: |-
+    cluster_check: true
+    init_config:
+    instances:
+      - host: redis-service
+        port: 6379
+        password: <redis-password>
+        tags:
+          - db:redis
+          - env:production
+          - service:cache
+  elasticsearch.yaml: |-
+    cluster_check: true
+    init_config:
+    instances:
+      - url: http://elasticsearch-service:9200
+        cluster_stats: true
+        pshard_stats: true
+        pending_task_stats: true
+        tags:
+          - db:elasticsearch
+          - env:production
+          - service:search
+  rabbitmq.yaml: |-
+    cluster_check: true
+    init_config:
+    instances:
+      - rabbitmq_api_url: http://rabbitmq-service:15672/api/
+        rabbitmq_user: datadog
+        rabbitmq_pass: <rabbitmq-password>
+        tags:
+          - mq:rabbitmq
+          - env:production
+          - service:messaging
+  kafka.yaml: |-
+    cluster_check: true
+    init_config:
+    instances:
+      - host: kafka-service
+        port: 9092
+        consumer_groups: true
+        tags:
+          - mq:kafka
+          - env:production
+          - service:streaming
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datadog-cluster-agent
+  namespace: datadog
+spec:
+  type: ClusterIP
+  selector:
+    app: datadog-cluster-agent
+  ports:
+  - port: 5005
+    name: agentport
+    targetPort: 5005
+  - port: 8443
+    name: metricsapi
+    targetPort: 8443
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: datadog-cluster-agent
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - events
+  - endpoints
+  - pods
+  - nodes
+  - componentstatuses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "quota.openshift.io"
+  resources:
+  - clusterresourcequotas
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - "autoscaling"
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  resourceNames:
+  - datadogtoken
+  - datadog-leader-election
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - update
+- nonResourceURLs:
+  - "/version"
+  - "/healthz"
+  - "/metrics"
+  verbs:
+  - get
+- apiGroups:
+  - "admissionregistration.k8s.io"
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: datadog-cluster-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: datadog-cluster-agent
+subjects:
+- kind: ServiceAccount
+  name: datadog-cluster-agent
+  namespace: datadog
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: datadog-cluster-agent
+  namespace: datadog

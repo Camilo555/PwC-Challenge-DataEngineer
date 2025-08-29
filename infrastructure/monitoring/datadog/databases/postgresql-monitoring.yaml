@@ -1,0 +1,160 @@
+# PostgreSQL Database Monitoring Configuration
+ad_identifiers:
+  - postgres
+  - postgresql
+
+init_config:
+  # Global configuration for all PostgreSQL instances
+  collect_function_metrics: true
+  collect_count_metrics: true
+  collect_activity_metrics: true
+  collect_database_size_metrics: true
+  collect_default_database: true
+  
+instances:
+  # Primary PostgreSQL instance
+  - host: postgresql-primary.data-platform.svc.cluster.local
+    port: 5432
+    username: datadog
+    password: ENC[datadog_postgresql_password]
+    dbname: postgres
+    ssl: prefer
+    tags:
+      - env:production
+      - role:primary
+      - service:postgresql
+      - team:data-platform
+    options:
+      statement_timeout: 5000
+      lock_timeout: 5000
+    relations:
+      # Monitor specific tables and indexes
+      - relation_regex: '.*\.fact_.*|.*\.dim_.*'
+        schemas:
+          - public
+          - analytics
+          - warehouse
+      - relation_name: 'pg_stat_user_tables'
+        schemas:
+          - public
+    custom_queries:
+      # Monitor slow queries
+      - metric_prefix: postgresql.slow_queries
+        query: |
+          SELECT schemaname, tablename, 
+                 n_tup_ins as inserts,
+                 n_tup_upd as updates,
+                 n_tup_del as deletes,
+                 n_tup_hot_upd as hot_updates,
+                 seq_scan as sequential_scans,
+                 seq_tup_read as sequential_tuples_read,
+                 idx_scan as index_scans,
+                 idx_tup_fetch as index_tuples_fetched
+          FROM pg_stat_user_tables
+        columns:
+          - name: schemaname
+            type: tag
+          - name: tablename
+            type: tag
+          - name: inserts
+            type: gauge
+          - name: updates
+            type: gauge
+          - name: deletes
+            type: gauge
+          - name: hot_updates
+            type: gauge
+          - name: sequential_scans
+            type: gauge
+          - name: sequential_tuples_read
+            type: gauge
+          - name: index_scans
+            type: gauge
+          - name: index_tuples_fetched
+            type: gauge
+            
+      # Monitor connection pool status
+      - metric_prefix: postgresql.connection_pool
+        query: |
+          SELECT state, 
+                 COUNT(*) as count,
+                 AVG(EXTRACT(EPOCH FROM (now() - query_start))) as avg_duration
+          FROM pg_stat_activity 
+          WHERE state IS NOT NULL
+          GROUP BY state
+        columns:
+          - name: state
+            type: tag
+          - name: count
+            type: gauge
+          - name: avg_duration
+            type: gauge
+            
+      # Monitor index usage efficiency
+      - metric_prefix: postgresql.index_efficiency
+        query: |
+          SELECT schemaname, tablename, indexname,
+                 idx_scan as index_scans,
+                 idx_tup_read as index_tuples_read,
+                 idx_tup_fetch as index_tuples_fetched,
+                 pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+          FROM pg_stat_user_indexes
+        columns:
+          - name: schemaname
+            type: tag
+          - name: tablename
+            type: tag
+          - name: indexname
+            type: tag
+          - name: index_scans
+            type: gauge
+          - name: index_tuples_read
+            type: gauge
+          - name: index_tuples_fetched
+            type: gauge
+            
+  # Read replica PostgreSQL instance
+  - host: postgresql-replica.data-platform.svc.cluster.local
+    port: 5432
+    username: datadog
+    password: ENC[datadog_postgresql_password]
+    dbname: postgres
+    ssl: prefer
+    tags:
+      - env:production
+      - role:replica
+      - service:postgresql
+      - team:data-platform
+    options:
+      statement_timeout: 5000
+      lock_timeout: 5000
+    collect_function_metrics: false
+    collect_count_metrics: true
+    collect_activity_metrics: true
+    collect_database_size_metrics: false
+    
+logs:
+  # PostgreSQL log collection
+  - type: file
+    path: "/var/log/postgresql/*.log"
+    service: postgresql
+    source: postgresql
+    sourcecategory: database
+    tags:
+      - env:production
+      - service:postgresql
+      - team:data-platform
+    log_processing_rules:
+      # Parse PostgreSQL log format
+      - type: multi_line
+        name: postgresql_multiline
+        pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+      # Extract slow query information
+      - type: include_at_match
+        name: slow_queries
+        pattern: 'duration: \d+\.\d+ ms'
+      # Mask sensitive data in logs
+      - type: mask_sequences
+        name: mask_passwords
+        replace_placeholder: "[MASKED]"
+        pattern: "password='[^']*'"

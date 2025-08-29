@@ -1,0 +1,67 @@
+# Docker Container Monitoring Configuration
+ad_identifiers:
+  - docker
+
+init_config:
+  # Global Docker monitoring configuration
+  
+instances:
+  # Docker daemon monitoring via Unix socket
+  - url: "unix://var/run/docker.sock"
+    tags:
+      - env:production
+      - service:docker
+      - team:data-platform
+    # Container collection settings
+    collect_container_size: true
+    collect_volumes_count: true
+    collect_images_stats: true
+    collect_disk_stats: true
+    collect_exit_codes: true
+    # Performance monitoring
+    performance_tags:
+      - "container_name"
+      - "docker_image" 
+      - "image_name"
+      - "image_tag"
+    # Container filtering
+    container_whitelist: []
+    container_blacklist:
+      - "name:datadog-agent"
+      - "name:dd-agent"
+    # Custom metrics collection
+    custom_cgroups: true
+    # Health check configuration
+    health_check_whitelist:
+      - ".*data.*"
+      - ".*platform.*"
+      - ".*analytics.*"
+
+logs:
+  # Docker daemon logs
+  - type: file
+    path: "/var/log/docker.log"
+    service: docker
+    source: docker
+    sourcecategory: containers
+    tags:
+      - env:production
+      - service:docker
+      - team:data-platform
+    log_processing_rules:
+      # Parse Docker log format
+      - type: multi_line
+        name: docker_multiline
+        pattern: '^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
+      # Extract error events
+      - type: include_at_match
+        name: docker_errors
+        pattern: '\s(ERROR|ERRO|FATAL)\s'
+      # Monitor container lifecycle events
+      - type: include_at_match
+        name: container_events
+        pattern: '(start|stop|kill|die|create|destroy)'
+      # Monitor image events
+      - type: include_at_match
+        name: image_events
+        pattern: '(pull|push|delete|tag|untag)'

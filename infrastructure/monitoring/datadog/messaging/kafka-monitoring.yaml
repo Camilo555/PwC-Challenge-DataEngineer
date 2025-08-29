@@ -1,0 +1,195 @@
+# Apache Kafka Message Queue Monitoring Configuration
+ad_identifiers:
+  - kafka
+
+init_config:
+  # Global Kafka monitoring configuration
+  is_jmx: true
+  collect_default_metrics: true
+
+instances:
+  # Kafka Broker JMX Monitoring
+  - host: kafka-broker-1.data-platform.svc.cluster.local
+    port: 9999
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform
+      - cluster:streaming-platform
+      - broker:1
+    # JMX configuration
+    user: datadog
+    password: ENC[datadog_kafka_jmx_password]
+    process_name_regex: .*kafka.*
+    tools_jar_path: /opt/kafka/libs/tools.jar
+    # Connection settings
+    rmi_connection_timeout: 20000
+    rmi_client_timeout: 15000
+    # Custom metrics collection
+    conf:
+      # Broker metrics
+      - include:
+          domain: kafka.server
+          bean_regex: kafka\.server:type=BrokerTopicMetrics,name=MessagesInPerSec,topic=.*
+          attribute:
+            Count:
+              metric_type: counter
+              alias: kafka.broker.messages_in_per_sec
+      - include:
+          domain: kafka.server
+          bean_regex: kafka\.server:type=BrokerTopicMetrics,name=BytesInPerSec,topic=.*
+          attribute:
+            Count:
+              metric_type: counter
+              alias: kafka.broker.bytes_in_per_sec
+      - include:
+          domain: kafka.server
+          bean_regex: kafka\.server:type=BrokerTopicMetrics,name=BytesOutPerSec,topic=.*
+          attribute:
+            Count:
+              metric_type: counter
+              alias: kafka.broker.bytes_out_per_sec
+      # Request metrics
+      - include:
+          domain: kafka.network
+          bean_regex: kafka\.network:type=RequestMetrics,name=RequestsPerSec,request=.*
+          attribute:
+            Count:
+              metric_type: counter
+              alias: kafka.network.requests_per_sec
+      # Partition metrics
+      - include:
+          domain: kafka.log
+          bean_regex: kafka\.log:type=LogSize,name=Size,topic=.*,partition=.*
+          attribute:
+            Value:
+              metric_type: gauge
+              alias: kafka.log.partition_size
+      # Replica manager metrics
+      - include:
+          domain: kafka.server
+          bean_regex: kafka\.server:type=ReplicaManager,name=LeaderCount
+          attribute:
+            Value:
+              metric_type: gauge
+              alias: kafka.replication.leader_count
+      - include:
+          domain: kafka.server
+          bean_regex: kafka\.server:type=ReplicaManager,name=PartitionCount
+          attribute:
+            Value:
+              metric_type: gauge
+              alias: kafka.replication.partition_count
+              
+  # Additional Kafka Brokers
+  - host: kafka-broker-2.data-platform.svc.cluster.local
+    port: 9999
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform
+      - cluster:streaming-platform
+      - broker:2
+    user: datadog
+    password: ENC[datadog_kafka_jmx_password]
+    process_name_regex: .*kafka.*
+    rmi_connection_timeout: 20000
+    rmi_client_timeout: 15000
+    
+  - host: kafka-broker-3.data-platform.svc.cluster.local
+    port: 9999
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform  
+      - cluster:streaming-platform
+      - broker:3
+    user: datadog
+    password: ENC[datadog_kafka_jmx_password]
+    process_name_regex: .*kafka.*
+    rmi_connection_timeout: 20000
+    rmi_client_timeout: 15000
+
+  # Zookeeper monitoring (if used)
+  - host: zookeeper.data-platform.svc.cluster.local
+    port: 9998
+    tags:
+      - env:production
+      - service:zookeeper
+      - team:data-platform
+      - cluster:streaming-platform
+    user: datadog
+    password: ENC[datadog_zookeeper_jmx_password]
+    process_name_regex: .*zookeeper.*
+    rmi_connection_timeout: 20000
+    rmi_client_timeout: 15000
+    conf:
+      # Zookeeper specific metrics
+      - include:
+          domain: org.apache.ZooKeeperService
+          bean_regex: org\.apache\.ZooKeeperService:name0=ReplicatedServer_id\d+,name1=replica\.\d+
+          attribute:
+            QuorumSize:
+              metric_type: gauge
+              alias: zookeeper.quorum_size
+
+logs:
+  # Kafka server logs
+  - type: file
+    path: "/opt/kafka/logs/server.log"
+    service: kafka
+    source: kafka
+    sourcecategory: messaging
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform
+    log_processing_rules:
+      # Parse Kafka log format
+      - type: multi_line
+        name: kafka_multiline
+        pattern: '^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+      # Extract error events
+      - type: include_at_match
+        name: kafka_errors
+        pattern: '\s(ERROR|FATAL)\s'
+      # Monitor rebalancing events
+      - type: include_at_match
+        name: kafka_rebalancing
+        pattern: 'rebalance|Rebalance'
+      # Monitor partition events
+      - type: include_at_match
+        name: kafka_partitions
+        pattern: 'partition|Partition'
+        
+  # Kafka controller logs
+  - type: file
+    path: "/opt/kafka/logs/controller.log"
+    service: kafka-controller
+    source: kafka
+    sourcecategory: messaging
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform
+      - component:controller
+    log_processing_rules:
+      - type: include_at_match
+        name: controller_events
+        pattern: 'Controller|controller'
+        
+  # Kafka state change logs  
+  - type: file
+    path: "/opt/kafka/logs/state-change.log"
+    service: kafka-state-change
+    source: kafka
+    sourcecategory: messaging
+    tags:
+      - env:production
+      - service:kafka
+      - team:data-platform
+      - component:state-change
+    log_processing_rules:
+      - type: include_at_match
+        name: state_changes
+        pattern: 'state change|State change'

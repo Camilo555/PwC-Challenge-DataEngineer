@@ -2,6 +2,7 @@
 GraphQL Router
 FastAPI integration for GraphQL endpoint.
 """
+
 from strawberry.fastapi import GraphQLRouter
 
 from api.graphql.resolvers import schema
@@ -14,7 +15,7 @@ graphql_router = GraphQLRouter(
     schema,
     graphiql=True,  # Enable GraphiQL interface for development
     path="/graphql",
-    include_in_schema=True
+    include_in_schema=True,
 )
 
 # The router is ready to be included in the main FastAPI app

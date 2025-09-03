@@ -2,6 +2,7 @@
 Intelligent Alerting System for Messaging Infrastructure
 ML-powered alert system with anomaly detection and smart routing for RabbitMQ and Kafka
 """
+
 import json
 import statistics
 from collections.abc import Callable
@@ -78,7 +79,9 @@ class NotificationChannel:
 
 class AnomalyDetector:
     def __init__(self, contamination: float = 0.1, n_estimators: int = 100):
-        self.model = IsolationForest(contamination=contamination, n_estimators=n_estimators, random_state=42)
+        self.model = IsolationForest(
+            contamination=contamination, n_estimators=n_estimators, random_state=42
+        )
         self.scaler = StandardScaler()
         self.is_trained = False
         self.feature_history = []
@@ -93,7 +96,10 @@ class AnomalyDetector:
             self.feature_history = self.feature_history[-1000:]
 
         # Retrain if we have enough samples
-        if len(self.feature_history) >= self.min_samples_for_training and len(self.feature_history) % 10 == 0:
+        if (
+            len(self.feature_history) >= self.min_samples_for_training
+            and len(self.feature_history) % 10 == 0
+        ):
             self._retrain()
 
     def _retrain(self):
@@ -151,7 +157,7 @@ class IntelligentAlerting:
         self.alert_rules[rule.name] = rule
 
         # Initialize anomaly detector for anomaly-based rules
-        if rule.condition == 'anomaly':
+        if rule.condition == "anomaly":
             self.anomaly_detectors[rule.metric_name] = AnomalyDetector()
 
         logger.info(f"Added alert rule: {rule.name}")
@@ -174,7 +180,9 @@ class IntelligentAlerting:
 
         # Limit history size
         if len(self.metric_history[metric_name]) > self.max_history_size:
-            self.metric_history[metric_name] = self.metric_history[metric_name][-self.max_history_size:]
+            self.metric_history[metric_name] = self.metric_history[metric_name][
+                -self.max_history_size :
+            ]
 
         # Update anomaly detector
         if metric_name in self.anomaly_detectors:
@@ -203,7 +211,9 @@ class IntelligentAlerting:
             statistics.stdev(recent_values) if len(recent_values) > 1 else 0,  # Std dev
             max(recent_values),  # Max
             min(recent_values),  # Min
-            recent_values[-1] - recent_values[-2] if len(recent_values) >= 2 else 0,  # Change from previous
+            recent_values[-1] - recent_values[-2]
+            if len(recent_values) >= 2
+            else 0,  # Change from previous
         ]
 
         # Add time-based features
@@ -213,7 +223,9 @@ class IntelligentAlerting:
 
         return features
 
-    async def _evaluate_alert_rules(self, metric_name: str, value: float, timestamp: datetime, tags: dict[str, str]):
+    async def _evaluate_alert_rules(
+        self, metric_name: str, value: float, timestamp: datetime, tags: dict[str, str]
+    ):
         """Evaluate all alert rules for a metric"""
         for rule_name, rule in self.alert_rules.items():
             if rule.metric_name != metric_name or not rule.enabled:
@@ -226,7 +238,9 @@ class IntelligentAlerting:
                     continue
 
             # Evaluate rule
-            should_alert, alert_context = await self._evaluate_rule(rule, metric_name, value, timestamp, tags)
+            should_alert, alert_context = await self._evaluate_rule(
+                rule, metric_name, value, timestamp, tags
+            )
 
             if should_alert:
                 alert = Alert(
@@ -240,7 +254,7 @@ class IntelligentAlerting:
                     metric_value=value,
                     threshold=rule.threshold,
                     timestamp=timestamp,
-                    tags=tags
+                    tags=tags,
                 )
 
                 await self._fire_alert(alert, rule)
@@ -249,7 +263,14 @@ class IntelligentAlerting:
                 cooldown_end = timestamp + timedelta(minutes=rule.cooldown_minutes)
                 self.alert_cooldowns[cooldown_key] = cooldown_end
 
-    async def _evaluate_rule(self, rule: AlertRule, metric_name: str, value: float, timestamp: datetime, tags: dict[str, str]) -> tuple[bool, dict[str, Any]]:
+    async def _evaluate_rule(
+        self,
+        rule: AlertRule,
+        metric_name: str,
+        value: float,
+        timestamp: datetime,
+        tags: dict[str, str],
+    ) -> tuple[bool, dict[str, Any]]:
         """Evaluate a specific rule"""
         context = {}
 
@@ -262,33 +283,35 @@ class IntelligentAlerting:
                 return False, context
 
         # Standard conditions
-        if rule.condition == 'gt':
+        if rule.condition == "gt":
             return value > rule.threshold, context
-        elif rule.condition == 'lt':
+        elif rule.condition == "lt":
             return value < rule.threshold, context
-        elif rule.condition == 'eq':
+        elif rule.condition == "eq":
             return abs(value - rule.threshold) < 0.001, context
-        elif rule.condition == 'anomaly':
+        elif rule.condition == "anomaly":
             if metric_name in self.anomaly_detectors:
                 features = self._extract_features(metric_name, timestamp)
                 if features:
-                    is_anomaly, anomaly_score = self.anomaly_detectors[metric_name].is_anomaly(features)
-                    context['anomaly_score'] = anomaly_score
+                    is_anomaly, anomaly_score = self.anomaly_detectors[metric_name].is_anomaly(
+                        features
+                    )
+                    context["anomaly_score"] = anomaly_score
                     return is_anomaly, context
 
         return False, context
 
-    def _generate_alert_description(self, rule: AlertRule, value: float, context: dict[str, Any]) -> str:
+    def _generate_alert_description(
+        self, rule: AlertRule, value: float, context: dict[str, Any]
+    ) -> str:
         """Generate human-readable alert description"""
-        if rule.condition == 'anomaly':
-            anomaly_score = context.get('anomaly_score', 0)
+        if rule.condition == "anomaly":
+            anomaly_score = context.get("anomaly_score", 0)
             return f"Anomaly detected in {rule.metric_name}. Current value: {value:.2f}, Anomaly score: {anomaly_score:.2f}"
         else:
-            operator_text = {
-                'gt': 'above',
-                'lt': 'below',
-                'eq': 'equal to'
-            }.get(rule.condition, rule.condition)
+            operator_text = {"gt": "above", "lt": "below", "eq": "equal to"}.get(
+                rule.condition, rule.condition
+            )
             return f"{rule.metric_name} is {operator_text} threshold. Current: {value:.2f}, Threshold: {rule.threshold:.2f}"
 
     async def _fire_alert(self, alert: Alert, rule: AlertRule):
@@ -309,8 +332,8 @@ class IntelligentAlerting:
                 "alert_id": alert.id,
                 "severity": alert.severity.value,
                 "metric_value": alert.metric_value,
-                "threshold": alert.threshold
-            }
+                "threshold": alert.threshold,
+            },
         )
 
         # Send notifications
@@ -333,41 +356,51 @@ class IntelligentAlerting:
 
     async def _send_notification(self, channel: NotificationChannel, alert: Alert):
         """Send notification via specific channel"""
-        if channel.type == 'slack':
+        if channel.type == "slack":
             await self._send_slack_notification(channel, alert)
-        elif channel.type == 'webhook':
+        elif channel.type == "webhook":
             await self._send_webhook_notification(channel, alert)
-        elif channel.type == 'email':
+        elif channel.type == "email":
             await self._send_email_notification(channel, alert)
         # Add more notification types as needed
 
     async def _send_slack_notification(self, channel: NotificationChannel, alert: Alert):
         """Send Slack notification"""
-        webhook_url = channel.config.get('webhook_url')
+        webhook_url = channel.config.get("webhook_url")
         if not webhook_url:
             return
 
         color_map = {
-            AlertSeverity.LOW: '#36a64f',
-            AlertSeverity.MEDIUM: '#ffcc00',
-            AlertSeverity.HIGH: '#ff9900',
-            AlertSeverity.CRITICAL: '#ff0000'
+            AlertSeverity.LOW: "#36a64f",
+            AlertSeverity.MEDIUM: "#ffcc00",
+            AlertSeverity.HIGH: "#ff9900",
+            AlertSeverity.CRITICAL: "#ff0000",
         }
 
         payload = {
-            "attachments": [{
-                "color": color_map.get(alert.severity, '#808080'),
-                "title": f"🚨 {alert.title}",
-                "text": alert.description,
-                "fields": [
-                    {"title": "Severity", "value": alert.severity.value.upper(), "short": True},
-                    {"title": "Metric", "value": f"{alert.metric_value:.2f}", "short": True},
-                    {"title": "Threshold", "value": f"{alert.threshold:.2f}" if alert.threshold else "N/A", "short": True},
-                    {"title": "Time", "value": alert.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"), "short": True}
-                ],
-                "footer": f"Source: {alert.source}",
-                "ts": int(alert.timestamp.timestamp())
-            }]
+            "attachments": [
+                {
+                    "color": color_map.get(alert.severity, "#808080"),
+                    "title": f"🚨 {alert.title}",
+                    "text": alert.description,
+                    "fields": [
+                        {"title": "Severity", "value": alert.severity.value.upper(), "short": True},
+                        {"title": "Metric", "value": f"{alert.metric_value:.2f}", "short": True},
+                        {
+                            "title": "Threshold",
+                            "value": f"{alert.threshold:.2f}" if alert.threshold else "N/A",
+                            "short": True,
+                        },
+                        {
+                            "title": "Time",
+                            "value": alert.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                            "short": True,
+                        },
+                    ],
+                    "footer": f"Source: {alert.source}",
+                    "ts": int(alert.timestamp.timestamp()),
+                }
+            ]
         }
 
         async with httpx.AsyncClient() as client:
@@ -375,7 +408,7 @@ class IntelligentAlerting:
 
     async def _send_webhook_notification(self, channel: NotificationChannel, alert: Alert):
         """Send webhook notification"""
-        webhook_url = channel.config.get('url')
+        webhook_url = channel.config.get("url")
         if not webhook_url:
             return
 
@@ -389,10 +422,10 @@ class IntelligentAlerting:
             "threshold": alert.threshold,
             "timestamp": alert.timestamp.isoformat(),
             "tags": alert.tags,
-            "source": alert.source
+            "source": alert.source,
         }
 
-        headers = channel.config.get('headers', {})
+        headers = channel.config.get("headers", {})
 
         async with httpx.AsyncClient() as client:
             await client.post(webhook_url, json=payload, headers=headers, timeout=10)
@@ -448,7 +481,7 @@ class IntelligentAlerting:
                 for severity in AlertSeverity
             },
             "top_alert_sources": self._get_top_alert_sources(recent_alerts),
-            "avg_resolution_time_minutes": self._calculate_avg_resolution_time(weekly_alerts)
+            "avg_resolution_time_minutes": self._calculate_avg_resolution_time(weekly_alerts),
         }
 
     def _get_top_alert_sources(self, alerts: list[Alert], limit: int = 5) -> list[dict[str, Any]]:
@@ -467,15 +500,15 @@ class IntelligentAlerting:
         if not resolved_alerts:
             return None
 
-        total_minutes = sum([
-            (a.resolution_time - a.timestamp).total_seconds() / 60
-            for a in resolved_alerts
-        ])
+        total_minutes = sum(
+            [(a.resolution_time - a.timestamp).total_seconds() / 60 for a in resolved_alerts]
+        )
 
         return total_minutes / len(resolved_alerts)
 
 
 # Messaging-specific alert factory functions
+
 
 def create_rabbitmq_alert_rules() -> list[AlertRule]:
     """Create RabbitMQ-specific alert rules"""
@@ -489,18 +522,18 @@ def create_rabbitmq_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x > 1000,
             source="rabbitmq",
-            tags={"system": "messaging", "component": "rabbitmq"}
+            tags={"system": "messaging", "component": "rabbitmq"},
         ),
         AlertRule(
             id="rabbitmq_queue_depth_critical",
-            name="RabbitMQ Critical Queue Depth", 
+            name="RabbitMQ Critical Queue Depth",
             description="Queue depth critically high - immediate attention required",
             metric_name="rabbitmq_queue_depth",
             threshold=5000,
             severity=AlertSeverity.CRITICAL,
             condition=lambda x: x > 5000,
             source="rabbitmq",
-            tags={"system": "messaging", "component": "rabbitmq"}
+            tags={"system": "messaging", "component": "rabbitmq"},
         ),
         AlertRule(
             id="rabbitmq_no_consumers",
@@ -511,7 +544,7 @@ def create_rabbitmq_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.ERROR,
             condition=lambda x: x == 0,
             source="rabbitmq",
-            tags={"system": "messaging", "component": "rabbitmq"}
+            tags={"system": "messaging", "component": "rabbitmq"},
         ),
         AlertRule(
             id="rabbitmq_connection_failures",
@@ -522,7 +555,7 @@ def create_rabbitmq_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.ERROR,
             condition=lambda x: x > 10,
             source="rabbitmq",
-            tags={"system": "messaging", "component": "rabbitmq"}
+            tags={"system": "messaging", "component": "rabbitmq"},
         ),
         AlertRule(
             id="rabbitmq_memory_usage_high",
@@ -533,8 +566,8 @@ def create_rabbitmq_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x > 85.0,
             source="rabbitmq",
-            tags={"system": "messaging", "component": "rabbitmq"}
-        )
+            tags={"system": "messaging", "component": "rabbitmq"},
+        ),
     ]
 
 
@@ -550,7 +583,7 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x > 1000,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
+            tags={"system": "messaging", "component": "kafka"},
         ),
         AlertRule(
             id="kafka_consumer_lag_critical",
@@ -561,7 +594,7 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.CRITICAL,
             condition=lambda x: x > 10000,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
+            tags={"system": "messaging", "component": "kafka"},
         ),
         AlertRule(
             id="kafka_broker_down",
@@ -572,7 +605,7 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.CRITICAL,
             condition=lambda x: x < 1,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
+            tags={"system": "messaging", "component": "kafka"},
         ),
         AlertRule(
             id="kafka_under_replicated_partitions",
@@ -583,7 +616,7 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.ERROR,
             condition=lambda x: x > 0,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
+            tags={"system": "messaging", "component": "kafka"},
         ),
         AlertRule(
             id="kafka_offline_partitions",
@@ -594,7 +627,7 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.CRITICAL,
             condition=lambda x: x > 0,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
+            tags={"system": "messaging", "component": "kafka"},
         ),
         AlertRule(
             id="kafka_low_throughput",
@@ -605,8 +638,8 @@ def create_kafka_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x < 10.0,
             source="kafka",
-            tags={"system": "messaging", "component": "kafka"}
-        )
+            tags={"system": "messaging", "component": "kafka"},
+        ),
     ]
 
 
@@ -622,7 +655,7 @@ def create_messaging_system_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.ERROR,
             condition=lambda x: x > 5.0,
             source="messaging",
-            tags={"system": "messaging", "component": "general"}
+            tags={"system": "messaging", "component": "general"},
         ),
         AlertRule(
             id="message_processing_latency_high",
@@ -633,7 +666,7 @@ def create_messaging_system_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x > 5000.0,
             source="messaging",
-            tags={"system": "messaging", "component": "general"}
+            tags={"system": "messaging", "component": "general"},
         ),
         AlertRule(
             id="dead_letter_queue_growing",
@@ -644,7 +677,7 @@ def create_messaging_system_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.WARNING,
             condition=lambda x: x > 50,
             source="messaging",
-            tags={"system": "messaging", "component": "general"}
+            tags={"system": "messaging", "component": "general"},
         ),
         AlertRule(
             id="messaging_system_unavailable",
@@ -655,37 +688,37 @@ def create_messaging_system_alert_rules() -> list[AlertRule]:
             severity=AlertSeverity.CRITICAL,
             condition=lambda x: x == 0,  # 0 = unhealthy, 1 = healthy
             source="messaging",
-            tags={"system": "messaging", "component": "general"}
-        )
+            tags={"system": "messaging", "component": "general"},
+        ),
     ]
 
 
 class MessagingAlertManager:
     """Specialized alert manager for messaging systems"""
-    
+
     def __init__(self, alert_manager: IntelligentAlertManager):
         self.alert_manager = alert_manager
         self.logger = get_logger(__name__)
-        
+
         # Setup messaging-specific alert rules
         self._setup_messaging_alerts()
-    
+
     def _setup_messaging_alerts(self):
         """Setup all messaging-related alert rules"""
         # Add RabbitMQ alerts
         for rule in create_rabbitmq_alert_rules():
             self.alert_manager.add_alert_rule(rule)
-        
-        # Add Kafka alerts  
+
+        # Add Kafka alerts
         for rule in create_kafka_alert_rules():
             self.alert_manager.add_alert_rule(rule)
-        
+
         # Add general messaging alerts
         for rule in create_messaging_system_alert_rules():
             self.alert_manager.add_alert_rule(rule)
-        
+
         self.logger.info("Setup messaging-specific alert rules")
-    
+
     def create_custom_messaging_alert(
         self,
         alert_id: str,
@@ -695,13 +728,15 @@ class MessagingAlertManager:
         threshold: float,
         severity: AlertSeverity,
         component: str,
-        condition: Callable[[float], bool] = None
+        condition: Callable[[float], bool] = None,
     ) -> AlertRule:
         """Create custom messaging alert rule"""
-        
+
         if condition is None:
-            condition = lambda x: x > threshold
-        
+
+            def condition(x):
+                return x > threshold
+
         rule = AlertRule(
             id=alert_id,
             name=name,
@@ -711,42 +746,41 @@ class MessagingAlertManager:
             severity=severity,
             condition=condition,
             source=component,
-            tags={"system": "messaging", "component": component, "custom": "true"}
+            tags={"system": "messaging", "component": component, "custom": "true"},
         )
-        
+
         self.alert_manager.add_alert_rule(rule)
         self.logger.info(f"Created custom messaging alert rule: {name}")
-        
+
         return rule
-    
+
     async def check_messaging_health(self) -> dict[str, Any]:
         """Check overall messaging system health"""
         rabbitmq_alerts = [
-            alert for alert in self.alert_manager.get_active_alerts()
-            if alert.source == "rabbitmq"
+            alert for alert in self.alert_manager.get_active_alerts() if alert.source == "rabbitmq"
         ]
-        
+
         kafka_alerts = [
-            alert for alert in self.alert_manager.get_active_alerts()
-            if alert.source == "kafka"
+            alert for alert in self.alert_manager.get_active_alerts() if alert.source == "kafka"
         ]
-        
+
         general_alerts = [
-            alert for alert in self.alert_manager.get_active_alerts()
-            if alert.source == "messaging"
+            alert for alert in self.alert_manager.get_active_alerts() if alert.source == "messaging"
         ]
-        
+
         # Determine overall health status
         critical_alerts = [
-            alert for alert in (rabbitmq_alerts + kafka_alerts + general_alerts)
+            alert
+            for alert in (rabbitmq_alerts + kafka_alerts + general_alerts)
             if alert.severity == AlertSeverity.CRITICAL
         ]
-        
+
         error_alerts = [
-            alert for alert in (rabbitmq_alerts + kafka_alerts + general_alerts)
+            alert
+            for alert in (rabbitmq_alerts + kafka_alerts + general_alerts)
             if alert.severity == AlertSeverity.ERROR
         ]
-        
+
         if critical_alerts:
             health_status = "critical"
         elif error_alerts:
@@ -755,49 +789,60 @@ class MessagingAlertManager:
             health_status = "warning"
         else:
             health_status = "healthy"
-        
+
         return {
             "overall_health": health_status,
             "rabbitmq": {
                 "active_alerts": len(rabbitmq_alerts),
-                "critical_alerts": len([a for a in rabbitmq_alerts if a.severity == AlertSeverity.CRITICAL]),
-                "error_alerts": len([a for a in rabbitmq_alerts if a.severity == AlertSeverity.ERROR])
+                "critical_alerts": len(
+                    [a for a in rabbitmq_alerts if a.severity == AlertSeverity.CRITICAL]
+                ),
+                "error_alerts": len(
+                    [a for a in rabbitmq_alerts if a.severity == AlertSeverity.ERROR]
+                ),
             },
             "kafka": {
                 "active_alerts": len(kafka_alerts),
-                "critical_alerts": len([a for a in kafka_alerts if a.severity == AlertSeverity.CRITICAL]),
-                "error_alerts": len([a for a in kafka_alerts if a.severity == AlertSeverity.ERROR])
+                "critical_alerts": len(
+                    [a for a in kafka_alerts if a.severity == AlertSeverity.CRITICAL]
+                ),
+                "error_alerts": len([a for a in kafka_alerts if a.severity == AlertSeverity.ERROR]),
             },
             "general_messaging": {
                 "active_alerts": len(general_alerts),
-                "critical_alerts": len([a for a in general_alerts if a.severity == AlertSeverity.CRITICAL]),
-                "error_alerts": len([a for a in general_alerts if a.severity == AlertSeverity.ERROR])
+                "critical_alerts": len(
+                    [a for a in general_alerts if a.severity == AlertSeverity.CRITICAL]
+                ),
+                "error_alerts": len(
+                    [a for a in general_alerts if a.severity == AlertSeverity.ERROR]
+                ),
             },
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
-    
+
     def get_messaging_alert_summary(self) -> dict[str, Any]:
         """Get summary of messaging-specific alerts"""
         all_alerts = self.alert_manager.get_active_alerts()
-        
+
         messaging_alerts = [
-            alert for alert in all_alerts
-            if alert.source in ["rabbitmq", "kafka", "messaging"]
+            alert for alert in all_alerts if alert.source in ["rabbitmq", "kafka", "messaging"]
         ]
-        
+
         return {
             "total_messaging_alerts": len(messaging_alerts),
             "by_component": {
                 "rabbitmq": len([a for a in messaging_alerts if a.source == "rabbitmq"]),
                 "kafka": len([a for a in messaging_alerts if a.source == "kafka"]),
-                "general": len([a for a in messaging_alerts if a.source == "messaging"])
+                "general": len([a for a in messaging_alerts if a.source == "messaging"]),
             },
             "by_severity": {
                 severity.value: len([a for a in messaging_alerts if a.severity == severity])
                 for severity in AlertSeverity
             },
-            "most_recent_alert": messaging_alerts[0].timestamp.isoformat() if messaging_alerts else None,
-            "timestamp": datetime.utcnow().isoformat()
+            "most_recent_alert": messaging_alerts[0].timestamp.isoformat()
+            if messaging_alerts
+            else None,
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
 

@@ -1,0 +1,142 @@
+[
+  {
+    "change_type": "column_added",
+    "layer": "bronze",
+    "compatibility_level": "backward_compatible",
+    "auto_migrate": true,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_type_changed",
+    "layer": "bronze",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_added",
+    "layer": "silver",
+    "compatibility_level": "backward_compatible",
+    "auto_migrate": true,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_removed",
+    "layer": "silver",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_added",
+    "layer": "gold",
+    "compatibility_level": "full_compatible",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_removed",
+    "layer": "gold",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_added",
+    "layer": "bronze",
+    "compatibility_level": "backward_compatible",
+    "auto_migrate": true,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_type_changed",
+    "layer": "bronze",
+    "compatibility_level": "forward_compatible",
+    "auto_migrate": true,
+    "transformation_function": "safe_type_conversion",
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_removed",
+    "layer": "bronze",
+    "compatibility_level": "forward_compatible",
+    "auto_migrate": true,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_added",
+    "layer": "silver",
+    "compatibility_level": "backward_compatible",
+    "auto_migrate": true,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": [
+      "business_rule_compliance"
+    ]
+  },
+  {
+    "change_type": "column_type_changed",
+    "layer": "silver",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_removed",
+    "layer": "silver",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_added",
+    "layer": "gold",
+    "compatibility_level": "backward_compatible",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": [
+      "downstream_impact_assessment",
+      "business_rule_compliance"
+    ]
+  },
+  {
+    "change_type": "column_type_changed",
+    "layer": "gold",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  },
+  {
+    "change_type": "column_removed",
+    "layer": "gold",
+    "compatibility_level": "breaking",
+    "auto_migrate": false,
+    "transformation_function": null,
+    "fallback_value": null,
+    "validation_rules": []
+  }
+]

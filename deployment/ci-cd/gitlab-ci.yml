@@ -1,0 +1,622 @@
+# Advanced Multi-Cloud CI/CD Pipeline
+# Supports AWS, Azure, and GCP deployments with comprehensive validation
+
+stages:
+  - validate
+  - security-scan
+  - test
+  - build
+  - plan
+  - deploy-dev
+  - integration-test
+  - deploy-staging
+  - performance-test
+  - deploy-production
+  - post-deployment-validation
+  - rollback
+
+variables:
+  TERRAFORM_VERSION: "1.5.0"
+  PYTHON_VERSION: "3.11"
+  DOCKER_VERSION: "24.0.0"
+  KUBECTL_VERSION: "1.28.0"
+  HELM_VERSION: "3.12.0"
+  
+  # Environment-specific variables
+  TF_VAR_environment: $CI_ENVIRONMENT_NAME
+  TF_VAR_project_name: "pwc-data-platform"
+  
+  # Terraform backend configuration
+  TF_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${CI_ENVIRONMENT_NAME}"
+  TF_USERNAME: gitlab-ci-token
+  TF_PASSWORD: $CI_JOB_TOKEN
+  TF_HTTP_LOCK_ADDRESS: "${TF_ADDRESS}/lock"
+  TF_HTTP_LOCK_METHOD: POST
+  TF_HTTP_UNLOCK_ADDRESS: "${TF_ADDRESS}/lock"
+  TF_HTTP_UNLOCK_METHOD: DELETE
+
+# Reusable templates
+.terraform-init: &terraform-init
+  before_script:
+    - cd infrastructure/terraform
+    - terraform version
+    - terraform init -backend-config="address=${TF_ADDRESS}" -backend-config="lock_address=${TF_HTTP_LOCK_ADDRESS}" -backend-config="unlock_address=${TF_HTTP_UNLOCK_ADDRESS}" -backend-config="username=${TF_USERNAME}" -backend-config="password=${TF_PASSWORD}" -backend-config="lock_method=${TF_HTTP_LOCK_METHOD}" -backend-config="unlock_method=${TF_HTTP_UNLOCK_METHOD}" -backend-config="retry_wait_min=5"
+
+.aws-credentials: &aws-credentials
+  before_script:
+    - export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+    - export AWS_DEFAULT_REGION=$AWS_REGION
+
+.azure-credentials: &azure-credentials
+  before_script:
+    - export AZURE_CLIENT_ID=$AZURE_CLIENT_ID
+    - export AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET
+    - export AZURE_TENANT_ID=$AZURE_TENANT_ID
+    - export AZURE_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID
+
+.gcp-credentials: &gcp-credentials
+  before_script:
+    - echo $GOOGLE_CREDENTIALS | base64 -d > ${HOME}/gcp-key.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=${HOME}/gcp-key.json
+    - export GOOGLE_PROJECT=$GCP_PROJECT_ID
+
+# Docker images for different stages
+.base-image: &base-image
+  image: 
+    name: hashicorp/terraform:${TERRAFORM_VERSION}
+    entrypoint: [""]
+
+.python-image: &python-image
+  image: python:${PYTHON_VERSION}-slim
+
+.docker-image: &docker-image
+  image: docker:${DOCKER_VERSION}
+  services:
+    - docker:${DOCKER_VERSION}-dind
+
+# Validation Stage
+terraform-validate:
+  stage: validate
+  <<: *base-image
+  <<: *terraform-init
+  script:
+    - terraform validate
+    - terraform fmt -check -recursive
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+code-quality:
+  stage: validate
+  <<: *python-image
+  before_script:
+    - pip install flake8 pylint black isort mypy bandit
+  script:
+    - black --check src/ scripts/
+    - isort --check-only src/ scripts/
+    - flake8 src/ scripts/
+    - pylint src/ scripts/
+    - mypy src/ scripts/
+  allow_failure: true
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+dependency-check:
+  stage: validate
+  <<: *python-image
+  before_script:
+    - pip install safety pip-audit
+  script:
+    - safety check --json --output safety-report.json
+    - pip-audit --format=json --output=pip-audit-report.json
+  artifacts:
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    paths:
+      - safety-report.json
+      - pip-audit-report.json
+  allow_failure: true
+
+# Security Scanning Stage
+sast-scan:
+  stage: security-scan
+  image: 
+    name: securecodewarrior/gitlab-sast:latest
+    entrypoint: [""]
+  script:
+    - /analyzer run
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+  allow_failure: true
+
+terraform-security-scan:
+  stage: security-scan
+  image: aquasec/tfsec:latest
+  script:
+    - tfsec infrastructure/terraform --format json --out tfsec-report.json
+    - tfsec infrastructure/terraform --format sarif --out tfsec-report.sarif
+  artifacts:
+    reports:
+      sast: tfsec-report.sarif
+    paths:
+      - tfsec-report.json
+  allow_failure: true
+
+container-scanning:
+  stage: security-scan
+  <<: *docker-image
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock 
+        -v $PWD:/tmp aquasec/trivy:latest 
+        image --format json --output /tmp/trivy-report.json $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+  allow_failure: true
+
+# Testing Stage
+unit-tests:
+  stage: test
+  <<: *python-image
+  before_script:
+    - pip install -r requirements.txt
+    - pip install pytest pytest-cov pytest-xdist
+  script:
+    - python -m pytest tests/unit/ -v --cov=src/ --cov-report=xml --cov-report=term --junitxml=junit.xml
+  artifacts:
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+
+integration-tests:
+  stage: test
+  <<: *python-image
+  services:
+    - postgres:13
+    - redis:6-alpine
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_pass
+    REDIS_URL: redis://redis:6379
+  before_script:
+    - pip install -r requirements.txt
+    - pip install pytest
+  script:
+    - python -m pytest tests/integration/ -v --junitxml=integration-junit.xml
+  artifacts:
+    reports:
+      junit: integration-junit.xml
+  allow_failure: true
+
+# Build Stage
+build-application:
+  stage: build
+  <<: *docker-image
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/app:$CI_COMMIT_SHA .
+    - docker build -t $CI_REGISTRY_IMAGE/app:latest .
+    - docker push $CI_REGISTRY_IMAGE/app:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/app:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+build-documentation:
+  stage: build
+  image: sphinxdoc/sphinx:latest
+  script:
+    - cd docs/
+    - make html
+  artifacts:
+    paths:
+      - docs/_build/html
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Infrastructure Planning Stage
+terraform-plan-dev:
+  stage: plan
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  variables:
+    TF_VAR_environment: "development"
+  script:
+    - terraform plan -var-file="environments/dev.tfvars" -out=dev.tfplan
+    - terraform show -json dev.tfplan > dev-plan.json
+  artifacts:
+    paths:
+      - infrastructure/terraform/dev.tfplan
+      - infrastructure/terraform/dev-plan.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infrastructure/**/*
+        - deployment/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infrastructure/**/*
+
+terraform-plan-staging:
+  stage: plan
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  variables:
+    TF_VAR_environment: "staging"
+  script:
+    - terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan
+    - terraform show -json staging.tfplan > staging-plan.json
+  artifacts:
+    paths:
+      - infrastructure/terraform/staging.tfplan
+      - infrastructure/terraform/staging-plan.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infrastructure/**/*
+    - if: $CI_COMMIT_TAG
+
+terraform-plan-prod:
+  stage: plan
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  variables:
+    TF_VAR_environment: "production"
+  script:
+    - terraform plan -var-file="environments/prod.tfvars" -out=prod.tfplan
+    - terraform show -json prod.tfplan > prod-plan.json
+    - |
+      # Cost estimation (simplified)
+      echo "Estimated monthly cost impact:" > cost-estimate.txt
+      # In practice, would use cloud cost estimation APIs
+      echo "Development: ~$500/month" >> cost-estimate.txt
+      echo "Staging: ~$800/month" >> cost-estimate.txt
+      echo "Production: ~$2000/month" >> cost-estimate.txt
+  artifacts:
+    paths:
+      - infrastructure/terraform/prod.tfplan
+      - infrastructure/terraform/prod-plan.json
+      - infrastructure/terraform/cost-estimate.txt
+    expire_in: 1 month
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+
+# Development Deployment
+deploy-dev:
+  stage: deploy-dev
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  environment:
+    name: development
+    url: https://dev.data-platform.example.com
+    auto_stop_in: 1 week
+  variables:
+    TF_VAR_environment: "development"
+  script:
+    - terraform apply -auto-approve dev.tfplan
+    - terraform output -json > dev-outputs.json
+  artifacts:
+    paths:
+      - infrastructure/terraform/dev-outputs.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infrastructure/**/*
+        - src/**/*
+        - deployment/**/*
+
+deploy-k8s-dev:
+  stage: deploy-dev
+  image: bitnami/kubectl:${KUBECTL_VERSION}
+  environment:
+    name: development
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT_DEV
+  script:
+    - kubectl apply -f deployment/kubernetes/base/
+    - kubectl apply -f deployment/kubernetes/environments/dev/
+    - kubectl rollout status deployment/data-platform-api -n development
+    - kubectl rollout status deployment/data-platform-worker -n development
+  dependencies:
+    - deploy-dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - deployment/kubernetes/**/*
+        - src/**/*
+
+# Integration Testing in Dev Environment
+integration-test-dev:
+  stage: integration-test
+  <<: *python-image
+  environment:
+    name: development
+  before_script:
+    - pip install requests pytest
+  script:
+    - export API_BASE_URL=$(jq -r '.api_endpoint.value' infrastructure/terraform/dev-outputs.json)
+    - python -m pytest tests/integration-e2e/ -v --junitxml=integration-e2e-junit.xml
+  artifacts:
+    reports:
+      junit: integration-e2e-junit.xml
+  dependencies:
+    - deploy-k8s-dev
+  allow_failure: true
+
+# Staging Deployment
+deploy-staging:
+  stage: deploy-staging
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  environment:
+    name: staging
+    url: https://staging.data-platform.example.com
+  variables:
+    TF_VAR_environment: "staging"
+  script:
+    - terraform apply -auto-approve staging.tfplan
+    - terraform output -json > staging-outputs.json
+  artifacts:
+    paths:
+      - infrastructure/terraform/staging-outputs.json
+    expire_in: 1 month
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+    - if: $CI_COMMIT_TAG
+
+deploy-k8s-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:${KUBECTL_VERSION}
+  environment:
+    name: staging
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT_STAGING
+  script:
+    - kubectl apply -f deployment/kubernetes/base/
+    - kubectl apply -f deployment/kubernetes/environments/staging/
+    - kubectl rollout status deployment/data-platform-api -n staging
+    - kubectl rollout status deployment/data-platform-worker -n staging
+  dependencies:
+    - deploy-staging
+
+# Performance Testing
+performance-test:
+  stage: performance-test
+  image: loadimpact/k6:latest
+  environment:
+    name: staging
+  script:
+    - export API_BASE_URL=$(jq -r '.api_endpoint.value' infrastructure/terraform/staging-outputs.json)
+    - k6 run --out json=performance-results.json tests/performance/load-test.js
+  artifacts:
+    paths:
+      - performance-results.json
+    reports:
+      performance: performance-results.json
+  dependencies:
+    - deploy-k8s-staging
+  allow_failure: true
+
+# Production Deployment (Blue-Green Strategy)
+deploy-production:
+  stage: deploy-production
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  environment:
+    name: production
+    url: https://data-platform.example.com
+  variables:
+    TF_VAR_environment: "production"
+    TF_VAR_deployment_strategy: "blue_green"
+  before_script:
+    - cd infrastructure/terraform
+    - terraform init
+    # Backup current state
+    - terraform state pull > prod-state-backup-$(date +%Y%m%d-%H%M%S).json
+  script:
+    - terraform apply -auto-approve prod.tfplan
+    - terraform output -json > prod-outputs.json
+  artifacts:
+    paths:
+      - infrastructure/terraform/prod-outputs.json
+      - infrastructure/terraform/prod-state-backup-*.json
+    expire_in: 6 months
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+
+deploy-k8s-production:
+  stage: deploy-production
+  image: bitnami/kubectl:${KUBECTL_VERSION}
+  environment:
+    name: production
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT_PROD
+  script:
+    # Blue-Green Deployment Strategy
+    - export DEPLOYMENT_COLOR=$(if kubectl get deployment data-platform-api-blue -n production 2>/dev/null; then echo "green"; else echo "blue"; fi)
+    - echo "Deploying to $DEPLOYMENT_COLOR environment"
+    - kubectl apply -f deployment/kubernetes/base/
+    - kubectl apply -f deployment/kubernetes/environments/prod/
+    - kubectl set image deployment/data-platform-api-${DEPLOYMENT_COLOR} api=$CI_REGISTRY_IMAGE/app:$CI_COMMIT_SHA -n production
+    - kubectl rollout status deployment/data-platform-api-${DEPLOYMENT_COLOR} -n production --timeout=600s
+    - echo "Deployed to $DEPLOYMENT_COLOR successfully"
+  dependencies:
+    - deploy-production
+
+# Post-deployment validation
+smoke-tests:
+  stage: post-deployment-validation
+  <<: *python-image
+  environment:
+    name: production
+  before_script:
+    - pip install requests
+  script:
+    - export API_BASE_URL=$(jq -r '.api_endpoint.value' infrastructure/terraform/prod-outputs.json)
+    - python tests/smoke/smoke-tests.py
+  dependencies:
+    - deploy-k8s-production
+
+health-check:
+  stage: post-deployment-validation
+  image: curlimages/curl:latest
+  environment:
+    name: production
+  script:
+    - export API_BASE_URL=$(jq -r '.api_endpoint.value' infrastructure/terraform/prod-outputs.json)
+    - curl -f $API_BASE_URL/health || exit 1
+    - curl -f $API_BASE_URL/metrics || exit 1
+  dependencies:
+    - deploy-k8s-production
+
+traffic-switch:
+  stage: post-deployment-validation
+  image: bitnami/kubectl:${KUBECTL_VERSION}
+  environment:
+    name: production
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT_PROD
+  script:
+    # Switch traffic to the new deployment after successful health checks
+    - export CURRENT_COLOR=$(kubectl get service data-platform-api -n production -o jsonpath='{.spec.selector.version}')
+    - export NEW_COLOR=$(if [ "$CURRENT_COLOR" = "blue" ]; then echo "green"; else echo "blue"; fi)
+    - echo "Switching traffic from $CURRENT_COLOR to $NEW_COLOR"
+    - kubectl patch service data-platform-api -n production -p '{"spec":{"selector":{"version":"'$NEW_COLOR'"}}}'
+    - echo "Traffic switched successfully to $NEW_COLOR"
+  dependencies:
+    - smoke-tests
+    - health-check
+  when: manual
+  allow_failure: false
+
+# Rollback functionality
+rollback-production:
+  stage: rollback
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  <<: *azure-credentials
+  <<: *gcp-credentials
+  environment:
+    name: production
+    action: prepare
+  script:
+    - echo "Rolling back production deployment"
+    - terraform state list
+    # Restore from backup if needed
+    - if [ -f "prod-state-backup-$(date +%Y%m%d)*.json" ]; then
+        terraform state push prod-state-backup-$(ls -t prod-state-backup-*.json | head -1);
+      fi
+    - terraform apply -auto-approve -target=module.production
+  when: manual
+  allow_failure: false
+
+rollback-k8s-production:
+  stage: rollback
+  image: bitnami/kubectl:${KUBECTL_VERSION}
+  environment:
+    name: production
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT_PROD
+  script:
+    - echo "Rolling back Kubernetes deployment"
+    - kubectl rollout undo deployment/data-platform-api -n production
+    - kubectl rollout undo deployment/data-platform-worker -n production
+    - kubectl rollout status deployment/data-platform-api -n production
+    - kubectl rollout status deployment/data-platform-worker -n production
+  when: manual
+
+# Cleanup jobs
+cleanup-dev:
+  stage: rollback
+  <<: *base-image
+  <<: *terraform-init
+  <<: *aws-credentials
+  environment:
+    name: development
+    action: stop
+  script:
+    - terraform destroy -var-file="environments/dev.tfvars" -auto-approve
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Notifications
+notify-slack:
+  stage: post-deployment-validation
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -X POST -H 'Content-type: application/json' \
+        --data "{\"text\":\"🚀 Production deployment completed successfully for commit $CI_COMMIT_SHA\"}" \
+        $SLACK_WEBHOOK_URL
+  dependencies:
+    - traffic-switch
+  when: on_success
+  allow_failure: true
+
+notify-teams:
+  stage: post-deployment-validation
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -X POST -H 'Content-type: application/json' \
+        --data "{\"text\":\"✅ Data Platform deployed to production - Commit: $CI_COMMIT_SHA\"}" \
+        $TEAMS_WEBHOOK_URL
+  dependencies:
+    - traffic-switch
+  when: on_success
+  allow_failure: true
+
+# Failure notifications
+notify-failure:
+  stage: rollback
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -X POST -H 'Content-type: application/json' \
+        --data "{\"text\":\"❌ Production deployment failed for commit $CI_COMMIT_SHA - Manual intervention required\"}" \
+        $SLACK_WEBHOOK_URL
+  when: on_failure
+  allow_failure: true

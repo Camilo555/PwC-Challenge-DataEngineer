@@ -35,9 +35,9 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 try:
-    import pika
     import aio_pika
-    from kafka import KafkaProducer, KafkaConsumer
+    import pika
+    from kafka import KafkaConsumer, KafkaProducer
     MESSAGING_AVAILABLE = True
 except ImportError:
     MESSAGING_AVAILABLE = False
@@ -274,10 +274,10 @@ async def redis_client():
 @pytest.fixture
 async def mock_rabbitmq_manager():
     """Create mock RabbitMQ manager for testing."""
-    from unittest.mock import AsyncMock, Mock
     import uuid
     from datetime import datetime
-    
+    from unittest.mock import AsyncMock, Mock
+
     manager = Mock()
     manager.connect = Mock(return_value=True)
     manager.publish_task = Mock(return_value=str(uuid.uuid4()))
@@ -300,9 +300,9 @@ async def mock_rabbitmq_manager():
 @pytest.fixture
 async def mock_kafka_manager():
     """Create mock Kafka manager for testing."""
-    from unittest.mock import AsyncMock, Mock
     from datetime import datetime
-    
+    from unittest.mock import AsyncMock, Mock
+
     manager = Mock()
     manager.create_producer = Mock()
     manager.create_consumer = Mock()
@@ -331,7 +331,7 @@ async def mock_kafka_manager():
 async def mock_messaging_cache():
     """Create mock distributed messaging cache for testing."""
     from unittest.mock import AsyncMock, Mock
-    
+
     cache = Mock()
     cache.get = AsyncMock(return_value=None)
     cache.set = AsyncMock(return_value=True)
@@ -370,13 +370,13 @@ async def in_memory_message_queue():
     """In-memory message queue for testing without external dependencies."""
     import asyncio
     from collections import defaultdict, deque
-    
+
     class InMemoryMessageQueue:
         def __init__(self):
             self.queues = defaultdict(deque)
             self.subscribers = defaultdict(list)
             self.stats = defaultdict(lambda: {"published": 0, "consumed": 0})
-        
+
         async def publish(self, topic: str, message: dict, key: str = None) -> str:
             message_id = f"msg_{len(self.queues[topic])}_{hash(str(message))}"
             self.queues[topic].append({
@@ -387,20 +387,20 @@ async def in_memory_message_queue():
             })
             self.stats[topic]["published"] += 1
             return message_id
-        
+
         async def consume(self, topic: str, timeout: float = 1.0):
             if self.queues[topic]:
                 message = self.queues[topic].popleft()
                 self.stats[topic]["consumed"] += 1
                 return message
             return None
-        
+
         async def subscribe(self, topic: str, callback):
             self.subscribers[topic].append(callback)
-        
+
         def get_stats(self, topic: str):
             return self.stats[topic]
-        
+
         def clear(self, topic: str = None):
             if topic:
                 self.queues[topic].clear()
@@ -408,27 +408,26 @@ async def in_memory_message_queue():
             else:
                 self.queues.clear()
                 self.stats.clear()
-    
+
     return InMemoryMessageQueue()
 
 
 @pytest.fixture
 async def in_memory_cache():
     """In-memory cache for testing without external dependencies."""
-    import asyncio
     from datetime import datetime, timedelta
-    
+
     class InMemoryCache:
         def __init__(self):
             self.data = {}
             self.expiry = {}
             self.stats = {"hits": 0, "misses": 0, "sets": 0, "deletes": 0}
-        
+
         def _is_expired(self, key: str) -> bool:
             if key not in self.expiry:
                 return False
             return datetime.now() > self.expiry[key]
-        
+
         async def get(self, key: str):
             if key in self.data and not self._is_expired(key):
                 self.stats["hits"] += 1
@@ -436,17 +435,17 @@ async def in_memory_cache():
             elif key in self.data:  # expired
                 del self.data[key]
                 del self.expiry[key]
-            
+
             self.stats["misses"] += 1
             return None
-        
+
         async def set(self, key: str, value, ttl: int = None) -> bool:
             self.data[key] = value
             if ttl:
                 self.expiry[key] = datetime.now() + timedelta(seconds=ttl)
             self.stats["sets"] += 1
             return True
-        
+
         async def delete(self, key: str) -> bool:
             if key in self.data:
                 del self.data[key]
@@ -455,17 +454,17 @@ async def in_memory_cache():
                 self.stats["deletes"] += 1
                 return True
             return False
-        
+
         async def exists(self, key: str) -> bool:
             return key in self.data and not self._is_expired(key)
-        
+
         async def clear(self):
             self.data.clear()
             self.expiry.clear()
-        
+
         def get_stats(self):
             return self.stats.copy()
-    
+
     return InMemoryCache()
 
 
@@ -546,7 +545,7 @@ def pytest_runtest_setup(item):
     if item.get_closest_marker("external"):
         # Could add logic here to check if external services are available
         pass
-    
+
     # Skip messaging tests if messaging libraries are not available
     if item.get_closest_marker("messaging") and not MESSAGING_AVAILABLE:
         pytest.skip("Messaging libraries (pika, kafka-python) not available")
@@ -696,7 +695,6 @@ def data_validator():
 def cleanup_temp_files():
     """Automatically clean up temporary files after each test."""
     # Setup
-    temp_files_before = set()
 
     yield
 
@@ -710,26 +708,26 @@ def polars_engine():
     """Polars engine fixture for DataFrame processing."""
     if not POLARS_AVAILABLE:
         pytest.skip("Polars not available")
-    
+
     class PolarsEngine:
         def __init__(self):
             self.name = "polars"
-        
+
         def read_csv(self, file_path, **kwargs):
             return pl.read_csv(file_path, **kwargs)
-        
+
         def read_parquet(self, file_path, **kwargs):
             return pl.read_parquet(file_path, **kwargs)
-        
+
         def to_pandas(self, df):
             return df.to_pandas()
-        
+
         def filter(self, df, condition):
             return df.filter(condition)
-        
+
         def select(self, df, columns):
             return df.select(columns)
-    
+
     return PolarsEngine()
 
 
@@ -753,14 +751,14 @@ def star_schema_config():
             ],
             "measures": [
                 "quantity",
-                "unit_price", 
+                "unit_price",
                 "discount_amount",
                 "line_total",
                 "net_amount"
             ],
             "foreign_keys": [
                 "customer_key",
-                "product_key", 
+                "product_key",
                 "time_key",
                 "geography_key"
             ]
@@ -843,9 +841,9 @@ def star_schema_config():
 def sample_silver_data():
     """Sample silver layer data fixture for data pipeline testing."""
     np.random.seed(42)  # For reproducible tests
-    
+
     n_records = 500
-    
+
     # Generate cleaned and standardized data
     data = {
         "invoice_id": [f"INV-{str(i).zfill(6)}" for i in range(1, n_records + 1)],
@@ -857,7 +855,7 @@ def sample_silver_data():
         "unit_price": np.round(np.random.uniform(10.0, 1000.0, n_records), 2),
         "discount_rate": np.round(np.random.uniform(0.0, 0.3, n_records), 2),
         "line_total": None,  # Will be calculated
-        "discount_amount": None,  # Will be calculated  
+        "discount_amount": None,  # Will be calculated
         "net_amount": None,  # Will be calculated
         "created_at": pd.date_range("2023-01-01", periods=n_records, freq="H"),
         "updated_at": pd.date_range("2023-01-01", periods=n_records, freq="H"),
@@ -865,19 +863,19 @@ def sample_silver_data():
         "source_system": np.random.choice(["ERP", "CRM", "E-commerce"], n_records),
         "batch_id": [f"batch_{(i // 100) + 1}" for i in range(n_records)]
     }
-    
+
     df = pd.DataFrame(data)
-    
+
     # Calculate derived fields
     df["line_total"] = df["quantity"] * df["unit_price"]
-    df["discount_amount"] = df["line_total"] * df["discount_rate"]  
+    df["discount_amount"] = df["line_total"] * df["discount_rate"]
     df["net_amount"] = df["line_total"] - df["discount_amount"]
-    
+
     # Add data lineage information
     df["bronze_record_id"] = [f"bronze_{i}" for i in range(1, n_records + 1)]
     df["transformation_version"] = "v1.0"
     df["validation_status"] = np.random.choice(["PASSED", "WARNING"], n_records, p=[0.9, 0.1])
-    
+
     return df
 
 
@@ -928,15 +926,15 @@ def messaging_performance_tracker():
     """Utility for measuring messaging performance."""
     import time
     from collections import defaultdict
-    
+
     class MessagingPerformanceTracker:
         def __init__(self):
             self.metrics = defaultdict(list)
             self.start_times = {}
-        
+
         def start_operation(self, operation_name: str):
             self.start_times[operation_name] = time.perf_counter()
-        
+
         def end_operation(self, operation_name: str):
             if operation_name in self.start_times:
                 duration = time.perf_counter() - self.start_times[operation_name]
@@ -944,12 +942,12 @@ def messaging_performance_tracker():
                 del self.start_times[operation_name]
                 return duration
             return None
-        
+
         def get_stats(self, operation_name: str):
             measurements = self.metrics[operation_name]
             if not measurements:
                 return None
-            
+
             return {
                 "count": len(measurements),
                 "min": min(measurements),
@@ -957,10 +955,10 @@ def messaging_performance_tracker():
                 "avg": sum(measurements) / len(measurements),
                 "total": sum(measurements)
             }
-        
+
         def get_all_stats(self):
             return {op: self.get_stats(op) for op in self.metrics.keys()}
-    
+
     return MessagingPerformanceTracker()
 
 
@@ -968,14 +966,14 @@ def messaging_performance_tracker():
 @pytest.fixture
 def message_generator():
     """Generate test messages for messaging tests."""
-    import uuid
     import random
+    import uuid
     from datetime import datetime
-    
+
     class MessageGenerator:
         def __init__(self):
             self.message_counter = 0
-        
+
         def generate_task_message(self, task_name: str = None, payload: dict = None):
             self.message_counter += 1
             return {
@@ -987,7 +985,7 @@ def message_generator():
                 "retry_count": 0,
                 "max_retries": 3
             }
-        
+
         def generate_cache_message(self, operation: str = "set", key: str = None, value = None):
             self.message_counter += 1
             return {
@@ -998,18 +996,18 @@ def message_generator():
                 "ttl": 300,
                 "created_at": datetime.now().isoformat()
             }
-        
+
         def generate_streaming_message(self, topic: str = None, payload: dict = None):
             self.message_counter += 1
             return {
                 "message_id": str(uuid.uuid4()),
-                "topic": topic or f"test-topic",
+                "topic": topic or "test-topic",
                 "key": f"test_key_{self.message_counter}",
                 "payload": payload or {"event": f"test_event_{self.message_counter}"},
                 "timestamp": datetime.now().isoformat(),
                 "headers": {"source": "test", "version": "1.0"}
             }
-        
+
         def generate_batch_messages(self, count: int, message_type: str = "task", **kwargs):
             messages = []
             for _ in range(count):
@@ -1022,5 +1020,5 @@ def message_generator():
                 else:
                     raise ValueError(f"Unknown message type: {message_type}")
             return messages
-    
+
     return MessageGenerator()

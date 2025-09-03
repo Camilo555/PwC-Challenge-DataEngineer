@@ -2,6 +2,7 @@
 Text embeddings module for vector search functionality.
 Provides text embedding generation for semantic search.
 """
+
 import logging
 from typing import Any
 
@@ -13,7 +14,9 @@ logger = logging.getLogger(__name__)
 class TextEmbedder:
     """Text embedding generator for semantic search."""
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", device: str = "cpu"):
+    def __init__(
+        self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", device: str = "cpu"
+    ):
         """Initialize TextEmbedder with specified model."""
         self.model_name = model_name
         self.device = device
@@ -25,6 +28,7 @@ class TextEmbedder:
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self._model = SentenceTransformer(self.model_name, device=self.device)
                 self.embedding_dimension = self._model.get_sentence_embedding_dimension()
                 logger.info(f"Loaded embedding model: {self.model_name}")
@@ -63,9 +67,13 @@ class TextEmbedder:
 
     def similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """Calculate cosine similarity between two embeddings."""
-        return np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
+        return np.dot(embedding1, embedding2) / (
+            np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
+        )
 
-    def batch_similarity(self, query_embedding: np.ndarray, document_embeddings: np.ndarray) -> np.ndarray:
+    def batch_similarity(
+        self, query_embedding: np.ndarray, document_embeddings: np.ndarray
+    ) -> np.ndarray:
         """Calculate similarities between a query and multiple documents."""
         query_norm = np.linalg.norm(query_embedding)
         doc_norms = np.linalg.norm(document_embeddings, axis=1)
@@ -103,7 +111,11 @@ class TextEmbedder:
 class MultilingualTextEmbedder(TextEmbedder):
     """Text embedder with multilingual support."""
 
-    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device: str = "cpu"):
+    def __init__(
+        self,
+        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        device: str = "cpu",
+    ):
         """Initialize with multilingual model."""
         super().__init__(model_name, device)
         self.embedding_dimension = 384  # Default for multilingual MiniLM
@@ -111,12 +123,14 @@ class MultilingualTextEmbedder(TextEmbedder):
     def detect_language(self, text: str) -> str:
         """Simple language detection (mock implementation)."""
         # This is a simplified mock - in practice you'd use langdetect or similar
-        common_english_words = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for']
+        common_english_words = ["the", "and", "or", "but", "in", "on", "at", "to", "for"]
         if any(word in text.lower() for word in common_english_words):
             return "en"
         return "unknown"
 
-    def encode_multilingual(self, texts: list[str], languages: list[str] | None = None) -> np.ndarray:
+    def encode_multilingual(
+        self, texts: list[str], languages: list[str] | None = None
+    ) -> np.ndarray:
         """Encode texts with language-aware preprocessing."""
         if languages is None:
             languages = [self.detect_language(text) for text in texts]
@@ -167,7 +181,7 @@ class DocumentEmbedder:
             "document_embedding": document_embedding,
             "chunk_embeddings": chunk_embeddings,
             "chunks": chunks,
-            "num_chunks": len(chunks)
+            "num_chunks": len(chunks),
         }
 
     def encode_documents(self, documents: list[str]) -> list[dict[str, Any]]:
@@ -185,7 +199,9 @@ def create_text_embedder(model_type: str = "default", **kwargs) -> TextEmbedder:
         raise ValueError(f"Unknown model type: {model_type}")
 
 
-def calculate_text_similarity(text1: str, text2: str, embedder: TextEmbedder | None = None) -> float:
+def calculate_text_similarity(
+    text1: str, text2: str, embedder: TextEmbedder | None = None
+) -> float:
     """Calculate semantic similarity between two texts."""
     if embedder is None:
         embedder = TextEmbedder()

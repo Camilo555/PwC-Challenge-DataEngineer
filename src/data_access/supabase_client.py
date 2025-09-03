@@ -2,6 +2,7 @@
 Supabase integration module for the PwC Data Engineering Challenge.
 Provides secure connection management, schema operations, and data integrity checks.
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,7 +42,9 @@ class SupabaseClient:
             raise DatabaseConnectionError("DATABASE_URL is required for Supabase connection")
 
         if settings.database_type.value != "postgresql":
-            logger.warning(f"Database type is {settings.database_type}, but using Supabase configuration")
+            logger.warning(
+                f"Database type is {settings.database_type}, but using Supabase configuration"
+            )
 
     @property
     def engine(self) -> Engine:
@@ -60,7 +63,7 @@ class SupabaseClient:
                 pool_pre_ping=True,
                 pool_recycle=3600,  # Recycle connections every hour
                 connect_args=connection_args,
-                echo=(settings.environment.value == "development")
+                echo=(settings.environment.value == "development"),
             )
             logger.info("Supabase engine created successfully")
 
@@ -87,12 +90,16 @@ class SupabaseClient:
             try:
                 with self.engine.connect() as conn:
                     # Test basic connectivity
-                    result = conn.execute(text("SELECT version(), current_database(), current_user"))
+                    result = conn.execute(
+                        text("SELECT version(), current_database(), current_user")
+                    )
                     row = result.fetchone()
 
                     if row:
                         version, database, user = row
-                        logger.info(f"Connected to Supabase database '{database}' as user '{user}' (attempt {attempt + 1})")
+                        logger.info(
+                            f"Connected to Supabase database '{database}' as user '{user}' (attempt {attempt + 1})"
+                        )
 
                         return {
                             "status": "connected",
@@ -101,17 +108,21 @@ class SupabaseClient:
                             "version": version,
                             "ssl_enabled": "supabase.co" in settings.database_url,
                             "connection_attempt": attempt + 1,
-                            "retry_count": attempt
+                            "retry_count": attempt,
                         }
 
             except Exception as e:
                 if attempt < max_retries:
-                    retry_delay = 2 ** attempt  # Exponential backoff
-                    logger.warning(f"Connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                    retry_delay = 2**attempt  # Exponential backoff
+                    logger.warning(
+                        f"Connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s..."
+                    )
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"All connection attempts failed. Last error: {e}")
-                    raise DatabaseConnectionError(f"Failed to connect to Supabase after {max_retries + 1} attempts: {e}") from e
+                    raise DatabaseConnectionError(
+                        f"Failed to connect to Supabase after {max_retries + 1} attempts: {e}"
+                    ) from e
 
         raise DatabaseConnectionError("Unknown connection error")
 
@@ -128,11 +139,14 @@ class SupabaseClient:
         try:
             with self.engine.connect() as conn:
                 # Check if schema exists
-                result = conn.execute(text("""
+                result = conn.execute(
+                    text("""
                     SELECT schema_name
                     FROM information_schema.schemata
                     WHERE schema_name = :schema_name
-                """), {"schema_name": schema_name})
+                """),
+                    {"schema_name": schema_name},
+                )
 
                 if not result.fetchone():
                     # Create schema
@@ -171,7 +185,6 @@ class SupabaseClient:
             "CREATE INDEX IF NOT EXISTS idx_fact_sale_date_key ON fact_sale(date_key)",
             "CREATE INDEX IF NOT EXISTS idx_fact_sale_country_key ON fact_sale(country_key)",
             "CREATE INDEX IF NOT EXISTS idx_fact_sale_invoice_key ON fact_sale(invoice_key)",
-
             # Dimension table indexes
             "CREATE INDEX IF NOT EXISTS idx_dim_product_stock_code ON dim_product(stock_code)",
             "CREATE INDEX IF NOT EXISTS idx_dim_customer_customer_id ON dim_customer(customer_id)",
@@ -201,7 +214,7 @@ class SupabaseClient:
             "status": "passed",
             "checks": [],
             "errors": [],
-            "warnings": []
+            "warnings": [],
         }
 
         try:
@@ -225,26 +238,38 @@ class SupabaseClient:
     async def _check_referential_integrity(self, session, report: dict[str, Any]) -> None:
         """Check referential integrity constraints."""
         checks = [
-            ("Orphaned fact records (missing product)", """
+            (
+                "Orphaned fact records (missing product)",
+                """
                 SELECT COUNT(*) FROM fact_sale f
                 LEFT JOIN dim_product p ON f.product_key = p.product_key
                 WHERE p.product_key IS NULL
-            """),
-            ("Orphaned fact records (missing customer)", """
+            """,
+            ),
+            (
+                "Orphaned fact records (missing customer)",
+                """
                 SELECT COUNT(*) FROM fact_sale f
                 LEFT JOIN dim_customer c ON f.customer_key = c.customer_key
                 WHERE f.customer_key IS NOT NULL AND c.customer_key IS NULL
-            """),
-            ("Orphaned fact records (missing country)", """
+            """,
+            ),
+            (
+                "Orphaned fact records (missing country)",
+                """
                 SELECT COUNT(*) FROM fact_sale f
                 LEFT JOIN dim_country co ON f.country_key = co.country_key
                 WHERE co.country_key IS NULL
-            """),
-            ("Orphaned fact records (missing invoice)", """
+            """,
+            ),
+            (
+                "Orphaned fact records (missing invoice)",
+                """
                 SELECT COUNT(*) FROM fact_sale f
                 LEFT JOIN dim_invoice i ON f.invoice_key = i.invoice_key
                 WHERE i.invoice_key IS NULL
-            """),
+            """,
+            ),
         ]
 
         for check_name, query in checks:
@@ -261,19 +286,31 @@ class SupabaseClient:
     async def _check_data_quality(self, session, report: dict[str, Any]) -> None:
         """Check data quality constraints."""
         checks = [
-            ("Negative quantities in facts", """
+            (
+                "Negative quantities in facts",
+                """
                 SELECT COUNT(*) FROM fact_sale WHERE quantity < 0
-            """),
-            ("Zero or negative prices", """
+            """,
+            ),
+            (
+                "Zero or negative prices",
+                """
                 SELECT COUNT(*) FROM fact_sale WHERE unit_price <= 0
-            """),
-            ("Missing product descriptions", """
+            """,
+            ),
+            (
+                "Missing product descriptions",
+                """
                 SELECT COUNT(*) FROM dim_product WHERE description IS NULL OR description = ''
-            """),
-            ("Invalid total amounts", """
+            """,
+            ),
+            (
+                "Invalid total amounts",
+                """
                 SELECT COUNT(*) FROM fact_sale
                 WHERE ABS(total_amount - (quantity * unit_price)) > 0.01
-            """),
+            """,
+            ),
         ]
 
         for check_name, query in checks:
@@ -291,19 +328,25 @@ class SupabaseClient:
         try:
             # Check for duplicate dimension entries
             duplicate_checks = [
-                ("Duplicate products by stock_code", """
+                (
+                    "Duplicate products by stock_code",
+                    """
                     SELECT stock_code, COUNT(*) as cnt
                     FROM dim_product
                     GROUP BY stock_code
                     HAVING COUNT(*) > 1
-                """),
-                ("Duplicate customers by customer_id", """
+                """,
+                ),
+                (
+                    "Duplicate customers by customer_id",
+                    """
                     SELECT customer_id, COUNT(*) as cnt
                     FROM dim_customer
                     WHERE customer_id IS NOT NULL
                     GROUP BY customer_id
                     HAVING COUNT(*) > 1
-                """),
+                """,
+                ),
             ]
 
             for check_name, query in duplicate_checks:
@@ -329,7 +372,7 @@ class SupabaseClient:
             "dim_customer",
             "dim_country",
             "dim_invoice",
-            "dim_date"
+            "dim_date",
         ]
 
         statistics = {}
@@ -351,14 +394,11 @@ class SupabaseClient:
                         statistics[table] = {
                             "row_count": count_result or 0,
                             "total_size": size_result[0] if size_result else "Unknown",
-                            "table_size": size_result[1] if size_result else "Unknown"
+                            "table_size": size_result[1] if size_result else "Unknown",
                         }
 
                     except Exception as e:
-                        statistics[table] = {
-                            "row_count": 0,
-                            "error": str(e)
-                        }
+                        statistics[table] = {"row_count": 0, "error": str(e)}
 
         except Exception as e:
             logger.error(f"Failed to get table statistics: {e}")
@@ -389,11 +429,11 @@ class SupabaseClient:
     async def backup_table_data(self, table_name: str, backup_path: Path) -> dict[str, Any]:
         """
         Create a backup of table data to local storage.
-        
+
         Args:
             table_name: Name of the table to backup
             backup_path: Path to store backup files
-            
+
         Returns:
             Backup metadata and statistics
         """
@@ -405,18 +445,18 @@ class SupabaseClient:
                 result = conn.execute(text(f"SELECT * FROM {table_name}"))
                 df = pd.DataFrame(result.fetchall(), columns=result.keys())
 
-                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
                 backup_file = backup_path / f"{table_name}_backup_{timestamp}.csv"
 
                 df.to_csv(backup_file, index=False)
 
                 backup_metadata = {
-                    'table_name': table_name,
-                    'backup_file': str(backup_file),
-                    'record_count': len(df),
-                    'file_size': backup_file.stat().st_size,
-                    'backup_timestamp': pd.Timestamp.now().isoformat(),
-                    'status': 'completed'
+                    "table_name": table_name,
+                    "backup_file": str(backup_file),
+                    "record_count": len(df),
+                    "file_size": backup_file.stat().st_size,
+                    "backup_timestamp": pd.Timestamp.now().isoformat(),
+                    "status": "completed",
                 }
 
                 logger.info(f"Table backup completed: {backup_metadata}")
@@ -425,20 +465,20 @@ class SupabaseClient:
         except Exception as e:
             logger.error(f"Backup failed for table {table_name}: {e}")
             return {
-                'table_name': table_name,
-                'status': 'failed',
-                'error': str(e),
-                'backup_timestamp': pd.Timestamp.now().isoformat()
+                "table_name": table_name,
+                "status": "failed",
+                "error": str(e),
+                "backup_timestamp": pd.Timestamp.now().isoformat(),
             }
 
     async def restore_table_data(self, backup_file: Path, table_name: str) -> dict[str, Any]:
         """
         Restore table data from backup file.
-        
+
         Args:
             backup_file: Path to backup CSV file
             table_name: Name of target table
-            
+
         Returns:
             Restore operation metadata
         """
@@ -453,15 +493,15 @@ class SupabaseClient:
                 conn.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
 
                 # Insert backup data
-                df.to_sql(table_name, conn, if_exists='append', index=False)
+                df.to_sql(table_name, conn, if_exists="append", index=False)
                 conn.commit()
 
                 restore_metadata = {
-                    'table_name': table_name,
-                    'backup_file': str(backup_file),
-                    'records_restored': len(df),
-                    'restore_timestamp': pd.Timestamp.now().isoformat(),
-                    'status': 'completed'
+                    "table_name": table_name,
+                    "backup_file": str(backup_file),
+                    "records_restored": len(df),
+                    "restore_timestamp": pd.Timestamp.now().isoformat(),
+                    "status": "completed",
                 }
 
                 logger.info(f"Table restore completed: {restore_metadata}")
@@ -470,46 +510,52 @@ class SupabaseClient:
         except Exception as e:
             logger.error(f"Restore failed for table {table_name}: {e}")
             return {
-                'table_name': table_name,
-                'status': 'failed',
-                'error': str(e),
-                'restore_timestamp': pd.Timestamp.now().isoformat()
+                "table_name": table_name,
+                "status": "failed",
+                "error": str(e),
+                "restore_timestamp": pd.Timestamp.now().isoformat(),
             }
 
     async def create_full_backup(self, backup_dir: str = "backups/supabase") -> dict[str, Any]:
         """Create full backup of all star schema tables."""
         backup_path = Path(backup_dir)
         backup_summary = {
-            'backup_timestamp': pd.Timestamp.now().isoformat(),
-            'backup_directory': str(backup_path),
-            'tables_backed_up': [],
-            'total_records': 0,
-            'total_size': 0,
-            'status': 'completed',
-            'errors': []
+            "backup_timestamp": pd.Timestamp.now().isoformat(),
+            "backup_directory": str(backup_path),
+            "tables_backed_up": [],
+            "total_records": 0,
+            "total_size": 0,
+            "status": "completed",
+            "errors": [],
         }
 
-        tables = ["fact_sale", "dim_product", "dim_customer", "dim_country", "dim_invoice", "dim_date"]
+        tables = [
+            "fact_sale",
+            "dim_product",
+            "dim_customer",
+            "dim_country",
+            "dim_invoice",
+            "dim_date",
+        ]
 
         for table in tables:
             try:
                 result = await self.backup_table_data(table, backup_path)
-                if result['status'] == 'completed':
-                    backup_summary['tables_backed_up'].append(result)
-                    backup_summary['total_records'] += result['record_count']
-                    backup_summary['total_size'] += result['file_size']
+                if result["status"] == "completed":
+                    backup_summary["tables_backed_up"].append(result)
+                    backup_summary["total_records"] += result["record_count"]
+                    backup_summary["total_size"] += result["file_size"]
                 else:
-                    backup_summary['errors'].append(result)
+                    backup_summary["errors"].append(result)
             except Exception as e:
-                backup_summary['errors'].append({
-                    'table_name': table,
-                    'error': str(e)
-                })
+                backup_summary["errors"].append({"table_name": table, "error": str(e)})
 
-        if backup_summary['errors']:
-            backup_summary['status'] = 'partial'
+        if backup_summary["errors"]:
+            backup_summary["status"] = "partial"
 
-        logger.info(f"Full backup completed: {len(backup_summary['tables_backed_up'])} tables, {backup_summary['total_records']} records")
+        logger.info(
+            f"Full backup completed: {len(backup_summary['tables_backed_up'])} tables, {backup_summary['total_records']} records"
+        )
         return backup_summary
 
     async def cleanup_old_connections(self) -> None:
@@ -563,13 +609,9 @@ async def health_check_supabase() -> dict[str, Any]:
             "connection": connection_info,
             "tables": statistics,
             "integrity": integrity_report,
-            "timestamp": pd.Timestamp.now().isoformat()
+            "timestamp": pd.Timestamp.now().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Supabase health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
+        return {"status": "unhealthy", "error": str(e), "timestamp": pd.Timestamp.now().isoformat()}

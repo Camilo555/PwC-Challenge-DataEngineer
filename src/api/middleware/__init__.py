@@ -14,5 +14,5 @@ __all__ = [
     "CorrelationMiddleware",
     "get_correlation_context",
     "extract_correlation_headers",
-    "add_correlation_headers"
+    "add_correlation_headers",
 ]

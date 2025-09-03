@@ -1,4 +1,5 @@
 """Base API client with retry logic and error handling."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +18,7 @@ logger = get_logger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states."""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
@@ -24,6 +26,7 @@ class CircuitState(Enum):
 
 class CircuitBreakerError(Exception):
     """Raised when circuit breaker is open."""
+
     pass
 
 
@@ -37,7 +40,7 @@ class CircuitBreaker:
         expected_exception: type[Exception] = Exception,
     ):
         """Initialize circuit breaker.
-        
+
         Args:
             failure_threshold: Number of failures before opening circuit
             recovery_timeout: Time to wait before attempting recovery
@@ -124,9 +127,7 @@ class BaseAPIClient(ABC):
 
         # Initialize circuit breaker
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=60.0,
-            expected_exception=aiohttp.ClientError
+            failure_threshold=5, recovery_timeout=60.0, expected_exception=aiohttp.ClientError
         )
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -136,10 +137,7 @@ class BaseAPIClient(ABC):
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
-            self._session = aiohttp.ClientSession(
-                headers=headers,
-                timeout=self.timeout
-            )
+            self._session = aiohttp.ClientSession(headers=headers, timeout=self.timeout)
         return self._session
 
     async def _enforce_rate_limit(self) -> None:
@@ -180,8 +178,7 @@ class BaseAPIClient(ABC):
         """
         # Use circuit breaker to protect the request
         return await self.circuit_breaker.call(
-            self._make_protected_request,
-            method, endpoint, params, data, retry_count
+            self._make_protected_request, method, endpoint, params, data, retry_count
         )
 
     async def _make_protected_request(
@@ -202,10 +199,7 @@ class BaseAPIClient(ABC):
 
         try:
             async with session.request(
-                method=method,
-                url=url,
-                params=params,
-                json=data
+                method=method, url=url, params=params, json=data
             ) as response:
                 response.raise_for_status()
                 result: dict[str, Any] = await response.json()
@@ -213,22 +207,20 @@ class BaseAPIClient(ABC):
 
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if retry_count < self.max_retries:
-                wait_time = 2 ** retry_count  # Exponential backoff
+                wait_time = 2**retry_count  # Exponential backoff
                 logger.warning(
                     f"Request failed (attempt {retry_count + 1}/{self.max_retries + 1}), "
                     f"retrying in {wait_time}s: {e}"
                 )
                 await asyncio.sleep(wait_time)
-                return await self._make_protected_request(method, endpoint, params, data, retry_count + 1)
+                return await self._make_protected_request(
+                    method, endpoint, params, data, retry_count + 1
+                )
             else:
                 logger.error(f"Request failed after {self.max_retries + 1} attempts: {e}")
                 raise
 
-    async def get(
-        self,
-        endpoint: str,
-        params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make GET request."""
         return await self._make_request("GET", endpoint, params=params)
 
@@ -236,7 +228,7 @@ class BaseAPIClient(ABC):
         self,
         endpoint: str,
         data: dict[str, Any] | None = None,
-        params: dict[str, Any] | None = None
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Make POST request."""
         return await self._make_request("POST", endpoint, params=params, data=data)

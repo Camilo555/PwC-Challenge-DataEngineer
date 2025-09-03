@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, status
 
 from core.config import settings

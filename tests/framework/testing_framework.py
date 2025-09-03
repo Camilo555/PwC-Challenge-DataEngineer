@@ -4,23 +4,20 @@ Comprehensive testing framework for the PwC Enterprise Data Platform
 """
 import asyncio
 import json
-import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Union
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
 
-import pytest
 import httpx
-from fastapi.testclient import TestClient
 
-from core.logging import get_logger
 from core.config.base_config import BaseConfig
+from core.logging import get_logger
 
 
 class TestType(Enum):
@@ -62,12 +59,12 @@ class TestResult:
     status: TestStatus
     duration_seconds: float
     start_time: datetime
-    end_time: Optional[datetime] = None
-    error_message: Optional[str] = None
+    end_time: datetime | None = None
+    error_message: str | None = None
     assertions_passed: int = 0
     assertions_total: int = 0
-    metadata: Dict[str, Any] = None
-    
+    metadata: dict[str, Any] = None
+
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
@@ -83,13 +80,13 @@ class TestSuite:
     description: str
     test_type: TestType
     severity: TestSeverity
-    tags: List[str]
-    setup_hooks: List[Callable] = None
-    teardown_hooks: List[Callable] = None
+    tags: list[str]
+    setup_hooks: list[Callable] = None
+    teardown_hooks: list[Callable] = None
     timeout_seconds: int = 300
     retry_count: int = 0
     parallel: bool = False
-    
+
     def __post_init__(self):
         if self.setup_hooks is None:
             self.setup_hooks = []
@@ -99,29 +96,29 @@ class TestSuite:
 
 class BaseTestFramework(ABC):
     """Base class for all test frameworks"""
-    
-    def __init__(self, config: Optional[BaseConfig] = None):
+
+    def __init__(self, config: BaseConfig | None = None):
         self.config = config or BaseConfig()
         self.logger = get_logger(__name__)
-        self.test_results: List[TestResult] = []
-        self.current_test: Optional[TestResult] = None
-        
+        self.test_results: list[TestResult] = []
+        self.current_test: TestResult | None = None
+
     @abstractmethod
     async def setup(self):
         """Setup test environment"""
         pass
-    
+
     @abstractmethod
     async def teardown(self):
         """Cleanup test environment"""
         pass
-    
+
     @asynccontextmanager
     async def test_context(self, test_name: str, test_type: TestType):
         """Context manager for individual tests"""
         test_id = str(uuid.uuid4())
         start_time = datetime.now()
-        
+
         self.current_test = TestResult(
             test_id=test_id,
             test_name=test_name,
@@ -130,17 +127,17 @@ class BaseTestFramework(ABC):
             duration_seconds=0.0,
             start_time=start_time
         )
-        
+
         try:
             yield self.current_test
-            
+
             # Test completed successfully
             self.current_test.status = TestStatus.PASSED
             self.current_test.end_time = datetime.now()
             self.current_test.duration_seconds = (
                 self.current_test.end_time - start_time
             ).total_seconds()
-            
+
         except AssertionError as e:
             # Test assertion failed
             self.current_test.status = TestStatus.FAILED
@@ -150,7 +147,7 @@ class BaseTestFramework(ABC):
                 self.current_test.end_time - start_time
             ).total_seconds()
             raise
-            
+
         except Exception as e:
             # Test error
             self.current_test.status = TestStatus.ERROR
@@ -160,53 +157,53 @@ class BaseTestFramework(ABC):
                 self.current_test.end_time - start_time
             ).total_seconds()
             raise
-            
+
         finally:
             self.test_results.append(self.current_test)
-    
+
     def assert_equals(self, actual: Any, expected: Any, message: str = ""):
         """Enhanced assertion with metadata tracking"""
         self.current_test.assertions_total += 1
-        
+
         try:
             assert actual == expected, f"{message}. Expected: {expected}, Actual: {actual}"
             self.current_test.assertions_passed += 1
         except AssertionError:
             self.logger.error(f"Assertion failed: {message}. Expected: {expected}, Actual: {actual}")
             raise
-    
+
     def assert_in_range(self, actual: float, min_val: float, max_val: float, message: str = ""):
         """Assert value is within range"""
         self.current_test.assertions_total += 1
-        
+
         try:
             assert min_val <= actual <= max_val, f"{message}. Expected: {min_val} <= {actual} <= {max_val}"
             self.current_test.assertions_passed += 1
         except AssertionError:
             self.logger.error(f"Range assertion failed: {message}")
             raise
-    
+
     def assert_response_time(self, duration_seconds: float, max_seconds: float, message: str = ""):
         """Assert response time is within acceptable limits"""
         self.current_test.assertions_total += 1
-        
+
         try:
             assert duration_seconds <= max_seconds, f"{message}. Response time {duration_seconds}s exceeded {max_seconds}s"
             self.current_test.assertions_passed += 1
         except AssertionError:
             self.logger.error(f"Response time assertion failed: {message}")
             raise
-    
-    def get_test_summary(self) -> Dict[str, Any]:
+
+    def get_test_summary(self) -> dict[str, Any]:
         """Get test execution summary"""
         total_tests = len(self.test_results)
         passed_tests = sum(1 for r in self.test_results if r.status == TestStatus.PASSED)
         failed_tests = sum(1 for r in self.test_results if r.status == TestStatus.FAILED)
         error_tests = sum(1 for r in self.test_results if r.status == TestStatus.ERROR)
-        
+
         total_duration = sum(r.duration_seconds for r in self.test_results)
         avg_duration = total_duration / total_tests if total_tests > 0 else 0
-        
+
         return {
             "total_tests": total_tests,
             "passed": passed_tests,
@@ -221,36 +218,36 @@ class BaseTestFramework(ABC):
 
 class APITestFramework(BaseTestFramework):
     """Framework for API testing"""
-    
-    def __init__(self, base_url: str, auth_token: Optional[str] = None, **kwargs):
+
+    def __init__(self, base_url: str, auth_token: str | None = None, **kwargs):
         super().__init__(**kwargs)
         self.base_url = base_url
         self.auth_token = auth_token
-        self.client: Optional[httpx.AsyncClient] = None
-        
+        self.client: httpx.AsyncClient | None = None
+
     async def setup(self):
         """Setup API test client"""
         headers = {"Content-Type": "application/json"}
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
-        
+
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             headers=headers,
             timeout=30.0
         )
-    
+
     async def teardown(self):
         """Cleanup API client"""
         if self.client:
             await self.client.aclose()
-    
-    async def get(self, endpoint: str, params: Optional[Dict] = None) -> httpx.Response:
+
+    async def get(self, endpoint: str, params: dict | None = None) -> httpx.Response:
         """Make GET request with timing"""
         start_time = time.time()
         response = await self.client.get(endpoint, params=params)
         duration = time.time() - start_time
-        
+
         # Add response metadata
         if self.current_test:
             self.current_test.metadata.update({
@@ -261,16 +258,16 @@ class APITestFramework(BaseTestFramework):
                     "status_code": response.status_code
                 }
             })
-        
+
         return response
-    
-    async def post(self, endpoint: str, json_data: Optional[Dict] = None, 
-                  data: Optional[Dict] = None) -> httpx.Response:
+
+    async def post(self, endpoint: str, json_data: dict | None = None,
+                  data: dict | None = None) -> httpx.Response:
         """Make POST request with timing"""
         start_time = time.time()
         response = await self.client.post(endpoint, json=json_data, data=data)
         duration = time.time() - start_time
-        
+
         # Add response metadata
         if self.current_test:
             self.current_test.metadata.update({
@@ -281,15 +278,15 @@ class APITestFramework(BaseTestFramework):
                     "status_code": response.status_code
                 }
             })
-        
+
         return response
-    
-    async def put(self, endpoint: str, json_data: Optional[Dict] = None) -> httpx.Response:
+
+    async def put(self, endpoint: str, json_data: dict | None = None) -> httpx.Response:
         """Make PUT request with timing"""
         start_time = time.time()
         response = await self.client.put(endpoint, json=json_data)
         duration = time.time() - start_time
-        
+
         # Add response metadata
         if self.current_test:
             self.current_test.metadata.update({
@@ -300,15 +297,15 @@ class APITestFramework(BaseTestFramework):
                     "status_code": response.status_code
                 }
             })
-        
+
         return response
-    
+
     async def delete(self, endpoint: str) -> httpx.Response:
         """Make DELETE request with timing"""
         start_time = time.time()
         response = await self.client.delete(endpoint)
         duration = time.time() - start_time
-        
+
         # Add response metadata
         if self.current_test:
             self.current_test.metadata.update({
@@ -319,32 +316,32 @@ class APITestFramework(BaseTestFramework):
                     "status_code": response.status_code
                 }
             })
-        
+
         return response
-    
+
     def assert_status_code(self, response: httpx.Response, expected_code: int, message: str = ""):
         """Assert HTTP status code"""
-        self.assert_equals(response.status_code, expected_code, 
+        self.assert_equals(response.status_code, expected_code,
                           message or f"HTTP status code should be {expected_code}")
-    
-    def assert_json_schema(self, response: httpx.Response, schema: Dict, message: str = ""):
+
+    def assert_json_schema(self, response: httpx.Response, schema: dict, message: str = ""):
         """Assert response matches JSON schema"""
         import jsonschema
-        
+
         self.current_test.assertions_total += 1
-        
+
         try:
             jsonschema.validate(response.json(), schema)
             self.current_test.assertions_passed += 1
         except jsonschema.ValidationError as e:
             self.logger.error(f"JSON schema validation failed: {e}")
             raise AssertionError(f"{message}. Schema validation failed: {e}")
-    
+
     def assert_response_contains(self, response: httpx.Response, key: str, value: Any = None, message: str = ""):
         """Assert response contains key/value"""
         response_data = response.json()
         self.current_test.assertions_total += 1
-        
+
         try:
             assert key in response_data, f"Response should contain key '{key}'"
             if value is not None:
@@ -357,30 +354,30 @@ class APITestFramework(BaseTestFramework):
 
 class DatabaseTestFramework(BaseTestFramework):
     """Framework for database testing"""
-    
+
     def __init__(self, db_connection_string: str, **kwargs):
         super().__init__(**kwargs)
         self.db_connection_string = db_connection_string
         self.db_connection = None
-    
+
     async def setup(self):
         """Setup database connection"""
         import asyncpg
         self.db_connection = await asyncpg.connect(self.db_connection_string)
-    
+
     async def teardown(self):
         """Cleanup database connection"""
         if self.db_connection:
             await self.db_connection.close()
-    
-    async def execute_query(self, query: str, *args) -> List[Dict]:
+
+    async def execute_query(self, query: str, *args) -> list[dict]:
         """Execute SQL query and return results"""
         start_time = time.time()
-        
+
         try:
             results = await self.db_connection.fetch(query, *args)
             duration = time.time() - start_time
-            
+
             # Add query metadata
             if self.current_test:
                 self.current_test.metadata.update({
@@ -390,108 +387,108 @@ class DatabaseTestFramework(BaseTestFramework):
                         "row_count": len(results)
                     }
                 })
-            
+
             return [dict(row) for row in results]
-            
+
         except Exception as e:
             self.logger.error(f"Database query failed: {e}")
             raise
-    
+
     async def count_rows(self, table: str, where_clause: str = "") -> int:
         """Count rows in table"""
         query = f"SELECT COUNT(*) as count FROM {table}"
         if where_clause:
             query += f" WHERE {where_clause}"
-        
+
         result = await self.execute_query(query)
         return result[0]['count']
-    
+
     def assert_row_count(self, actual_count: int, expected_count: int, message: str = ""):
         """Assert row count matches expected"""
-        self.assert_equals(actual_count, expected_count, 
+        self.assert_equals(actual_count, expected_count,
                           message or f"Row count should be {expected_count}")
-    
+
     def assert_query_performance(self, duration_seconds: float, max_seconds: float = 1.0, message: str = ""):
         """Assert query performance"""
-        self.assert_response_time(duration_seconds, max_seconds, 
+        self.assert_response_time(duration_seconds, max_seconds,
                                  message or f"Query should complete within {max_seconds}s")
 
 
 class PerformanceTestFramework(BaseTestFramework):
     """Framework for performance testing"""
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.performance_metrics: Dict[str, List[float]] = {}
-    
+        self.performance_metrics: dict[str, list[float]] = {}
+
     async def setup(self):
         """Setup performance monitoring"""
         pass
-    
+
     async def teardown(self):
         """Cleanup performance monitoring"""
         pass
-    
+
     async def measure_performance(self, operation_name: str, operation: Callable, *args, **kwargs):
         """Measure operation performance"""
         start_time = time.time()
-        
+
         try:
             result = await operation(*args, **kwargs) if asyncio.iscoroutinefunction(operation) else operation(*args, **kwargs)
             duration = time.time() - start_time
-            
+
             # Track performance metrics
             if operation_name not in self.performance_metrics:
                 self.performance_metrics[operation_name] = []
             self.performance_metrics[operation_name].append(duration)
-            
+
             # Add to current test metadata
             if self.current_test:
                 if "performance_metrics" not in self.current_test.metadata:
                     self.current_test.metadata["performance_metrics"] = {}
-                
+
                 self.current_test.metadata["performance_metrics"][operation_name] = {
                     "duration": duration,
                     "timestamp": time.time()
                 }
-            
+
             return result, duration
-            
+
         except Exception as e:
             duration = time.time() - start_time
             self.logger.error(f"Performance measurement failed for {operation_name}: {e}")
             raise
-    
+
     def assert_performance_percentile(self, operation_name: str, percentile: int, max_duration: float, message: str = ""):
         """Assert performance percentile"""
         if operation_name not in self.performance_metrics:
             raise AssertionError(f"No performance data for operation: {operation_name}")
-        
+
         durations = sorted(self.performance_metrics[operation_name])
         index = int((percentile / 100.0) * len(durations))
         percentile_duration = durations[min(index, len(durations) - 1)]
-        
-        self.assert_response_time(percentile_duration, max_duration, 
+
+        self.assert_response_time(percentile_duration, max_duration,
                                  message or f"{percentile}th percentile for {operation_name} should be under {max_duration}s")
-    
+
     def assert_average_performance(self, operation_name: str, max_avg_duration: float, message: str = ""):
         """Assert average performance"""
         if operation_name not in self.performance_metrics:
             raise AssertionError(f"No performance data for operation: {operation_name}")
-        
+
         durations = self.performance_metrics[operation_name]
         avg_duration = sum(durations) / len(durations)
-        
+
         self.assert_response_time(avg_duration, max_avg_duration,
                                  message or f"Average duration for {operation_name} should be under {max_avg_duration}s")
-    
-    def get_performance_summary(self, operation_name: str) -> Dict[str, float]:
+
+    def get_performance_summary(self, operation_name: str) -> dict[str, float]:
         """Get performance summary for operation"""
         if operation_name not in self.performance_metrics:
             return {}
-        
+
         durations = sorted(self.performance_metrics[operation_name])
-        
+
         return {
             "count": len(durations),
             "min": min(durations),
@@ -505,20 +502,20 @@ class PerformanceTestFramework(BaseTestFramework):
 
 class MockService:
     """Mock service for testing"""
-    
+
     def __init__(self):
-        self.call_history: List[Dict[str, Any]] = []
-        self.responses: Dict[str, Any] = {}
-        self.delays: Dict[str, float] = {}
-    
+        self.call_history: list[dict[str, Any]] = []
+        self.responses: dict[str, Any] = {}
+        self.delays: dict[str, float] = {}
+
     def set_response(self, method_name: str, response: Any):
         """Set mock response for method"""
         self.responses[method_name] = response
-    
+
     def set_delay(self, method_name: str, delay_seconds: float):
         """Set delay for method call"""
         self.delays[method_name] = delay_seconds
-    
+
     async def mock_call(self, method_name: str, *args, **kwargs):
         """Mock method call"""
         # Record call
@@ -528,20 +525,20 @@ class MockService:
             "kwargs": kwargs,
             "timestamp": time.time()
         })
-        
+
         # Apply delay if configured
         if method_name in self.delays:
             await asyncio.sleep(self.delays[method_name])
-        
+
         # Return configured response
         return self.responses.get(method_name, None)
-    
-    def get_call_count(self, method_name: Optional[str] = None) -> int:
+
+    def get_call_count(self, method_name: str | None = None) -> int:
         """Get call count for method or all methods"""
         if method_name:
             return sum(1 for call in self.call_history if call["method"] == method_name)
         return len(self.call_history)
-    
+
     def reset(self):
         """Reset mock service state"""
         self.call_history.clear()
@@ -551,9 +548,9 @@ class MockService:
 
 class TestDataFactory:
     """Factory for generating test data"""
-    
+
     @staticmethod
-    def create_test_user(user_id: Optional[str] = None, **overrides) -> Dict[str, Any]:
+    def create_test_user(user_id: str | None = None, **overrides) -> dict[str, Any]:
         """Create test user data"""
         base_user = {
             "user_id": user_id or str(uuid.uuid4()),
@@ -566,9 +563,9 @@ class TestDataFactory:
         }
         base_user.update(overrides)
         return base_user
-    
+
     @staticmethod
-    def create_test_sale(sale_id: Optional[str] = None, **overrides) -> Dict[str, Any]:
+    def create_test_sale(sale_id: str | None = None, **overrides) -> dict[str, Any]:
         """Create test sale data"""
         base_sale = {
             "sale_id": sale_id or str(uuid.uuid4()),
@@ -583,9 +580,9 @@ class TestDataFactory:
         }
         base_sale.update(overrides)
         return base_sale
-    
+
     @staticmethod
-    def create_test_product(product_id: Optional[str] = None, **overrides) -> Dict[str, Any]:
+    def create_test_product(product_id: str | None = None, **overrides) -> dict[str, Any]:
         """Create test product data"""
         base_product = {
             "product_id": product_id or str(uuid.uuid4()),
@@ -603,11 +600,11 @@ class TestDataFactory:
 
 class TestReporter:
     """Test result reporter"""
-    
+
     def __init__(self, output_format: str = "json"):
         self.output_format = output_format
-    
-    def generate_report(self, test_results: List[TestResult], output_file: Optional[str] = None) -> str:
+
+    def generate_report(self, test_results: list[TestResult], output_file: str | None = None) -> str:
         """Generate test report"""
         if self.output_format == "json":
             return self._generate_json_report(test_results, output_file)
@@ -615,8 +612,8 @@ class TestReporter:
             return self._generate_html_report(test_results, output_file)
         else:
             return self._generate_text_report(test_results, output_file)
-    
-    def _generate_json_report(self, test_results: List[TestResult], output_file: Optional[str] = None) -> str:
+
+    def _generate_json_report(self, test_results: list[TestResult], output_file: str | None = None) -> str:
         """Generate JSON report"""
         report_data = {
             "summary": {
@@ -629,22 +626,22 @@ class TestReporter:
             },
             "test_results": [asdict(result) for result in test_results]
         }
-        
+
         report_json = json.dumps(report_data, indent=2, default=str)
-        
+
         if output_file:
             with open(output_file, 'w') as f:
                 f.write(report_json)
-        
+
         return report_json
-    
-    def _generate_html_report(self, test_results: List[TestResult], output_file: Optional[str] = None) -> str:
+
+    def _generate_html_report(self, test_results: list[TestResult], output_file: str | None = None) -> str:
         """Generate HTML report"""
         # Simplified HTML report
         total = len(test_results)
         passed = sum(1 for r in test_results if r.status == TestStatus.PASSED)
         failed = sum(1 for r in test_results if r.status == TestStatus.FAILED)
-        
+
         html_content = f"""
         <html>
         <head><title>Test Report</title></head>
@@ -659,7 +656,7 @@ class TestReporter:
             <table border="1">
                 <tr><th>Test Name</th><th>Type</th><th>Status</th><th>Duration</th></tr>
         """
-        
+
         for result in test_results:
             status_color = "green" if result.status == TestStatus.PASSED else "red"
             html_content += f"""
@@ -670,25 +667,25 @@ class TestReporter:
                     <td>{result.duration_seconds:.2f}s</td>
                 </tr>
             """
-        
+
         html_content += """
             </table>
         </body>
         </html>
         """
-        
+
         if output_file:
             with open(output_file, 'w') as f:
                 f.write(html_content)
-        
+
         return html_content
-    
-    def _generate_text_report(self, test_results: List[TestResult], output_file: Optional[str] = None) -> str:
+
+    def _generate_text_report(self, test_results: list[TestResult], output_file: str | None = None) -> str:
         """Generate text report"""
         total = len(test_results)
         passed = sum(1 for r in test_results if r.status == TestStatus.PASSED)
         failed = sum(1 for r in test_results if r.status == TestStatus.FAILED)
-        
+
         report_text = f"""
 TEST EXECUTION REPORT
 ====================
@@ -702,38 +699,38 @@ Summary:
 
 Test Results:
 """
-        
+
         for result in test_results:
             report_text += f"- {result.test_name} ({result.test_type.value}): {result.status.value} ({result.duration_seconds:.2f}s)\n"
             if result.error_message:
                 report_text += f"  Error: {result.error_message}\n"
-        
+
         if output_file:
             with open(output_file, 'w') as f:
                 f.write(report_text)
-        
+
         return report_text
 
 
 # Utility functions for common test operations
-async def wait_for_condition(condition: Callable[[], bool], timeout_seconds: int = 30, 
+async def wait_for_condition(condition: Callable[[], bool], timeout_seconds: int = 30,
                            check_interval: float = 0.5) -> bool:
     """Wait for a condition to become true"""
     start_time = time.time()
-    
+
     while time.time() - start_time < timeout_seconds:
         try:
             if condition():
                 return True
         except Exception:
             pass  # Ignore exceptions during condition check
-        
+
         await asyncio.sleep(check_interval)
-    
+
     return False
 
 
-def create_test_environment_variables() -> Dict[str, str]:
+def create_test_environment_variables() -> dict[str, str]:
     """Create test environment variables"""
     return {
         "ENVIRONMENT": "testing",

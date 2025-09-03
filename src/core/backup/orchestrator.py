@@ -4,6 +4,7 @@ Backup and Disaster Recovery Orchestrator
 Central orchestrator for comprehensive backup and disaster recovery operations,
 integrating all backup components into a unified system.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 
 class OrchestrationMode(str, Enum):
     """Orchestration operation modes."""
+
     MANUAL = "manual"
     SCHEDULED = "scheduled"
     EMERGENCY = "emergency"
@@ -37,6 +39,7 @@ class OrchestrationMode(str, Enum):
 @dataclass
 class BackupJob:
     """Comprehensive backup job definition."""
+
     job_id: str
     name: str
     component: str
@@ -57,7 +60,7 @@ class BackupJob:
 class BackupOrchestrator:
     """
     Master orchestrator for backup and disaster recovery operations.
-    
+
     Features:
     - Centralized backup and recovery coordination
     - Multi-storage backend management
@@ -88,7 +91,7 @@ class BackupOrchestrator:
             "active_operations": {},
             "last_full_backup": None,
             "last_dr_test": None,
-            "system_health": "healthy"
+            "system_health": "healthy",
         }
 
         # Initialize default storage backends
@@ -135,16 +138,16 @@ class BackupOrchestrator:
         self,
         mode: OrchestrationMode = OrchestrationMode.MANUAL,
         validate: bool = True,
-        multi_storage: bool = True
+        multi_storage: bool = True,
     ) -> dict[str, Any]:
         """
         Trigger comprehensive full system backup.
-        
+
         Args:
             mode: Orchestration mode for the backup
             validate: Whether to validate backups after completion
             multi_storage: Whether to store in multiple backend
-            
+
         Returns:
             Comprehensive backup results
         """
@@ -157,7 +160,7 @@ class BackupOrchestrator:
             "type": "full_backup",
             "start_time": datetime.utcnow(),
             "mode": mode.value,
-            "status": "in_progress"
+            "status": "in_progress",
         }
 
         try:
@@ -169,7 +172,7 @@ class BackupOrchestrator:
             # Execute full system backup
             backup_results = await self.backup_manager.perform_full_system_backup(
                 compress=True,
-                validate=False  # We'll do our own validation
+                validate=False,  # We'll do our own validation
             )
 
             # Store backups in multiple storage backends if requested
@@ -189,12 +192,7 @@ class BackupOrchestrator:
 
             # Record completion metrics
             await self.monitor.record_backup_completion(
-                operation_id,
-                "system",
-                "full",
-                total_duration,
-                total_size,
-                success
+                operation_id, "system", "full", total_duration, total_size, success
             )
 
             # Update orchestration state
@@ -210,7 +208,7 @@ class BackupOrchestrator:
                     f"Full system backup completed successfully in {total_duration:.1f}s "
                     f"({total_size / 1024 / 1024:.1f} MB)",
                     "system",
-                    tags={"operation_id": operation_id, "mode": mode.value}
+                    tags={"operation_id": operation_id, "mode": mode.value},
                 )
             else:
                 await self.monitor.generate_alert(
@@ -218,31 +216,31 @@ class BackupOrchestrator:
                     "Full System Backup Issues",
                     f"Full system backup completed with {backup_results['summary']['failed_backups']} failures",
                     "system",
-                    tags={"operation_id": operation_id, "mode": mode.value}
+                    tags={"operation_id": operation_id, "mode": mode.value},
                 )
 
-            logger.info(f"Full system backup completed: {operation_id} "
-                       f"(success: {success}, duration: {total_duration:.1f}s)")
+            logger.info(
+                f"Full system backup completed: {operation_id} "
+                f"(success: {success}, duration: {total_duration:.1f}s)"
+            )
 
             return {
                 "operation_id": operation_id,
                 "success": success,
                 "duration_seconds": total_duration,
-                "backup_results": backup_results
+                "backup_results": backup_results,
             }
 
         except Exception as e:
             # Record failure
-            await self.monitor.record_backup_completion(
-                operation_id, "system", "full", 0, 0, False
-            )
+            await self.monitor.record_backup_completion(operation_id, "system", "full", 0, 0, False)
 
             await self.monitor.generate_alert(
                 AlertSeverity.CRITICAL,
                 "Full System Backup Failed",
                 f"Full system backup failed: {str(e)}",
                 "system",
-                tags={"operation_id": operation_id, "error": str(e)}
+                tags={"operation_id": operation_id, "error": str(e)},
             )
 
             self.orchestration_state["active_operations"][operation_id]["status"] = "failed"
@@ -252,19 +250,16 @@ class BackupOrchestrator:
             raise
 
     async def execute_disaster_recovery(
-        self,
-        plan_id: str,
-        simulate: bool = False,
-        override_rto: int | None = None
+        self, plan_id: str, simulate: bool = False, override_rto: int | None = None
     ) -> dict[str, Any]:
         """
         Execute disaster recovery plan.
-        
+
         Args:
             plan_id: ID of disaster recovery plan to execute
             simulate: Whether to simulate execution
             override_rto: Override RTO in minutes
-            
+
         Returns:
             Disaster recovery execution results
         """
@@ -278,7 +273,7 @@ class BackupOrchestrator:
             "plan_id": plan_id,
             "start_time": datetime.utcnow(),
             "simulate": simulate,
-            "status": "in_progress"
+            "status": "in_progress",
         }
 
         try:
@@ -291,7 +286,7 @@ class BackupOrchestrator:
                     "Disaster Recovery Initiated",
                     f"Disaster recovery plan {plan_id} is being executed",
                     "system",
-                    tags={"plan_id": plan_id, "operation_id": operation_id}
+                    tags={"plan_id": plan_id, "operation_id": operation_id},
                 )
 
             # Execute the disaster recovery plan
@@ -308,11 +303,13 @@ class BackupOrchestrator:
                 "system",
                 "disaster_recovery",
                 total_duration,
-                dr_results["status"] == "completed"
+                dr_results["status"] == "completed",
             )
 
             # Update orchestration state
-            self.orchestration_state["active_operations"][operation_id]["status"] = dr_results["status"]
+            self.orchestration_state["active_operations"][operation_id]["status"] = dr_results[
+                "status"
+            ]
             self.orchestration_state["active_operations"][operation_id]["end_time"] = end_time
 
             if simulate:
@@ -325,7 +322,11 @@ class BackupOrchestrator:
                     f"Disaster Recovery {'Test' if simulate else 'Execution'} Completed",
                     f"DR plan {plan_id} {'simulation' if simulate else 'execution'} completed in {total_duration:.1f}s",
                     "system",
-                    tags={"plan_id": plan_id, "operation_id": operation_id, "simulate": str(simulate)}
+                    tags={
+                        "plan_id": plan_id,
+                        "operation_id": operation_id,
+                        "simulate": str(simulate),
+                    },
                 )
             else:
                 await self.monitor.generate_alert(
@@ -333,15 +334,21 @@ class BackupOrchestrator:
                     f"Disaster Recovery {'Test' if simulate else 'Execution'} Failed",
                     f"DR plan {plan_id} {'simulation' if simulate else 'execution'} failed",
                     "system",
-                    tags={"plan_id": plan_id, "operation_id": operation_id, "error": dr_results.get("error", "Unknown")}
+                    tags={
+                        "plan_id": plan_id,
+                        "operation_id": operation_id,
+                        "error": dr_results.get("error", "Unknown"),
+                    },
                 )
 
-            logger.info(f"Disaster recovery {'simulation' if simulate else 'execution'} completed: {operation_id}")
+            logger.info(
+                f"Disaster recovery {'simulation' if simulate else 'execution'} completed: {operation_id}"
+            )
 
             return {
                 "operation_id": operation_id,
                 "dr_results": dr_results,
-                "total_duration": total_duration
+                "total_duration": total_duration,
             }
 
         except Exception as e:
@@ -350,7 +357,7 @@ class BackupOrchestrator:
                 "Disaster Recovery Failed",
                 f"DR plan {plan_id} failed with critical error: {str(e)}",
                 "system",
-                tags={"plan_id": plan_id, "operation_id": operation_id, "error": str(e)}
+                tags={"plan_id": plan_id, "operation_id": operation_id, "error": str(e)},
             )
 
             self.orchestration_state["active_operations"][operation_id]["status"] = "failed"
@@ -360,19 +367,16 @@ class BackupOrchestrator:
             raise
 
     async def restore_point_in_time(
-        self,
-        component: str,
-        target_timestamp: datetime,
-        destination: Path | None = None
+        self, component: str, target_timestamp: datetime, destination: Path | None = None
     ) -> dict[str, Any]:
         """
         Restore component to specific point in time.
-        
+
         Args:
             component: Component to restore
             target_timestamp: Target timestamp for restore
             destination: Optional custom restore destination
-            
+
         Returns:
             Point-in-time restore results
         """
@@ -384,10 +388,12 @@ class BackupOrchestrator:
             start_time = datetime.utcnow()
 
             # Find closest backup to target timestamp
-            recovery_points = self.recovery_manager.get_recovery_points(component=component, limit=100)
+            recovery_points = self.recovery_manager.get_recovery_points(
+                component=component, limit=100
+            )
 
             closest_backup = None
-            min_time_diff = float('inf')
+            min_time_diff = float("inf")
 
             for point in recovery_points:
                 point_time = datetime.fromisoformat(point["timestamp"])
@@ -404,7 +410,7 @@ class BackupOrchestrator:
             restore_results = await self.recovery_manager.restore_from_backup(
                 backup_id=closest_backup["backup_id"],
                 target_location=destination,
-                verify_integrity=True
+                verify_integrity=True,
             )
 
             end_time = datetime.utcnow()
@@ -416,7 +422,7 @@ class BackupOrchestrator:
                 component,
                 "point_in_time",
                 total_duration,
-                restore_results["status"] == "completed"
+                restore_results["status"] == "completed",
             )
 
             logger.info(f"Point-in-time restore completed: {operation_id}")
@@ -426,7 +432,7 @@ class BackupOrchestrator:
                 "restore_results": restore_results,
                 "backup_used": closest_backup["backup_id"],
                 "time_difference_seconds": min_time_diff,
-                "duration_seconds": total_duration
+                "duration_seconds": total_duration,
             }
 
         except Exception as e:
@@ -436,7 +442,7 @@ class BackupOrchestrator:
     async def run_maintenance_tasks(self) -> dict[str, Any]:
         """
         Run scheduled maintenance tasks.
-        
+
         Returns:
             Maintenance tasks results
         """
@@ -445,7 +451,7 @@ class BackupOrchestrator:
         maintenance_results = {
             "start_time": datetime.utcnow().isoformat(),
             "tasks": {},
-            "total_duration": 0.0
+            "total_duration": 0.0,
         }
 
         start_time = datetime.utcnow()
@@ -462,7 +468,7 @@ class BackupOrchestrator:
             # Clean up storage backends
             storage_cleanup = {}
             for backend_id, backend in self.storage_backends.items():
-                if hasattr(backend, 'cleanup_expired_files'):
+                if hasattr(backend, "cleanup_expired_files"):
                     cleanup_result = await backend.cleanup_expired_files()
                     storage_cleanup[backend_id] = cleanup_result
 
@@ -479,7 +485,9 @@ class BackupOrchestrator:
             maintenance_results["end_time"] = end_time.isoformat()
             maintenance_results["total_duration"] = (end_time - start_time).total_seconds()
 
-            logger.info(f"Maintenance tasks completed in {maintenance_results['total_duration']:.1f}s")
+            logger.info(
+                f"Maintenance tasks completed in {maintenance_results['total_duration']:.1f}s"
+            )
 
             return maintenance_results
 
@@ -490,7 +498,7 @@ class BackupOrchestrator:
     async def get_system_status(self) -> dict[str, Any]:
         """
         Get comprehensive system status.
-        
+
         Returns:
             Complete system status report
         """
@@ -502,11 +510,11 @@ class BackupOrchestrator:
             "storage_backends": {},
             "monitoring": {
                 "active_alerts": len(await self.monitor.get_active_alerts()),
-                "metrics_summary": await self.monitor.get_metrics_summary(hours=24)
+                "metrics_summary": await self.monitor.get_metrics_summary(hours=24),
             },
             "sla_compliance": await self.monitor.get_sla_compliance_report(),
             "last_full_backup": self.orchestration_state.get("last_full_backup"),
-            "last_dr_test": self.orchestration_state.get("last_dr_test")
+            "last_dr_test": self.orchestration_state.get("last_dr_test"),
         }
 
         # Add storage backend statistics
@@ -521,9 +529,7 @@ class BackupOrchestrator:
     def _initialize_storage_backends(self) -> None:
         """Initialize default storage backends."""
         # Local storage backend
-        local_config = {
-            "base_path": str(self.config.project_root / "backup_storage")
-        }
+        local_config = {"base_path": str(self.config.project_root / "backup_storage")}
 
         self.storage_backends["local"] = LocalStorageBackend("local", local_config)
 
@@ -552,7 +558,7 @@ class BackupOrchestrator:
             validation_level="standard",
             storage_backends=["local"],
             priority="high",
-            tags={"automated": "true", "critical": "true"}
+            tags={"automated": "true", "critical": "true"},
         )
 
         # Data lake backup job
@@ -566,7 +572,7 @@ class BackupOrchestrator:
             validation_level="standard",
             storage_backends=["local"],
             priority="normal",
-            tags={"automated": "true"}
+            tags={"automated": "true"},
         )
 
         # Configuration backup job
@@ -580,7 +586,7 @@ class BackupOrchestrator:
             validation_level="basic",
             storage_backends=["local"],
             priority="normal",
-            tags={"automated": "true"}
+            tags={"automated": "true"},
         )
 
         logger.info(f"Created {len(self.backup_jobs)} default backup jobs")
@@ -592,8 +598,8 @@ class BackupOrchestrator:
             "Standard Disaster Recovery Plan",
             "Comprehensive disaster recovery plan for system-wide failures",
             rto_minutes=240,  # 4 hours
-            rpo_minutes=60,   # 1 hour
-            priority_components=["database", "configuration", "data_lake"]
+            rpo_minutes=60,  # 1 hour
+            priority_components=["database", "configuration", "data_lake"],
         )
 
         logger.info("Created default disaster recovery plans")
@@ -609,7 +615,7 @@ class BackupOrchestrator:
             "database": None,
             "data_lake": [],
             "configuration": None,
-            "overall_success": True
+            "overall_success": True,
         }
 
         try:
@@ -620,9 +626,7 @@ class BackupOrchestrator:
 
                 if db_path.exists():
                     report = await self.validator.validate_backup(
-                        db_path,
-                        db_backup,
-                        IntegrityLevel.STANDARD
+                        db_path, db_backup, IntegrityLevel.STANDARD
                     )
                     validation_results["database"] = report.to_dict()
 
@@ -636,9 +640,7 @@ class BackupOrchestrator:
 
                     if dl_path.exists():
                         report = await self.validator.validate_backup(
-                            dl_path,
-                            dl_backup,
-                            IntegrityLevel.STANDARD
+                            dl_path, dl_backup, IntegrityLevel.STANDARD
                         )
                         validation_results["data_lake"].append(report.to_dict())
 
@@ -652,9 +654,7 @@ class BackupOrchestrator:
 
                 if config_path.exists():
                     report = await self.validator.validate_backup(
-                        config_path,
-                        config_backup,
-                        IntegrityLevel.BASIC
+                        config_path, config_backup, IntegrityLevel.BASIC
                     )
                     validation_results["configuration"] = report.to_dict()
 
@@ -671,11 +671,7 @@ class BackupOrchestrator:
     async def _run_maintenance_validation(self) -> dict[str, Any]:
         """Run validation on recent backups."""
         # Simplified maintenance validation
-        return {
-            "backups_validated": 0,
-            "validation_errors": 0,
-            "validation_warnings": 0
-        }
+        return {"backups_validated": 0, "validation_errors": 0, "validation_warnings": 0}
 
     async def _update_system_health(self) -> None:
         """Update overall system health status."""

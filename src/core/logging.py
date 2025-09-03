@@ -2,6 +2,7 @@
 Centralized logging configuration.
 Provides structured logging with support for multiple formats and outputs.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,11 +40,28 @@ class JSONFormatter(logging.Formatter):
         # Add extra fields if present
         for key, value in record.__dict__.items():
             if key not in [
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "thread", "threadName", "exc_info", "exc_text", "stack_info",
-                "getMessage", "message"
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "getMessage",
+                "message",
             ]:
                 log_data[key] = value
 
@@ -54,10 +72,10 @@ class ColoredFormatter(logging.Formatter):
     """Colored formatter for console output."""
 
     COLORS = {
-        "DEBUG": "\033[36m",     # Cyan
-        "INFO": "\033[32m",      # Green
-        "WARNING": "\033[33m",   # Yellow
-        "ERROR": "\033[31m",     # Red
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[35m",  # Magenta
     }
     RESET = "\033[0m"
@@ -184,7 +202,9 @@ class LoggerAdapter(logging.LoggerAdapter):
         """Initialize logger adapter with extra context."""
         super().__init__(logger, extra)
 
-    def process(self, msg: str, kwargs: MutableMapping[str, Any]) -> tuple[str, MutableMapping[str, Any]]:
+    def process(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
         """Process log message and add extra context."""
         if "extra" not in kwargs:
             kwargs["extra"] = {}
@@ -192,10 +212,7 @@ class LoggerAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
-def get_logger_with_context(
-    name: str,
-    **context: Any
-) -> LoggerAdapter:
+def get_logger_with_context(name: str, **context: Any) -> LoggerAdapter:
     """
     Get a logger with additional context.
 

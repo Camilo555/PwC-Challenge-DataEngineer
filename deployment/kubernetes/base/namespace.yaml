@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pwc-data-platform
+  labels:
+    name: pwc-data-platform
+    environment: production
+    managed-by: helm
+    security.policy: restricted
+    compliance.frameworks: "gdpr,sox,pci-dss"
+  annotations:
+    description: "PwC Data Engineering Challenge - Production Data Platform"
+    owner: "data-engineering-team"
+    cost-center: "engineering"
+    created-by: "cloud-data-platform-agent"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pwc-monitoring
+  labels:
+    name: pwc-monitoring
+    environment: production
+    managed-by: helm
+    component: monitoring
+  annotations:
+    description: "Monitoring and observability components"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pwc-security
+  labels:
+    name: pwc-security
+    environment: production
+    managed-by: helm
+    component: security
+    security.policy: restricted
+  annotations:
+    description: "Security and compliance components"

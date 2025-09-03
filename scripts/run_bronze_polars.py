@@ -3,12 +3,12 @@
 Enhanced Bronze Layer Processing with Polars
 ============================================
 
-High-performance data processing script using Polars engine for optimal 
+High-performance data processing script using Polars engine for optimal
 performance on medium-sized datasets (1GB-100GB).
 
 Features:
 - 30x+ performance improvement over Pandas
-- Lazy evaluation for memory efficiency  
+- Lazy evaluation for memory efficiency
 - Comprehensive data quality assessment
 - Advanced error handling and logging
 - Business rule validation

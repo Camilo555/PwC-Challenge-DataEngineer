@@ -1,0 +1,535 @@
+# Istio Service Mesh Configuration for PwC Data Platform
+# Provides traffic management, security, and observability
+
+---
+# Istio Gateway for external traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: pwc-data-platform-gateway
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-data-platform
+    component: service-mesh
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTPS traffic
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: pwc-data-platform-tls
+    hosts:
+    - "api.pwc-data-platform.com"
+    - "data-catalog.pwc-data-platform.com"
+    - "monitoring.pwc-data-platform.com"
+    
+  # HTTP redirect to HTTPS
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "api.pwc-data-platform.com" 
+    - "data-catalog.pwc-data-platform.com"
+    - "monitoring.pwc-data-platform.com"
+    tls:
+      httpsRedirect: true
+
+---
+# Virtual Service for API traffic management
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-api-vs
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: service-mesh
+spec:
+  hosts:
+  - "api.pwc-data-platform.com"
+  gateways:
+  - pwc-data-platform-gateway
+  
+  http:
+  # Health check route (no authentication)
+  - match:
+    - uri:
+        exact: /health
+    route:
+    - destination:
+        host: pwc-api
+        port:
+          number: 8000
+    timeout: 5s
+    
+  # API v1 routes with circuit breaker
+  - match:
+    - uri:
+        prefix: /api/v1
+    route:
+    - destination:
+        host: pwc-api
+        port:
+          number: 8000
+        subset: v1
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,gateway-error,connect-failure,refused-stream
+      retryRemoteLocalities: true
+    fault:
+      delay:
+        percentage:
+          value: 0.1  # 0.1% of requests get delayed (for testing)
+        fixedDelay: 2s
+    headers:
+      request:
+        set:
+          x-api-version: "v1"
+          x-forwarded-proto: "https"
+      response:
+        set:
+          x-content-type-options: "nosniff"
+          x-frame-options: "DENY"
+          x-xss-protection: "1; mode=block"
+          
+  # API v2 routes with advanced traffic management
+  - match:
+    - uri:
+        prefix: /api/v2
+    route:
+    - destination:
+        host: pwc-api
+        port:
+          number: 8000
+        subset: v2
+      weight: 90  # 90% to stable version
+    - destination:
+        host: pwc-api-canary
+        port:
+          number: 8000
+      weight: 10  # 10% to canary version
+    timeout: 45s
+    retries:
+      attempts: 5
+      perTryTimeout: 15s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+    headers:
+      request:
+        set:
+          x-api-version: "v2"
+          x-forwarded-proto: "https"
+          
+  # WebSocket routes for real-time features
+  - match:
+    - uri:
+        prefix: /ws
+    route:
+    - destination:
+        host: pwc-api
+        port:
+          number: 8000
+    timeout: 0s  # No timeout for WebSocket connections
+    headers:
+      request:
+        set:
+          upgrade: "websocket"
+          connection: "upgrade"
+
+---
+# Destination Rule for API service
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: pwc-api-dr
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: service-mesh
+spec:
+  host: pwc-api
+  
+  # Traffic policy for connection pooling and circuit breaker
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 10  # Queue for pending requests
+        http2MaxRequests: 100        # Max requests to backend
+        maxRequestsPerConnection: 2  # Max requests per HTTP/1.1 connection
+        maxRetries: 3
+        consecutiveGatewayErrors: 5  # Circuit breaker
+        interval: 30s                # Analysis interval
+        baseEjectionTime: 30s        # Min ejection duration
+        maxEjectionPercent: 50       # Max % of upstream hosts ejected
+        minHealthPercent: 30         # Min healthy upstream hosts
+        
+    # Load balancing policy
+    loadBalancer:
+      simple: LEAST_CONN  # Use least connections for better performance
+      consistentHash:
+        httpHeaderName: "x-user-id"  # Session affinity if needed
+        
+    # Outlier detection for automatic failover
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+      
+  # Subsets for different versions
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 50  # Lower limits for v1
+        http:
+          http1MaxPendingRequests: 5
+          
+  - name: v2
+    labels:
+      version: v2
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100  # Higher limits for v2
+        http:
+          http1MaxPendingRequests: 15
+
+---
+# Service Entry for external dependencies
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: pwc-data-platform
+spec:
+  hosts:
+  - api.exchangerate-api.com
+  - datadog-api.datadoghq.com
+  - api.github.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  - number: 80
+    name: http
+    protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Authorization Policy - Zero Trust Security
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: pwc-api-authz
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: security
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+      
+  rules:
+  # Allow health checks from any source
+  - to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/health", "/metrics"]
+    
+  # Allow authenticated API access
+  - from:
+    - source:
+        requestPrincipals: ["*"]  # Must have valid JWT
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        paths: ["/api/*"]
+    when:
+    - key: request.headers[authorization]
+      values: ["Bearer *"]
+      
+  # Allow WebSocket connections with authentication
+  - from:
+    - source:
+        requestPrincipals: ["*"]
+    to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/ws/*"]
+    when:
+    - key: request.headers[upgrade]
+      values: ["websocket"]
+      
+  # Admin endpoints require specific roles
+  - from:
+    - source:
+        requestPrincipals: ["*"]
+    to:
+    - operation:
+        methods: ["*"]
+        paths: ["/api/v1/admin/*", "/api/v2/admin/*"]
+    when:
+    - key: request.auth.claims[roles]
+      values: ["admin", "super-admin"]
+
+---
+# Request Authentication using JWT
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: pwc-api-jwt
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: security
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+      
+  jwtRules:
+  # JWT validation for API endpoints
+  - issuer: "https://auth.pwc-data-platform.com"
+    jwksUri: "https://auth.pwc-data-platform.com/.well-known/jwks.json"
+    audiences:
+    - "pwc-data-platform-api"
+    forwardOriginalToken: true
+    
+  # OAuth2 integration
+  - issuer: "https://accounts.google.com"
+    jwksUri: "https://www.googleapis.com/oauth2/v3/certs"
+    audiences:
+    - "your-google-oauth-client-id"
+    
+  # Auth0 integration
+  - issuer: "https://your-tenant.auth0.com/"
+    jwksUri: "https://your-tenant.auth0.com/.well-known/jwks.json"
+    audiences:
+    - "your-auth0-audience"
+
+---
+# Peer Authentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: pwc-data-platform-mtls
+  namespace: pwc-data-platform
+  labels:
+    component: security
+spec:
+  mtls:
+    mode: STRICT  # Require mTLS for all communications
+
+---
+# Service Monitor for Prometheus scraping
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pwc-api-metrics
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    
+---
+# Telemetry Configuration for custom metrics
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-api-telemetry
+  namespace: pwc-data-platform
+  labels:
+    component: observability
+spec:
+  metrics:
+  # Custom API metrics
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: requests_total
+      tags:
+        method:
+          value: "request.method | 'unknown'"
+        response_code:
+          value: "response.code | 200"
+        api_version:
+          value: "request.headers['x-api-version'] | 'unknown'"
+        user_type:
+          value: "request.auth.claims['user_type'] | 'anonymous'"
+        
+  # Custom business metrics
+  - providers:
+    - name: otel
+  - overrides:
+    - match:
+        metric: data_processing_requests
+      tags:
+        processing_type:
+          value: "request.headers['x-processing-type'] | 'batch'"
+        data_size_category:
+          value: "request.headers['x-data-size'] | 'small'"
+
+---
+# Envoy Filter for advanced traffic control
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: pwc-api-rate-limiting
+  namespace: pwc-data-platform
+  labels:
+    component: traffic-management
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+      
+  configPatches:
+  # Rate limiting configuration
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.local_ratelimit
+        typed_config:
+          "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+          type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          value:
+            stat_prefix: local_rate_limiter
+            token_bucket:
+              max_tokens: 1000
+              tokens_per_fill: 100
+              fill_interval: 60s
+            filter_enabled:
+              runtime_key: local_rate_limit_enabled
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            filter_enforced:
+              runtime_key: local_rate_limit_enforced
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            response_headers_to_add:
+            - append: false
+              header:
+                key: x-local-rate-limit
+                value: 'true'
+
+---
+# Fault Injection for resilience testing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-api-fault-injection
+  namespace: pwc-data-platform
+  labels:
+    component: resilience-testing
+    environment: staging  # Only apply in staging
+spec:
+  hosts:
+  - pwc-api
+  
+  http:
+  # Inject faults for testing resilience
+  - match:
+    - headers:
+        x-chaos-test:
+          exact: "enabled"
+    fault:
+      delay:
+        percentage:
+          value: 5.0  # 5% of requests
+        fixedDelay: 3s
+      abort:
+        percentage:
+          value: 1.0  # 1% of requests
+        httpStatus: 503
+    route:
+    - destination:
+        host: pwc-api
+        
+  # Normal traffic
+  - route:
+    - destination:
+        host: pwc-api
+
+---
+# Sidecar configuration for resource optimization
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: pwc-api-sidecar
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: service-mesh
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+      
+  ingress:
+  - port:
+      number: 8000
+      name: http
+      protocol: HTTP
+    defaultEndpoint: 127.0.0.1:8000
+    
+  egress:
+  # Allow outbound to other services in the mesh
+  - hosts:
+    - "./*"  # Same namespace
+    - "pwc-monitoring/*"  # Monitoring namespace
+    - "istio-system/*"   # Istio system
+    
+  # Allow outbound to external services
+  - hosts:
+    - "api.exchangerate-api.com"
+    - "datadog-api.datadoghq.com"
+    - "api.github.com"
+    
+  # Resource limits for sidecar
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

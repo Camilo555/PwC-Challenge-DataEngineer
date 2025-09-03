@@ -2,6 +2,7 @@
 Data Mart Service
 Business logic for accessing and analyzing star schema data.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -22,9 +23,7 @@ class DataMartService:
         self.session = session
 
     async def get_dashboard_overview(
-        self,
-        date_from: str | None = None,
-        date_to: str | None = None
+        self, date_from: str | None = None, date_to: str | None = None
     ) -> dict[str, Any]:
         """Get high-level dashboard KPIs."""
         try:
@@ -36,7 +35,7 @@ class DataMartService:
                 func.sum(FactSale.total_amount).label("total_revenue"),
                 func.count(FactSale.sale_id).label("total_transactions"),
                 func.count(func.distinct(FactSale.customer_key)).label("unique_customers"),
-                func.avg(FactSale.total_amount).label("avg_order_value")
+                func.avg(FactSale.total_amount).label("avg_order_value"),
             ).select_from(FactSale)
 
             if date_filter is not None:
@@ -46,7 +45,9 @@ class DataMartService:
 
             # Get period comparison (previous period)
             prev_period_query = self._get_previous_period_metrics(date_from, date_to)
-            prev_result = self.session.exec(prev_period_query).first() if prev_period_query else None
+            prev_result = (
+                self.session.exec(prev_period_query).first() if prev_period_query else None
+            )
 
             # Calculate growth rates
             growth_metrics = self._calculate_growth_metrics(result, prev_result)
@@ -60,18 +61,18 @@ class DataMartService:
             return {
                 "period": {
                     "date_from": date_from,
-                    "date_to": date_to or datetime.now().strftime("%Y-%m-%d")
+                    "date_to": date_to or datetime.now().strftime("%Y-%m-%d"),
                 },
                 "metrics": {
                     "total_revenue": float(result.total_revenue or 0),
                     "total_transactions": int(result.total_transactions or 0),
                     "unique_customers": int(result.unique_customers or 0),
-                    "avg_order_value": float(result.avg_order_value or 0)
+                    "avg_order_value": float(result.avg_order_value or 0),
                 },
                 "growth": growth_metrics,
                 "top_products": top_products,
                 "top_countries": top_countries,
-                "generated_at": datetime.now().isoformat()
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -84,7 +85,7 @@ class DataMartService:
         date_from: str | None = None,
         date_to: str | None = None,
         country: str | None = None,
-        product_category: str | None = None
+        product_category: str | None = None,
     ) -> dict[str, Any]:
         """Get detailed sales analytics with time series data."""
         try:
@@ -104,16 +105,19 @@ class DataMartService:
             time_group = self._get_time_grouping(granularity)
 
             # Main sales analytics query
-            query = select(
-                time_group.label("period"),
-                func.sum(FactSale.total_amount).label("revenue"),
-                func.sum(FactSale.quantity).label("units_sold"),
-                func.count(FactSale.sale_id).label("transactions"),
-                func.count(func.distinct(FactSale.customer_key)).label("unique_customers"),
-                func.avg(FactSale.total_amount).label("avg_order_value"),
-                func.sum(FactSale.profit_amount).label("profit")
-            ).select_from(FactSale)\
-             .join(DimDate, FactSale.date_key == DimDate.date_key)
+            query = (
+                select(
+                    time_group.label("period"),
+                    func.sum(FactSale.total_amount).label("revenue"),
+                    func.sum(FactSale.quantity).label("units_sold"),
+                    func.count(FactSale.sale_id).label("transactions"),
+                    func.count(func.distinct(FactSale.customer_key)).label("unique_customers"),
+                    func.avg(FactSale.total_amount).label("avg_order_value"),
+                    func.sum(FactSale.profit_amount).label("profit"),
+                )
+                .select_from(FactSale)
+                .join(DimDate, FactSale.date_key == DimDate.date_key)
+            )
 
             if country or product_category:
                 if country:
@@ -137,7 +141,7 @@ class DataMartService:
                     "transactions": int(row.transactions or 0),
                     "unique_customers": int(row.unique_customers or 0),
                     "avg_order_value": float(row.avg_order_value or 0),
-                    "profit": float(row.profit or 0)
+                    "profit": float(row.profit or 0),
                 }
                 for row in results
             ]
@@ -151,11 +155,11 @@ class DataMartService:
                     "date_from": date_from,
                     "date_to": date_to,
                     "country": country,
-                    "product_category": product_category
+                    "product_category": product_category,
                 },
                 "time_series": time_series,
                 "summary": summary,
-                "generated_at": datetime.now().isoformat()
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -165,21 +169,21 @@ class DataMartService:
     async def get_customer_segments(self) -> list[dict[str, Any]]:
         """Get customer segmentation based on RFM analysis."""
         try:
-            query = select(
-                DimCustomer.rfm_segment,
-                func.count(DimCustomer.customer_key).label("customer_count"),
-                func.avg(DimCustomer.lifetime_value).label("avg_lifetime_value"),
-                func.avg(DimCustomer.avg_order_value).label("avg_order_value"),
-                func.avg(DimCustomer.total_orders).label("avg_total_orders"),
-                func.avg(DimCustomer.recency_score).label("avg_recency"),
-                func.avg(DimCustomer.frequency_score).label("avg_frequency"),
-                func.avg(DimCustomer.monetary_score).label("avg_monetary")
-            ).where(
-                and_(
-                    DimCustomer.is_current == True,
-                    DimCustomer.rfm_segment.is_not(None)
+            query = (
+                select(
+                    DimCustomer.rfm_segment,
+                    func.count(DimCustomer.customer_key).label("customer_count"),
+                    func.avg(DimCustomer.lifetime_value).label("avg_lifetime_value"),
+                    func.avg(DimCustomer.avg_order_value).label("avg_order_value"),
+                    func.avg(DimCustomer.total_orders).label("avg_total_orders"),
+                    func.avg(DimCustomer.recency_score).label("avg_recency"),
+                    func.avg(DimCustomer.frequency_score).label("avg_frequency"),
+                    func.avg(DimCustomer.monetary_score).label("avg_monetary"),
                 )
-            ).group_by(DimCustomer.rfm_segment).order_by(desc("avg_lifetime_value"))
+                .where(and_(DimCustomer.is_current, DimCustomer.rfm_segment.is_not(None)))
+                .group_by(DimCustomer.rfm_segment)
+                .order_by(desc("avg_lifetime_value"))
+            )
 
             results = self.session.exec(query).all()
 
@@ -192,7 +196,7 @@ class DataMartService:
                     "avg_total_orders": float(row.avg_total_orders or 0),
                     "avg_recency_score": float(row.avg_recency or 0),
                     "avg_frequency_score": float(row.avg_frequency or 0),
-                    "avg_monetary_score": float(row.avg_monetary or 0)
+                    "avg_monetary_score": float(row.avg_monetary or 0),
                 }
                 for row in results
             ]
@@ -206,10 +210,7 @@ class DataMartService:
         try:
             # Get customer details
             customer_query = select(DimCustomer).where(
-                and_(
-                    DimCustomer.customer_id == customer_id,
-                    DimCustomer.is_current == True
-                )
+                and_(DimCustomer.customer_id == customer_id, DimCustomer.is_current)
             )
             customer = self.session.exec(customer_query).first()
 
@@ -217,31 +218,37 @@ class DataMartService:
                 return None
 
             # Get customer's purchase history
-            purchase_history_query = select(
-                DimDate.date,
-                FactSale.total_amount,
-                FactSale.quantity,
-                DimProduct.description,
-                DimProduct.category
-            ).select_from(FactSale)\
-             .join(DimDate, FactSale.date_key == DimDate.date_key)\
-             .join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-             .where(FactSale.customer_key == customer.customer_key)\
-             .order_by(desc(DimDate.date))\
-             .limit(20)
+            purchase_history_query = (
+                select(
+                    DimDate.date,
+                    FactSale.total_amount,
+                    FactSale.quantity,
+                    DimProduct.description,
+                    DimProduct.category,
+                )
+                .select_from(FactSale)
+                .join(DimDate, FactSale.date_key == DimDate.date_key)
+                .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+                .where(FactSale.customer_key == customer.customer_key)
+                .order_by(desc(DimDate.date))
+                .limit(20)
+            )
 
             purchases = self.session.exec(purchase_history_query).all()
 
             # Get favorite categories
-            category_query = select(
-                DimProduct.category,
-                func.sum(FactSale.total_amount).label("total_spent"),
-                func.count(FactSale.sale_id).label("purchases")
-            ).select_from(FactSale)\
-             .join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-             .where(FactSale.customer_key == customer.customer_key)\
-             .group_by(DimProduct.category)\
-             .order_by(desc("total_spent"))
+            category_query = (
+                select(
+                    DimProduct.category,
+                    func.sum(FactSale.total_amount).label("total_spent"),
+                    func.count(FactSale.sale_id).label("purchases"),
+                )
+                .select_from(FactSale)
+                .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+                .where(FactSale.customer_key == customer.customer_key)
+                .group_by(DimProduct.category)
+                .order_by(desc("total_spent"))
+            )
 
             categories = self.session.exec(category_query).all()
 
@@ -257,7 +264,7 @@ class DataMartService:
                     "avg_order_value": float(customer.avg_order_value or 0),
                     "recency_score": customer.recency_score,
                     "frequency_score": customer.frequency_score,
-                    "monetary_score": customer.monetary_score
+                    "monetary_score": customer.monetary_score,
                 },
                 "recent_purchases": [
                     {
@@ -265,7 +272,7 @@ class DataMartService:
                         "amount": float(row.total_amount),
                         "quantity": row.quantity,
                         "product": row.description,
-                        "category": row.category
+                        "category": row.category,
                     }
                     for row in purchases
                 ],
@@ -273,10 +280,10 @@ class DataMartService:
                     {
                         "category": row.category,
                         "total_spent": float(row.total_spent),
-                        "purchase_count": int(row.purchases)
+                        "purchase_count": int(row.purchases),
                     }
                     for row in categories
-                ]
+                ],
             }
 
         except Exception as e:
@@ -288,7 +295,7 @@ class DataMartService:
         top_n: int = 20,
         metric: str = "revenue",
         date_from: str | None = None,
-        date_to: str | None = None
+        date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get top-performing products by specified metric."""
         try:
@@ -297,35 +304,43 @@ class DataMartService:
                 "revenue": func.sum(FactSale.total_amount),
                 "quantity": func.sum(FactSale.quantity),
                 "profit": func.sum(FactSale.profit_amount),
-                "margin": func.avg(FactSale.margin_percentage)
+                "margin": func.avg(FactSale.margin_percentage),
             }
 
             metric_col = metric_columns.get(metric, metric_columns["revenue"])
 
-            query = select(
-                DimProduct.stock_code,
-                DimProduct.description,
-                DimProduct.category,
-                DimProduct.brand,
-                metric_col.label("metric_value"),
-                func.sum(FactSale.quantity).label("total_quantity"),
-                func.sum(FactSale.total_amount).label("total_revenue"),
-                func.count(FactSale.sale_id).label("transaction_count")
-            ).select_from(FactSale)\
-             .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+            query = (
+                select(
+                    DimProduct.stock_code,
+                    DimProduct.description,
+                    DimProduct.category,
+                    DimProduct.brand,
+                    metric_col.label("metric_value"),
+                    func.sum(FactSale.quantity).label("total_quantity"),
+                    func.sum(FactSale.total_amount).label("total_revenue"),
+                    func.count(FactSale.sale_id).label("transaction_count"),
+                )
+                .select_from(FactSale)
+                .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+            )
 
             # Add date filter if specified
             date_filter = self._build_date_filter(date_from, date_to)
             if date_filter is not None:
-                query = query.join(DimDate, FactSale.date_key == DimDate.date_key)\
-                            .where(date_filter)
+                query = query.join(DimDate, FactSale.date_key == DimDate.date_key).where(
+                    date_filter
+                )
 
-            query = query.group_by(
-                DimProduct.stock_code,
-                DimProduct.description,
-                DimProduct.category,
-                DimProduct.brand
-            ).order_by(desc("metric_value")).limit(top_n)
+            query = (
+                query.group_by(
+                    DimProduct.stock_code,
+                    DimProduct.description,
+                    DimProduct.category,
+                    DimProduct.brand,
+                )
+                .order_by(desc("metric_value"))
+                .limit(top_n)
+            )
 
             results = self.session.exec(query).all()
 
@@ -338,7 +353,7 @@ class DataMartService:
                     f"{metric}_value": float(row.metric_value or 0),
                     "total_quantity": int(row.total_quantity),
                     "total_revenue": float(row.total_revenue),
-                    "transaction_count": int(row.transaction_count)
+                    "transaction_count": int(row.transaction_count),
                 }
                 for row in results
             ]
@@ -350,24 +365,28 @@ class DataMartService:
     async def get_country_performance(self) -> list[dict[str, Any]]:
         """Get sales performance by country."""
         try:
-            query = select(
-                DimCountry.country_name,
-                DimCountry.country_code,
-                DimCountry.region,
-                DimCountry.continent,
-                func.sum(FactSale.total_amount).label("total_revenue"),
-                func.sum(FactSale.quantity).label("total_quantity"),
-                func.count(FactSale.sale_id).label("transaction_count"),
-                func.count(func.distinct(FactSale.customer_key)).label("unique_customers"),
-                func.avg(FactSale.total_amount).label("avg_order_value")
-            ).select_from(FactSale)\
-             .join(DimCountry, FactSale.country_key == DimCountry.country_key)\
-             .group_by(
-                DimCountry.country_name,
-                DimCountry.country_code,
-                DimCountry.region,
-                DimCountry.continent
-            ).order_by(desc("total_revenue"))
+            query = (
+                select(
+                    DimCountry.country_name,
+                    DimCountry.country_code,
+                    DimCountry.region,
+                    DimCountry.continent,
+                    func.sum(FactSale.total_amount).label("total_revenue"),
+                    func.sum(FactSale.quantity).label("total_quantity"),
+                    func.count(FactSale.sale_id).label("transaction_count"),
+                    func.count(func.distinct(FactSale.customer_key)).label("unique_customers"),
+                    func.avg(FactSale.total_amount).label("avg_order_value"),
+                )
+                .select_from(FactSale)
+                .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+                .group_by(
+                    DimCountry.country_name,
+                    DimCountry.country_code,
+                    DimCountry.region,
+                    DimCountry.continent,
+                )
+                .order_by(desc("total_revenue"))
+            )
 
             results = self.session.exec(query).all()
 
@@ -381,7 +400,7 @@ class DataMartService:
                     "total_quantity": int(row.total_quantity),
                     "transaction_count": int(row.transaction_count),
                     "unique_customers": int(row.unique_customers),
-                    "avg_order_value": float(row.avg_order_value or 0)
+                    "avg_order_value": float(row.avg_order_value or 0),
                 }
                 for row in results
             ]
@@ -393,25 +412,26 @@ class DataMartService:
     async def get_seasonal_trends(self, year: int | None = None) -> dict[str, Any]:
         """Get seasonal sales trends and patterns."""
         try:
-            query = select(
-                DimDate.month,
-                DimDate.month_name,
-                DimDate.quarter,
-                func.sum(FactSale.total_amount).label("revenue"),
-                func.sum(FactSale.quantity).label("quantity"),
-                func.count(FactSale.sale_id).label("transactions"),
-                func.avg(FactSale.total_amount).label("avg_order_value")
-            ).select_from(FactSale)\
-             .join(DimDate, FactSale.date_key == DimDate.date_key)
+            query = (
+                select(
+                    DimDate.month,
+                    DimDate.month_name,
+                    DimDate.quarter,
+                    func.sum(FactSale.total_amount).label("revenue"),
+                    func.sum(FactSale.quantity).label("quantity"),
+                    func.count(FactSale.sale_id).label("transactions"),
+                    func.avg(FactSale.total_amount).label("avg_order_value"),
+                )
+                .select_from(FactSale)
+                .join(DimDate, FactSale.date_key == DimDate.date_key)
+            )
 
             if year:
                 query = query.where(DimDate.year == year)
 
-            query = query.group_by(
-                DimDate.month,
-                DimDate.month_name,
-                DimDate.quarter
-            ).order_by(DimDate.month)
+            query = query.group_by(DimDate.month, DimDate.month_name, DimDate.quarter).order_by(
+                DimDate.month
+            )
 
             results = self.session.exec(query).all()
 
@@ -423,7 +443,7 @@ class DataMartService:
                     "revenue": float(row.revenue),
                     "quantity": int(row.quantity),
                     "transactions": int(row.transactions),
-                    "avg_order_value": float(row.avg_order_value or 0)
+                    "avg_order_value": float(row.avg_order_value or 0),
                 }
                 for row in results
             ]
@@ -437,7 +457,7 @@ class DataMartService:
                         "quarter": quarter,
                         "revenue": 0,
                         "quantity": 0,
-                        "transactions": 0
+                        "transactions": 0,
                     }
                 quarterly_data[quarter]["revenue"] += month_data["revenue"]
                 quarterly_data[quarter]["quantity"] += month_data["quantity"]
@@ -446,14 +466,16 @@ class DataMartService:
             quarterly_trends = list(quarterly_data.values())
             for quarter in quarterly_trends:
                 quarter["avg_order_value"] = (
-                    quarter["revenue"] / quarter["transactions"] if quarter["transactions"] > 0 else 0
+                    quarter["revenue"] / quarter["transactions"]
+                    if quarter["transactions"] > 0
+                    else 0
                 )
 
             return {
                 "year": year,
                 "monthly_trends": monthly_trends,
                 "quarterly_trends": quarterly_trends,
-                "generated_at": datetime.now().isoformat()
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -469,7 +491,7 @@ class DataMartService:
                 "cohort_type": cohort_type,
                 "analysis": "Cohort analysis requires complex temporal calculations",
                 "note": "This feature requires advanced SQL window functions",
-                "generated_at": datetime.now().isoformat()
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -486,7 +508,7 @@ class DataMartService:
                 func.count(FactSale.sale_id).label("total_transactions"),
                 func.count(func.distinct(FactSale.customer_key)).label("total_customers"),
                 func.avg(FactSale.total_amount).label("avg_order_value"),
-                func.sum(FactSale.profit_amount).label("total_profit")
+                func.sum(FactSale.profit_amount).label("total_profit"),
             ).select_from(FactSale)
 
             overall = self.session.exec(overall_query).first()
@@ -495,16 +517,16 @@ class DataMartService:
             customer_query = select(
                 func.avg(DimCustomer.lifetime_value).label("avg_clv"),
                 func.avg(DimCustomer.total_orders).label("avg_orders_per_customer"),
-                func.count(DimCustomer.customer_key).label("active_customers")
-            ).where(DimCustomer.is_current == True)
+                func.count(DimCustomer.customer_key).label("active_customers"),
+            ).where(DimCustomer.is_current)
 
             customer_metrics = self.session.exec(customer_query).first()
 
             # Product metrics
             product_query = select(
                 func.count(func.distinct(DimProduct.product_key)).label("total_products"),
-                func.count(func.distinct(DimProduct.category)).label("total_categories")
-            ).where(DimProduct.is_current == True)
+                func.count(func.distinct(DimProduct.category)).label("total_categories"),
+            ).where(DimProduct.is_current)
 
             product_metrics = self.session.exec(product_query).first()
 
@@ -514,25 +536,26 @@ class DataMartService:
                     "total_profit": float(overall.total_profit or 0),
                     "profit_margin": float(
                         (overall.total_profit / overall.total_revenue * 100)
-                        if overall.total_revenue and overall.total_profit else 0
-                    )
+                        if overall.total_revenue and overall.total_profit
+                        else 0
+                    ),
                 },
                 "sales_metrics": {
                     "total_transactions": int(overall.total_transactions or 0),
                     "total_units_sold": int(overall.total_units or 0),
-                    "avg_order_value": float(overall.avg_order_value or 0)
+                    "avg_order_value": float(overall.avg_order_value or 0),
                 },
                 "customer_metrics": {
                     "total_customers": int(overall.total_customers or 0),
                     "active_customers": int(customer_metrics.active_customers or 0),
                     "avg_customer_lifetime_value": float(customer_metrics.avg_clv or 0),
-                    "avg_orders_per_customer": float(customer_metrics.avg_orders_per_customer or 0)
+                    "avg_orders_per_customer": float(customer_metrics.avg_orders_per_customer or 0),
                 },
                 "product_metrics": {
                     "total_products": int(product_metrics.total_products or 0),
-                    "total_categories": int(product_metrics.total_categories or 0)
+                    "total_categories": int(product_metrics.total_categories or 0),
                 },
-                "generated_at": datetime.now().isoformat()
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -559,11 +582,11 @@ class DataMartService:
         if granularity == "daily":
             return DimDate.date
         elif granularity == "weekly":
-            return func.concat(DimDate.year, '-W', DimDate.week)
+            return func.concat(DimDate.year, "-W", DimDate.week)
         elif granularity == "monthly":
-            return func.concat(DimDate.year, '-', func.lpad(DimDate.month, 2, '0'))
+            return func.concat(DimDate.year, "-", func.lpad(DimDate.month, 2, "0"))
         elif granularity == "quarterly":
-            return func.concat(DimDate.year, '-Q', DimDate.quarter)
+            return func.concat(DimDate.year, "-Q", DimDate.quarter)
         else:
             return DimDate.date
 
@@ -580,7 +603,7 @@ class DataMartService:
         return {
             "revenue_growth": 0.0,  # Placeholder
             "transaction_growth": 0.0,  # Placeholder
-            "customer_growth": 0.0  # Placeholder
+            "customer_growth": 0.0,  # Placeholder
         }
 
     def _calculate_time_series_summary(self, time_series: list[dict[str, Any]]) -> dict[str, Any]:
@@ -596,57 +619,39 @@ class DataMartService:
             "total_transactions": sum(transactions),
             "avg_revenue_per_period": sum(revenues) / len(revenues),
             "max_revenue_period": max(revenues),
-            "min_revenue_period": min(revenues)
+            "min_revenue_period": min(revenues),
         }
 
     async def _get_top_products(self, limit: int = 5, date_filter=None) -> list[dict[str, Any]]:
         """Get top products by revenue."""
-        query = select(
-            DimProduct.description,
-            func.sum(FactSale.total_amount).label("revenue")
-        ).select_from(FactSale)\
-         .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+        query = (
+            select(DimProduct.description, func.sum(FactSale.total_amount).label("revenue"))
+            .select_from(FactSale)
+            .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+        )
 
         if date_filter is not None:
-            query = query.join(DimDate, FactSale.date_key == DimDate.date_key)\
-                        .where(date_filter)
+            query = query.join(DimDate, FactSale.date_key == DimDate.date_key).where(date_filter)
 
-        query = query.group_by(DimProduct.description)\
-                    .order_by(desc("revenue"))\
-                    .limit(limit)
+        query = query.group_by(DimProduct.description).order_by(desc("revenue")).limit(limit)
 
         results = self.session.exec(query).all()
 
-        return [
-            {
-                "product": row.description,
-                "revenue": float(row.revenue)
-            }
-            for row in results
-        ]
+        return [{"product": row.description, "revenue": float(row.revenue)} for row in results]
 
     async def _get_top_countries(self, limit: int = 5, date_filter=None) -> list[dict[str, Any]]:
         """Get top countries by revenue."""
-        query = select(
-            DimCountry.country_name,
-            func.sum(FactSale.total_amount).label("revenue")
-        ).select_from(FactSale)\
-         .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+        query = (
+            select(DimCountry.country_name, func.sum(FactSale.total_amount).label("revenue"))
+            .select_from(FactSale)
+            .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+        )
 
         if date_filter is not None:
-            query = query.join(DimDate, FactSale.date_key == DimDate.date_key)\
-                        .where(date_filter)
+            query = query.join(DimDate, FactSale.date_key == DimDate.date_key).where(date_filter)
 
-        query = query.group_by(DimCountry.country_name)\
-                    .order_by(desc("revenue"))\
-                    .limit(limit)
+        query = query.group_by(DimCountry.country_name).order_by(desc("revenue")).limit(limit)
 
         results = self.session.exec(query).all()
 
-        return [
-            {
-                "country": row.country_name,
-                "revenue": float(row.revenue)
-            }
-            for row in results
-        ]
+        return [{"country": row.country_name, "revenue": float(row.revenue)} for row in results]

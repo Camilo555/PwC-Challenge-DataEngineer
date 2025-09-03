@@ -2,6 +2,7 @@
 Enhanced Factory Pattern for ETL Processors
 Provides improved type safety, plugin architecture, and configuration management.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,11 +13,12 @@ from core.logging import get_logger
 
 from .base_processor import BaseETLProcessor, ProcessingConfig, ProcessingEngine, ProcessingStage
 
-T = TypeVar('T', bound=BaseETLProcessor)
+T = TypeVar("T", bound=BaseETLProcessor)
 
 
 class ProcessorCapability(Enum):
     """Capabilities that processors can support"""
+
     STREAMING = "streaming"
     BATCH = "batch"
     REAL_TIME = "real_time"
@@ -32,6 +34,7 @@ class ProcessorCapability(Enum):
 @dataclass
 class ProcessorMetadata:
     """Metadata about a processor implementation"""
+
     name: str
     version: str
     description: str
@@ -65,6 +68,7 @@ class ProcessorPlugin(Protocol):
 @dataclass
 class ProcessorRegistration:
     """Registration information for a processor"""
+
     processor_class: type[BaseETLProcessor]
     metadata: ProcessorMetadata
     plugin: ProcessorPlugin | None = None
@@ -87,21 +91,21 @@ class ProcessorRegistry:
         processor_class: type[BaseETLProcessor],
         metadata: ProcessorMetadata,
         plugin: ProcessorPlugin | None = None,
-        override: bool = False
+        override: bool = False,
     ) -> None:
         """Register a processor with the registry"""
 
         if name in self._processors and not override:
-            raise ValueError(f"Processor '{name}' already registered. Use override=True to replace.")
+            raise ValueError(
+                f"Processor '{name}' already registered. Use override=True to replace."
+            )
 
         # Validate processor class
         if not issubclass(processor_class, BaseETLProcessor):
             raise TypeError("Processor class must inherit from BaseETLProcessor")
 
         registration = ProcessorRegistration(
-            processor_class=processor_class,
-            metadata=metadata,
-            plugin=plugin
+            processor_class=processor_class, metadata=metadata, plugin=plugin
         )
 
         self._processors[name] = registration
@@ -163,7 +167,7 @@ class ProcessorRegistry:
         engine: ProcessingEngine | None = None,
         stage: ProcessingStage | None = None,
         capability: ProcessorCapability | None = None,
-        active_only: bool = True
+        active_only: bool = True,
     ) -> list[str]:
         """List processors matching criteria"""
 
@@ -181,7 +185,7 @@ class ProcessorRegistry:
         if active_only:
             candidates = {name for name in candidates if self._processors[name].is_active}
 
-        return sorted(list(candidates))
+        return sorted(candidates)
 
     def get_metadata(self, name: str) -> ProcessorMetadata:
         """Get processor metadata"""
@@ -190,14 +194,11 @@ class ProcessorRegistry:
     def get_best_processor(
         self,
         config: ProcessingConfig,
-        required_capabilities: list[ProcessorCapability] | None = None
+        required_capabilities: list[ProcessorCapability] | None = None,
     ) -> str:
         """Get the best processor for given configuration and requirements"""
 
-        candidates = self.list_processors(
-            engine=config.engine,
-            stage=config.stage
-        )
+        candidates = self.list_processors(engine=config.engine, stage=config.stage)
 
         if required_capabilities:
             for capability in required_capabilities:
@@ -205,7 +206,9 @@ class ProcessorRegistry:
                 candidates = [name for name in candidates if name in capability_processors]
 
         if not candidates:
-            raise ValueError(f"No suitable processor found for {config.engine.value}/{config.stage.value}")
+            raise ValueError(
+                f"No suitable processor found for {config.engine.value}/{config.stage.value}"
+            )
 
         # Simple scoring based on capabilities match
         scored_candidates = []
@@ -243,7 +246,7 @@ class EnhancedProcessorFactory:
         processor_class: type[BaseETLProcessor],
         metadata: ProcessorMetadata,
         plugin: ProcessorPlugin | None = None,
-        config_validator: callable | None = None
+        config_validator: callable | None = None,
     ) -> None:
         """Register a processor with optional config validator"""
 
@@ -253,10 +256,7 @@ class EnhancedProcessorFactory:
             self._config_validators[name] = config_validator
 
     def create_processor(
-        self,
-        name: str,
-        config: ProcessingConfig,
-        validate_config: bool = True
+        self, name: str, config: ProcessingConfig, validate_config: bool = True
     ) -> BaseETLProcessor:
         """Create a processor instance with enhanced validation"""
 
@@ -282,7 +282,7 @@ class EnhancedProcessorFactory:
     def create_best_processor(
         self,
         config: ProcessingConfig,
-        required_capabilities: list[ProcessorCapability] | None = None
+        required_capabilities: list[ProcessorCapability] | None = None,
     ) -> BaseETLProcessor:
         """Create the best processor for given requirements"""
 
@@ -290,10 +290,7 @@ class EnhancedProcessorFactory:
         return self.create_processor(best_name, config)
 
     def _validate_configuration(
-        self,
-        name: str,
-        config: ProcessingConfig,
-        registration: ProcessorRegistration
+        self, name: str, config: ProcessingConfig, registration: ProcessorRegistration
     ) -> None:
         """Validate processor configuration"""
 
@@ -301,7 +298,9 @@ class EnhancedProcessorFactory:
         metadata = registration.metadata
 
         if config.engine != metadata.engine:
-            raise ValueError(f"Engine mismatch: processor expects {metadata.engine.value}, got {config.engine.value}")
+            raise ValueError(
+                f"Engine mismatch: processor expects {metadata.engine.value}, got {config.engine.value}"
+            )
 
         if config.stage not in metadata.supported_stages:
             raise ValueError(f"Stage not supported: {config.stage.value}")
@@ -336,6 +335,7 @@ class EnhancedProcessorFactory:
         try:
             # Import pandas processors
             from etl.bronze.pandas_bronze import PandasBronzeProcessor
+
             self.registry.register(
                 "pandas_bronze",
                 PandasBronzeProcessor,
@@ -348,12 +348,13 @@ class EnhancedProcessorFactory:
                     capabilities=[
                         ProcessorCapability.BATCH,
                         ProcessorCapability.VALIDATION,
-                        ProcessorCapability.MONITORING
-                    ]
-                )
+                        ProcessorCapability.MONITORING,
+                    ],
+                ),
             )
 
             from etl.silver.pandas_silver import PandasSilverProcessor
+
             self.registry.register(
                 "pandas_silver",
                 PandasSilverProcessor,
@@ -366,9 +367,9 @@ class EnhancedProcessorFactory:
                     capabilities=[
                         ProcessorCapability.BATCH,
                         ProcessorCapability.VALIDATION,
-                        ProcessorCapability.MONITORING
-                    ]
-                )
+                        ProcessorCapability.MONITORING,
+                    ],
+                ),
             )
 
             # Import Spark processors
@@ -392,9 +393,9 @@ class EnhancedProcessorFactory:
                         ProcessorCapability.DISTRIBUTED,
                         ProcessorCapability.VALIDATION,
                         ProcessorCapability.MONITORING,
-                        ProcessorCapability.COMPRESSION
-                    ]
-                )
+                        ProcessorCapability.COMPRESSION,
+                    ],
+                ),
             )
 
             self.registry.register(
@@ -411,9 +412,9 @@ class EnhancedProcessorFactory:
                         ProcessorCapability.DISTRIBUTED,
                         ProcessorCapability.VALIDATION,
                         ProcessorCapability.MONITORING,
-                        ProcessorCapability.COMPRESSION
-                    ]
-                )
+                        ProcessorCapability.COMPRESSION,
+                    ],
+                ),
             )
 
             self.registry.register(
@@ -430,9 +431,9 @@ class EnhancedProcessorFactory:
                         ProcessorCapability.DISTRIBUTED,
                         ProcessorCapability.VALIDATION,
                         ProcessorCapability.MONITORING,
-                        ProcessorCapability.COMPRESSION
-                    ]
-                )
+                        ProcessorCapability.COMPRESSION,
+                    ],
+                ),
             )
 
         except ImportError as e:
@@ -461,7 +462,7 @@ class EnhancedProcessorFactory:
             "is_active": registration.is_active,
             "has_plugin": registration.plugin is not None,
             "class_name": registration.processor_class.__name__,
-            "module": registration.processor_class.__module__
+            "module": registration.processor_class.__module__,
         }
 
     def list_processors_detailed(self) -> list[dict[str, Any]]:
@@ -484,9 +485,7 @@ def get_processor_factory() -> EnhancedProcessorFactory:
 
 
 def create_processor(
-    name: str,
-    config: ProcessingConfig,
-    validate_config: bool = True
+    name: str, config: ProcessingConfig, validate_config: bool = True
 ) -> BaseETLProcessor:
     """Convenience function to create a processor"""
     factory = get_processor_factory()
@@ -494,8 +493,7 @@ def create_processor(
 
 
 def create_best_processor(
-    config: ProcessingConfig,
-    required_capabilities: list[ProcessorCapability] | None = None
+    config: ProcessingConfig, required_capabilities: list[ProcessorCapability] | None = None
 ) -> BaseETLProcessor:
     """Convenience function to create the best processor for requirements"""
     factory = get_processor_factory()

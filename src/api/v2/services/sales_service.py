@@ -2,6 +2,7 @@
 Enhanced Sales Service for API V2
 Provides advanced analytics and improved performance.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -48,7 +49,7 @@ class EnhancedSalesService:
         page: int = 1,
         size: int = 20,
         sort: str = "invoice_date:desc",
-        include_aggregations: bool = True
+        include_aggregations: bool = True,
     ) -> PaginatedEnhancedSales:
         """Get paginated sales with enhanced details and analytics."""
         start_time = time.time()
@@ -102,7 +103,7 @@ class EnhancedSalesService:
                 filters_applied=applied_filters,
                 response_time_ms=response_time_ms,
                 data_freshness=datetime.utcnow(),
-                quality_score=self._calculate_data_quality_score(items)
+                quality_score=self._calculate_data_quality_score(items),
             )
 
         except Exception as e:
@@ -110,9 +111,7 @@ class EnhancedSalesService:
             raise
 
     async def get_comprehensive_analytics(
-        self,
-        filters: SalesFiltersV2 | None = None,
-        include_forecasting: bool = False
+        self, filters: SalesFiltersV2 | None = None, include_forecasting: bool = False
     ) -> EnhancedSalesAnalytics:
         """Get comprehensive sales analytics with multiple dimensions."""
         try:
@@ -124,7 +123,7 @@ class EnhancedSalesService:
                 self._get_top_customers(filters),
                 self._get_geographic_breakdown(filters),
                 self._get_category_performance(filters),
-                self._get_seasonal_insights(filters)
+                self._get_seasonal_insights(filters),
             ]
 
             if include_forecasting:
@@ -140,7 +139,7 @@ class EnhancedSalesService:
                 geographic_breakdown=results[4],  # list[SalesAggregation]
                 category_performance=results[5],  # list[SalesAggregation]
                 seasonal_insights=results[6],  # dict[str, Any]
-                forecasting=results[7] if include_forecasting else None  # dict[str, Any] | None
+                forecasting=results[7] if include_forecasting else None,  # dict[str, Any] | None
             )
 
             return analytics
@@ -150,9 +149,7 @@ class EnhancedSalesService:
             raise
 
     async def export_sales_data(
-        self,
-        export_request: SalesExportRequest,
-        user_id: str | None = None
+        self, export_request: SalesExportRequest, user_id: str | None = None
     ) -> SalesExportResponse:
         """Export sales data with the specified format and options."""
         try:
@@ -170,7 +167,7 @@ class EnhancedSalesService:
                 estimated_completion=estimated_completion,
                 download_url=None,
                 file_size_mb=None,
-                record_count=None
+                record_count=None,
             )
 
         except Exception as e:
@@ -181,53 +178,53 @@ class EnhancedSalesService:
 
     def _build_enhanced_query(self):
         """Build the base enhanced query with all necessary joins."""
-        return select(
-            # Fact table fields
-            FactSale.sale_id,
-            FactSale.quantity,
-            FactSale.unit_price,
-            FactSale.total_amount,
-            FactSale.discount_amount,
-            FactSale.tax_amount,
-            FactSale.profit_amount,
-            FactSale.margin_percentage,
-            FactSale.created_at,
+        return (
+            select(
+                # Fact table fields
+                FactSale.sale_id,
+                FactSale.quantity,
+                FactSale.unit_price,
+                FactSale.total_amount,
+                FactSale.discount_amount,
+                FactSale.tax_amount,
+                FactSale.profit_amount,
+                FactSale.margin_percentage,
+                FactSale.created_at,
+                # Product dimension
+                DimProduct.stock_code,
+                DimProduct.description,
+                DimProduct.category,
+                DimProduct.brand,
+                # Customer dimension
+                DimCustomer.customer_id,
+                DimCustomer.customer_segment,
+                DimCustomer.lifetime_value,
+                # Country dimension
+                DimCountry.country_name,
+                DimCountry.country_code,
+                DimCountry.region,
+                DimCountry.continent,
+                # Date dimension
+                DimDate.date,
+                DimDate.fiscal_year,
+                DimDate.fiscal_quarter,
+                DimDate.is_weekend,
+                DimDate.is_holiday,
+                # Invoice dimension
+                DimInvoice.invoice_no,
+                DimInvoice.is_cancelled,
+            )
+            .select_from(FactSale)
+            .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+            .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+            .join(DimDate, FactSale.date_key == DimDate.date_key)
+            .join(DimInvoice, FactSale.invoice_key == DimInvoice.invoice_key)
+            .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+        )
 
-            # Product dimension
-            DimProduct.stock_code,
-            DimProduct.description,
-            DimProduct.category,
-            DimProduct.brand,
-
-            # Customer dimension
-            DimCustomer.customer_id,
-            DimCustomer.customer_segment,
-            DimCustomer.lifetime_value,
-
-            # Country dimension
-            DimCountry.country_name,
-            DimCountry.country_code,
-            DimCountry.region,
-            DimCountry.continent,
-
-            # Date dimension
-            DimDate.date,
-            DimDate.fiscal_year,
-            DimDate.fiscal_quarter,
-            DimDate.is_weekend,
-            DimDate.is_holiday,
-
-            # Invoice dimension
-            DimInvoice.invoice_no,
-            DimInvoice.is_cancelled
-        ).select_from(FactSale)\
-         .join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-         .join(DimCountry, FactSale.country_key == DimCountry.country_key)\
-         .join(DimDate, FactSale.date_key == DimDate.date_key)\
-         .join(DimInvoice, FactSale.invoice_key == DimInvoice.invoice_key)\
-         .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
-
-    def _apply_enhanced_filters(self, query, filters: SalesFiltersV2 | None) -> tuple[Any, dict[str, Any]]:
+    def _apply_enhanced_filters(
+        self, query, filters: SalesFiltersV2 | None
+    ) -> tuple[Any, dict[str, Any]]:
         """Apply enhanced filters to the query."""
         applied_filters: dict[str, Any] = {}
         filter_conditions = []
@@ -238,93 +235,93 @@ class EnhancedSalesService:
         # Date filters
         if filters.date_from:
             filter_conditions.append(DimDate.date >= filters.date_from)
-            applied_filters['date_from'] = filters.date_from.isoformat()
+            applied_filters["date_from"] = filters.date_from.isoformat()
 
         if filters.date_to:
             filter_conditions.append(DimDate.date <= filters.date_to)
-            applied_filters['date_to'] = filters.date_to.isoformat()
+            applied_filters["date_to"] = filters.date_to.isoformat()
 
         if filters.fiscal_year:
             filter_conditions.append(DimDate.fiscal_year == filters.fiscal_year)
-            applied_filters['fiscal_year'] = str(filters.fiscal_year)
+            applied_filters["fiscal_year"] = str(filters.fiscal_year)
 
         if filters.fiscal_quarter:
             filter_conditions.append(DimDate.fiscal_quarter == filters.fiscal_quarter)
-            applied_filters['fiscal_quarter'] = str(filters.fiscal_quarter)
+            applied_filters["fiscal_quarter"] = str(filters.fiscal_quarter)
 
         # Geographic filters
         if filters.countries:
             filter_conditions.append(DimCountry.country_name.in_(filters.countries))
-            applied_filters['countries'] = list(filters.countries)
+            applied_filters["countries"] = list(filters.countries)
 
         if filters.regions:
             filter_conditions.append(DimCountry.region.in_(filters.regions))
-            applied_filters['regions'] = list(filters.regions)
+            applied_filters["regions"] = list(filters.regions)
 
         if filters.continents:
             filter_conditions.append(DimCountry.continent.in_(filters.continents))
-            applied_filters['continents'] = list(filters.continents)
+            applied_filters["continents"] = list(filters.continents)
 
         # Product filters
         if filters.categories:
             filter_conditions.append(DimProduct.category.in_(filters.categories))
-            applied_filters['categories'] = list(filters.categories)
+            applied_filters["categories"] = list(filters.categories)
 
         if filters.brands:
             filter_conditions.append(DimProduct.brand.in_(filters.brands))
-            applied_filters['brands'] = list(filters.brands)
+            applied_filters["brands"] = list(filters.brands)
 
         if filters.stock_codes:
             filter_conditions.append(DimProduct.stock_code.in_(filters.stock_codes))
-            applied_filters['stock_codes'] = list(filters.stock_codes)
+            applied_filters["stock_codes"] = list(filters.stock_codes)
 
         # Customer filters
         if filters.customer_segments:
             filter_conditions.append(DimCustomer.customer_segment.in_(filters.customer_segments))
-            applied_filters['customer_segments'] = list(filters.customer_segments)
+            applied_filters["customer_segments"] = list(filters.customer_segments)
 
         if filters.min_customer_ltv is not None:
             filter_conditions.append(DimCustomer.lifetime_value >= filters.min_customer_ltv)
-            applied_filters['min_customer_ltv'] = str(float(filters.min_customer_ltv))
+            applied_filters["min_customer_ltv"] = str(float(filters.min_customer_ltv))
 
         # Financial filters
         if filters.min_amount is not None:
             filter_conditions.append(FactSale.total_amount >= filters.min_amount)
-            applied_filters['min_amount'] = str(float(filters.min_amount))
+            applied_filters["min_amount"] = str(float(filters.min_amount))
 
         if filters.max_amount is not None:
             filter_conditions.append(FactSale.total_amount <= filters.max_amount)
-            applied_filters['max_amount'] = str(float(filters.max_amount))
+            applied_filters["max_amount"] = str(float(filters.max_amount))
 
         if filters.min_margin is not None:
             filter_conditions.append(FactSale.margin_percentage >= filters.min_margin)
-            applied_filters['min_margin'] = str(float(filters.min_margin))
+            applied_filters["min_margin"] = str(float(filters.min_margin))
 
         if filters.has_profit_data is not None:
             if filters.has_profit_data:
                 filter_conditions.append(FactSale.profit_amount.is_not(None))
             else:
                 filter_conditions.append(FactSale.profit_amount.is_(None))
-            applied_filters['has_profit_data'] = str(filters.has_profit_data)
+            applied_filters["has_profit_data"] = str(filters.has_profit_data)
 
         # Business context filters
         if filters.exclude_cancelled:
-            filter_conditions.append(DimInvoice.is_cancelled == False)
-            applied_filters['exclude_cancelled'] = str(True)
+            filter_conditions.append(not DimInvoice.is_cancelled)
+            applied_filters["exclude_cancelled"] = str(True)
 
         if filters.exclude_refunds:
             filter_conditions.append(FactSale.quantity > 0)
-            applied_filters['exclude_refunds'] = str(True)
+            applied_filters["exclude_refunds"] = str(True)
 
         if filters.include_weekends is not None:
             if not filters.include_weekends:
-                filter_conditions.append(DimDate.is_weekend == False)
-            applied_filters['include_weekends'] = str(filters.include_weekends)
+                filter_conditions.append(not DimDate.is_weekend)
+            applied_filters["include_weekends"] = str(filters.include_weekends)
 
         if filters.include_holidays is not None:
             if not filters.include_holidays:
-                filter_conditions.append(DimDate.is_holiday == False)
-            applied_filters['include_holidays'] = str(filters.include_holidays)
+                filter_conditions.append(not DimDate.is_holiday)
+            applied_filters["include_holidays"] = str(filters.include_holidays)
 
         # Apply all conditions
         if filter_conditions:
@@ -381,7 +378,7 @@ class EnhancedSalesService:
             is_holiday=row.is_holiday,
             revenue_per_unit=Decimal(str(revenue_per_unit)) if revenue_per_unit else None,
             profitability_score=profitability_score,
-            customer_value_tier=customer_value_tier
+            customer_value_tier=customer_value_tier,
         )
 
     async def _calculate_aggregations(self, filters: SalesFiltersV2 | None) -> dict[str, Any]:
@@ -391,7 +388,7 @@ class EnhancedSalesService:
             "total_revenue": 0,
             "avg_order_value": 0,
             "unique_customers": 0,
-            "top_category": None
+            "top_category": None,
         }
 
     def _calculate_data_quality_score(self, items: list[EnhancedSaleItem]) -> float:
@@ -467,7 +464,7 @@ class EnhancedSalesService:
                 "total_amount": FactSale.total_amount,
                 "quantity": FactSale.quantity,
                 "country": DimCountry.country_name,
-                "customer_id": DimCustomer.customer_id
+                "customer_id": DimCustomer.customer_id,
             }
 
             if field in sort_mapping:

@@ -1,37 +1,29 @@
 """
 Centralized configuration management using Pydantic BaseSettings.
+Consolidated configuration system inheriting from BaseConfig.
 Supports multiple environments and future Supabase integration.
 """
+
 from __future__ import annotations
 
 import os
 import secrets
-from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from pydantic import Field, computed_field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+
+# Import base configuration to consolidate dual systems
+from core.config.base_config import (
+    BaseConfig,
+    DatabaseType,
+    Environment,
+)
 
 
-class Environment(str, Enum):
-    """Environment types for the application."""
-
-    DEVELOPMENT = "development"
-    STAGING = "staging"
-    PRODUCTION = "production"
-    TESTING = "testing"
-
-
-class DatabaseType(str, Enum):
-    """Supported database types."""
-
-    SQLITE = "sqlite"
-    POSTGRESQL = "postgresql"
-
-
-class Settings(BaseSettings):
+class Settings(BaseConfig):
     """
     Application settings with support for multiple environments.
     Prepared for future Supabase (PostgreSQL) integration.
@@ -268,9 +260,7 @@ class Settings(BaseSettings):
     def is_supabase_enabled(self) -> bool:
         """Check if Supabase integration is enabled."""
         return (
-            self.supabase_url is not None
-            and self.supabase_key is not None
-            and self.is_postgresql()
+            self.supabase_url is not None and self.supabase_key is not None and self.is_postgresql()
         )
 
     @property
@@ -302,11 +292,13 @@ class Settings(BaseSettings):
             "spark.sql.adaptive.coalescePartitions.enabled": "true",
             # JDBC drivers for SQLite and Postgres (download from Maven Central at runtime)
             # Include Delta Lake JAR to ensure Delta classes are available in Spark
-            "spark.jars.packages": ",".join([
-                "org.xerial:sqlite-jdbc:3.45.3.0",
-                "org.postgresql:postgresql:42.7.3",
-                "io.delta:delta-spark_2.12:3.2.1",
-            ]),
+            "spark.jars.packages": ",".join(
+                [
+                    "org.xerial:sqlite-jdbc:3.45.3.0",
+                    "org.postgresql:postgresql:42.7.3",
+                    "io.delta:delta-spark_2.12:3.2.1",
+                ]
+            ),
         }
 
     @property
@@ -363,6 +355,7 @@ class Settings(BaseSettings):
         if self.database_type == DatabaseType.POSTGRESQL:
             # Very simple parse; prefer env vars in production
             import re
+
             m = re.match(r"postgresql://([^:@]+):([^@]+)@", self.database_url)
             if m:
                 props["user"] = m.group(1)
@@ -385,7 +378,7 @@ class Settings(BaseSettings):
             url = self.database_url
             prefix = "sqlite:///"
             if url.startswith(prefix):
-                db_path = url[len(prefix):]
+                db_path = url[len(prefix) :]
             else:
                 # Fallback: remove leading sqlite://
                 db_path = url.replace("sqlite://", "")
@@ -419,8 +412,50 @@ class Settings(BaseSettings):
             errors.append("SECRET_KEY must be at least 32 characters long")
 
         if errors:
-            error_msg = "Security validation failed:\n" + "\n".join(f"  - {error}" for error in errors)
+            error_msg = "Security validation failed:\n" + "\n".join(
+                f"  - {error}" for error in errors
+            )
             raise ValueError(error_msg)
+
+    def validate_runtime_config(self) -> None:
+        """Runtime configuration validation - can be called after startup"""
+        errors = []
+
+        # Database connectivity check
+        try:
+            database_url = self.get_database_url(async_mode=False)
+            if not database_url:
+                errors.append("Database URL is not properly configured")
+        except Exception as e:
+            errors.append(f"Database configuration error: {e}")
+
+        # Path existence validation
+        required_paths = [self.data_path, self.logs_path]
+        for path in required_paths:
+            if not path.exists():
+                try:
+                    path.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    errors.append(f"Cannot create required path {path}: {e}")
+
+        # Service dependencies check
+        if self.enable_monitoring:
+            # Check if required monitoring services are available
+            pass  # Add specific monitoring checks if needed
+
+        if errors:
+            error_msg = "Runtime configuration validation failed:\n" + "\n".join(
+                f"  - {error}" for error in errors
+            )
+            raise ValueError(error_msg)
+
+    def reload_from_environment(self) -> Settings:
+        """Reload configuration from environment variables"""
+        # Create new settings instance to pick up env changes
+        new_settings = Settings()
+        new_settings.validate_security_config()
+        new_settings.validate_runtime_config()
+        return new_settings
 
     @classmethod
     def generate_secure_key(cls) -> str:
@@ -440,13 +475,21 @@ settings = get_settings()
 # Validate and create paths on import
 settings.validate_paths()
 
-# Validate security configuration (can be disabled for testing)
-if os.getenv("SKIP_SECURITY_VALIDATION", "false").lower() != "true":
+# Always validate security configuration
+# Only allow skipping in development environment with explicit flag
+if settings.environment == Environment.PRODUCTION:
+    # Never allow bypassing security validation in production
+    settings.validate_security_config()
+elif (
+    os.getenv("SKIP_SECURITY_VALIDATION", "false").lower() == "true"
+    and settings.environment == Environment.DEVELOPMENT
+):
+    # Only allow skipping in development environment
+    print("Warning: Security validation disabled in development environment")
+else:
+    # Require security validation in all other environments
     try:
         settings.validate_security_config()
     except ValueError as e:
-        if settings.environment == Environment.PRODUCTION:
-            raise e
-        else:
-            # Log warning for non-production environments
-            print(f"Warning: {e}")
+        print(f"Error: Security validation failed: {e}")
+        raise e

@@ -2,6 +2,7 @@
 Enhanced Error Handling and Retry Mechanisms for ETL Processors
 Provides comprehensive retry logic, circuit breakers, and fault tolerance.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,12 +19,13 @@ from typing import Any, TypeVar
 
 from core.logging import get_logger
 
-T = TypeVar('T')
-F = TypeVar('F', bound=Callable[..., Any])
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class RetryStrategy(Enum):
     """Different retry strategies"""
+
     FIXED_INTERVAL = "fixed_interval"
     EXPONENTIAL_BACKOFF = "exponential_backoff"
     LINEAR_BACKOFF = "linear_backoff"
@@ -33,6 +35,7 @@ class RetryStrategy(Enum):
 
 class ErrorSeverity(Enum):
     """Error severity levels"""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -41,19 +44,21 @@ class ErrorSeverity(Enum):
 
 class ErrorCategory(Enum):
     """Categories of errors for different handling strategies"""
-    TRANSIENT = "transient"           # Network timeouts, temporary resource unavailability
-    RESOURCE = "resource"             # Out of memory, disk space
-    DATA_QUALITY = "data_quality"     # Bad data format, validation failures
-    CONFIGURATION = "configuration"   # Invalid config, missing dependencies
+
+    TRANSIENT = "transient"  # Network timeouts, temporary resource unavailability
+    RESOURCE = "resource"  # Out of memory, disk space
+    DATA_QUALITY = "data_quality"  # Bad data format, validation failures
+    CONFIGURATION = "configuration"  # Invalid config, missing dependencies
     EXTERNAL_SERVICE = "external_service"  # External API failures
-    INFRASTRUCTURE = "infrastructure" # Database connection, file system
-    BUSINESS_LOGIC = "business_logic" # Domain-specific validation errors
-    UNKNOWN = "unknown"               # Unclassified errors
+    INFRASTRUCTURE = "infrastructure"  # Database connection, file system
+    BUSINESS_LOGIC = "business_logic"  # Domain-specific validation errors
+    UNKNOWN = "unknown"  # Unclassified errors
 
 
 @dataclass
 class RetryConfig:
     """Configuration for retry behavior"""
+
     max_attempts: int = 3
     strategy: RetryStrategy = RetryStrategy.EXPONENTIAL_BACKOFF
     base_delay: float = 1.0
@@ -68,6 +73,7 @@ class RetryConfig:
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker"""
+
     failure_threshold: int = 5
     recovery_timeout: float = 60.0
     expected_exception: type[Exception] = Exception
@@ -76,6 +82,7 @@ class CircuitBreakerConfig:
 @dataclass
 class ErrorRecord:
     """Record of an error occurrence"""
+
     timestamp: datetime
     exception: Exception
     category: ErrorCategory
@@ -86,8 +93,9 @@ class ErrorRecord:
 
 class CircuitBreakerState(Enum):
     """Circuit breaker states"""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, blocking calls
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, blocking calls
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
@@ -147,7 +155,9 @@ class CircuitBreaker:
         if self.last_failure_time is None:
             return True
 
-        return (datetime.now() - self.last_failure_time).total_seconds() >= self.config.recovery_timeout
+        return (
+            datetime.now() - self.last_failure_time
+        ).total_seconds() >= self.config.recovery_timeout
 
     def _on_success(self):
         """Handle successful call"""
@@ -166,7 +176,9 @@ class CircuitBreaker:
             if self.failure_count >= self.config.failure_threshold:
                 if self.state != CircuitBreakerState.OPEN:
                     self.state = CircuitBreakerState.OPEN
-                    self.logger.warning(f"Circuit breaker opened after {self.failure_count} failures")
+                    self.logger.warning(
+                        f"Circuit breaker opened after {self.failure_count} failures"
+                    )
 
 
 class ErrorClassifier:
@@ -210,11 +222,11 @@ class ErrorClassifier:
 
         # Check error message patterns
         error_msg = str(exception).lower()
-        if any(keyword in error_msg for keyword in ['timeout', 'connection', 'network']):
+        if any(keyword in error_msg for keyword in ["timeout", "connection", "network"]):
             return ErrorCategory.TRANSIENT
-        elif any(keyword in error_msg for keyword in ['memory', 'space', 'disk']):
+        elif any(keyword in error_msg for keyword in ["memory", "space", "disk"]):
             return ErrorCategory.RESOURCE
-        elif any(keyword in error_msg for keyword in ['config', 'setting', 'parameter']):
+        elif any(keyword in error_msg for keyword in ["config", "setting", "parameter"]):
             return ErrorCategory.CONFIGURATION
 
         return ErrorCategory.UNKNOWN
@@ -289,12 +301,7 @@ class RetryHandler:
 
         return False
 
-    async def execute_with_retry(
-        self,
-        func: Callable[..., Awaitable[T]],
-        *args,
-        **kwargs
-    ) -> T:
+    async def execute_with_retry(self, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
         """Execute async function with retry logic"""
         last_exception = None
 
@@ -341,8 +348,7 @@ class ErrorTracker:
 
         with self.lock:
             recent_errors = [
-                record for record in self.error_history
-                if record.timestamp >= cutoff_time
+                record for record in self.error_history if record.timestamp >= cutoff_time
             ]
 
         return len(recent_errors) / max(time_window_minutes, 1)
@@ -355,7 +361,7 @@ class ErrorTracker:
                 "by_category": dict(self.error_counts),
                 "by_severity": dict(self.severity_counts),
                 "by_hour": dict(self.hourly_counts),
-                "recent_rate": self.get_error_rate(60)
+                "recent_rate": self.get_error_rate(60),
             }
 
 
@@ -366,7 +372,7 @@ class ResilientExecutor:
         self,
         retry_config: RetryConfig | None = None,
         circuit_breaker_config: CircuitBreakerConfig | None = None,
-        error_tracker: ErrorTracker | None = None
+        error_tracker: ErrorTracker | None = None,
     ):
         self.retry_config = retry_config or RetryConfig()
         self.retry_handler = RetryHandler(self.retry_config)
@@ -380,11 +386,7 @@ class ResilientExecutor:
         self.logger = get_logger(self.__class__.__name__)
 
     def execute(
-        self,
-        func: Callable[..., T],
-        *args,
-        context: dict[str, Any] | None = None,
-        **kwargs
+        self, func: Callable[..., T], *args, context: dict[str, Any] | None = None, **kwargs
     ) -> T:
         """Execute a function with full resilience mechanisms"""
 
@@ -417,13 +419,15 @@ class ResilientExecutor:
                     category=category,
                     severity=severity,
                     context=context,
-                    retry_attempt=attempt
+                    retry_attempt=attempt,
                 )
 
                 self.error_tracker.record_error(error_record)
 
                 # Check if we should retry
-                if attempt < self.retry_config.max_attempts and self.retry_handler.should_retry(e, attempt):
+                if attempt < self.retry_config.max_attempts and self.retry_handler.should_retry(
+                    e, attempt
+                ):
                     delay = self.retry_handler.calculate_delay(attempt)
 
                     self.logger.warning(
@@ -448,7 +452,7 @@ class ResilientExecutor:
         func: Callable[..., Awaitable[T]],
         *args,
         context: dict[str, Any] | None = None,
-        **kwargs
+        **kwargs,
     ) -> T:
         """Execute an async function with full resilience mechanisms"""
 
@@ -481,13 +485,15 @@ class ResilientExecutor:
                     category=category,
                     severity=severity,
                     context=context,
-                    retry_attempt=attempt
+                    retry_attempt=attempt,
                 )
 
                 self.error_tracker.record_error(error_record)
 
                 # Check if we should retry
-                if attempt < self.retry_config.max_attempts and self.retry_handler.should_retry(e, attempt):
+                if attempt < self.retry_config.max_attempts and self.retry_handler.should_retry(
+                    e, attempt
+                ):
                     delay = self.retry_handler.calculate_delay(attempt)
 
                     self.logger.warning(
@@ -516,7 +522,7 @@ def resilient(
     retryable_exceptions: list[type[Exception]] | None = None,
     non_retryable_exceptions: list[type[Exception]] | None = None,
     use_circuit_breaker: bool = False,
-    circuit_breaker_threshold: int = 5
+    circuit_breaker_threshold: int = 5,
 ) -> Callable[[F], F]:
     """Decorator for making functions resilient"""
 
@@ -527,18 +533,15 @@ def resilient(
             base_delay=base_delay,
             max_delay=max_delay,
             retryable_exceptions=retryable_exceptions or [Exception],
-            non_retryable_exceptions=non_retryable_exceptions or []
+            non_retryable_exceptions=non_retryable_exceptions or [],
         )
 
         circuit_config = None
         if use_circuit_breaker:
-            circuit_config = CircuitBreakerConfig(
-                failure_threshold=circuit_breaker_threshold
-            )
+            circuit_config = CircuitBreakerConfig(failure_threshold=circuit_breaker_threshold)
 
         executor = ResilientExecutor(
-            retry_config=retry_config,
-            circuit_breaker_config=circuit_config
+            retry_config=retry_config, circuit_breaker_config=circuit_config
         )
 
         @wraps(func)
@@ -565,7 +568,7 @@ class BulkResilientExecutor:
         func: Callable[[Any], Any],
         items: list[Any],
         max_failures: int | None = None,
-        fail_fast: bool = False
+        fail_fast: bool = False,
     ) -> dict[str, Any]:
         """Execute function on batch of items with failure tolerance"""
 
@@ -585,7 +588,7 @@ class BulkResilientExecutor:
                     "item": item,
                     "error": str(e),
                     "exception_type": type(e).__name__,
-                    "success": False
+                    "success": False,
                 }
                 failures.append(failure_record)
 
@@ -606,7 +609,7 @@ class BulkResilientExecutor:
             "success_rate": success_rate,
             "results": results,
             "failures": failures,
-            "error_summary": self.executor.error_tracker.get_error_summary()
+            "error_summary": self.executor.error_tracker.get_error_summary(),
         }
 
 
@@ -614,14 +617,11 @@ class BulkResilientExecutor:
 def create_resilient_executor(
     max_attempts: int = 3,
     strategy: RetryStrategy = RetryStrategy.EXPONENTIAL_BACKOFF,
-    use_circuit_breaker: bool = False
+    use_circuit_breaker: bool = False,
 ) -> ResilientExecutor:
     """Create a configured resilient executor"""
 
-    retry_config = RetryConfig(
-        max_attempts=max_attempts,
-        strategy=strategy
-    )
+    retry_config = RetryConfig(max_attempts=max_attempts, strategy=strategy)
 
     circuit_config = None
     if use_circuit_breaker:

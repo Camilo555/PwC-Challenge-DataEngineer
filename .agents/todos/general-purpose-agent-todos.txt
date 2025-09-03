@@ -1,0 +1,130 @@
+# General-Purpose Agent Todo List - PwC Challenge Data Engineer Project
+# Last Updated: 2025-01-25
+# Status: Active
+
+## IMMEDIATE PRIORITY (Week 1-2) - Critical Issues
+
+### Code Quality Fixes
+- [ ] Fix 247 Ruff linting issues by running `python -m ruff check src/ --fix`
+- [ ] Remove unused imports in airflow_dags/advanced_retail_etl_dag.py (lines 155+)
+- [ ] Clean up unused variables across Airflow DAGs
+- [ ] Fix circular import risks in core.config modules
+- [ ] Remove 87 blank lines containing extraneous whitespace
+- [ ] Fix F-string formatting issues (unnecessary f-prefixes)
+- [ ] Run mypy type checking and resolve type issues
+
+### Configuration Issues
+- [ ] Resolve dependency version conflicts in pyproject.toml
+- [ ] Uncomment and fix opentelemetry-exporter-jaeger-thrift dependency (line 74)
+- [ ] Resolve Apache Airflow dependency conflicts (line 54)
+- [ ] Validate environment variables for production security
+- [ ] Consolidate dual configuration systems (BaseConfig + Settings)
+
+### Performance Optimization
+- [ ] Cache expensive memory calculations in base_processor.py (lines 329-482)
+- [ ] Optimize API middleware stack (reduce from 7+ layers)
+- [ ] Review JSON serialization library usage (consolidate ORJSON/UJSON)
+- [ ] Implement query performance monitoring for database layer
+
+## HIGH PRIORITY (Week 3-4) - Architecture Improvements
+
+### ETL Pipeline Enhancements
+- [ ] Reduce coupling between medallion architecture layers
+- [ ] Implement centralized metadata catalog
+- [ ] Add schema evolution support across bronze/silver/gold layers
+- [ ] Optimize processing engine switching overhead
+- [ ] Implement proper CDC (Change Data Capture) support
+
+### API Layer Optimization
+- [ ] Simplify middleware stack for non-production environments
+- [ ] Implement comprehensive request/response validation with Pydantic
+- [ ] Add standardized error codes and exception types
+- [ ] Optimize authentication overhead for multiple auth methods
+
+### Database Improvements
+- [ ] Add missing composite indexes on fact table foreign keys
+- [ ] Implement query result caching with proper invalidation
+- [ ] Add connection pool monitoring and optimization
+- [ ] Review and optimize complex joins in star schema
+
+## MEDIUM PRIORITY (Month 2) - Quality & Testing
+
+### Testing Framework
+- [ ] Implement actual tests for the 51 defined test markers
+- [ ] Create test data factories and fixtures
+- [ ] Add integration with CI/CD pipeline
+- [ ] Establish test coverage baselines (target 90%+)
+- [ ] Add mutation testing framework
+- [ ] Implement chaos engineering tests
+
+### Documentation
+- [ ] Auto-generate API documentation from FastAPI OpenAPI specs
+- [ ] Create comprehensive architecture diagrams
+- [ ] Add troubleshooting guides for common issues
+- [ ] Document performance tuning procedures
+
+### Security Enhancements
+- [ ] Simplify security framework for appropriate use case scale
+- [ ] Optimize security scanning to reduce API request overhead
+- [ ] Implement proper secrets management across environments
+- [ ] Add security compliance testing automation
+
+## LOW PRIORITY (Month 3+) - Advanced Features
+
+### Advanced Analytics
+- [ ] Implement predictive analytics for system monitoring
+- [ ] Add real-time anomaly detection
+- [ ] Create automated performance benchmarking
+- [ ] Implement ML-based query optimization
+
+### Scalability Enhancements
+- [ ] Activate multi-cloud features when deployment scaling requires
+- [ ] Implement advanced microservices patterns (CQRS/Event Sourcing)
+- [ ] Add container orchestration optimizations
+- [ ] Implement advanced monitoring with predictive capabilities
+
+### Infrastructure Evolution
+- [ ] Optimize Terraform infrastructure for current scale
+- [ ] Implement infrastructure as code testing
+- [ ] Add automated disaster recovery procedures
+- [ ] Implement cost optimization automation
+
+## TECHNICAL DEBT ITEMS
+
+### Code Cleanup
+- [ ] Remove commented-out code blocks
+- [ ] Consolidate duplicate functionality across modules
+- [ ] Refactor complex functions into smaller, testable units
+- [ ] Standardize logging patterns across all modules
+
+### Architecture Simplification
+- [ ] Evaluate and remove over-engineered components
+- [ ] Simplify configuration management
+- [ ] Reduce module dependencies and coupling
+- [ ] Optimize import statements and module structure
+
+## SUCCESS METRICS
+
+### Performance Targets
+- [ ] API response time < 100ms (95th percentile)
+- [ ] ETL processing time reduction by 30%
+- [ ] Database query performance < 50ms average
+- [ ] Memory usage optimization < 2GB per process
+
+### Quality Targets
+- [ ] Zero critical linting issues
+- [ ] Test coverage > 90%
+- [ ] Code complexity reduction by 25%
+- [ ] Zero security vulnerabilities in production
+
+### Operational Targets
+- [ ] System uptime > 99.9%
+- [ ] Deployment time < 10 minutes
+- [ ] Recovery time < 15 minutes
+- [ ] Cost reduction of 20% through optimizations
+
+## NOTES
+- Project shows excellent technical implementation but is over-engineered for most use cases
+- Focus on core functionality first, then add advanced features incrementally
+- Strong architectural foundation exists - optimization rather than rebuild needed
+- Current assessment: B+ (85/100) with significant room for operational optimization

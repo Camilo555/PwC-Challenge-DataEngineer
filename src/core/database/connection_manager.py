@@ -4,6 +4,7 @@ Advanced Database Connection Manager
 Enterprise-grade database connection pooling with performance optimization,
 health monitoring, and automatic failover capabilities.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,67 +23,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import QueuePool, StaticPool
+from sqlalchemy.pool import StaticPool
 
 from core.config.base_config import BaseConfig, DatabaseType
+from core.database.pool_config import ConnectionPoolConfig
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class ConnectionPoolConfig:
-    """Connection pool configuration with optimized defaults."""
-
-    # Pool size settings
-    pool_size: int = 10
-    max_overflow: int = 20
-    pool_timeout: int = 30
-    pool_recycle: int = 3600  # 1 hour
-    pool_pre_ping: bool = True
-
-    # Connection retry settings
-    connect_retries: int = 3
-    retry_delay: float = 1.0
-
-    # Health monitoring
-    health_check_interval: int = 300  # 5 minutes
-    max_connection_age: int = 3600  # 1 hour
-
-    # Performance optimization
-    echo: bool = False
-    echo_pool: bool = False
-    isolation_level: str | None = None
-
-    # Async settings
-    async_pool_size: int = 5
-    async_max_overflow: int = 10
-
-    def get_pool_kwargs(self) -> dict[str, Any]:
-        """Get connection pool keyword arguments."""
-        return {
-            'poolclass': QueuePool,
-            'pool_size': self.pool_size,
-            'max_overflow': self.max_overflow,
-            'pool_timeout': self.pool_timeout,
-            'pool_recycle': self.pool_recycle,
-            'pool_pre_ping': self.pool_pre_ping,
-            'echo': self.echo,
-            'echo_pool': self.echo_pool,
-            'isolation_level': self.isolation_level,
-        }
-
-    def get_async_pool_kwargs(self) -> dict[str, Any]:
-        """Get async connection pool keyword arguments."""
-        return {
-            'poolclass': QueuePool,
-            'pool_size': self.async_pool_size,
-            'max_overflow': self.async_max_overflow,
-            'pool_timeout': self.pool_timeout,
-            'pool_recycle': self.pool_recycle,
-            'pool_pre_ping': self.pool_pre_ping,
-            'echo': self.echo,
-        }
 
 
 @dataclass
@@ -102,14 +49,16 @@ class ConnectionMetrics:
         """Get metrics as dictionary."""
         uptime = datetime.utcnow() - self.uptime_start
         return {
-            'total_connections': self.total_connections,
-            'active_connections': self.active_connections,
-            'pool_hits': self.pool_hits,
-            'pool_misses': self.pool_misses,
-            'connection_errors': self.connection_errors,
-            'avg_connection_time_ms': self.avg_connection_time * 1000,
-            'uptime_seconds': uptime.total_seconds(),
-            'last_health_check': self.last_health_check.isoformat() if self.last_health_check else None,
+            "total_connections": self.total_connections,
+            "active_connections": self.active_connections,
+            "pool_hits": self.pool_hits,
+            "pool_misses": self.pool_misses,
+            "connection_errors": self.connection_errors,
+            "avg_connection_time_ms": self.avg_connection_time * 1000,
+            "uptime_seconds": uptime.total_seconds(),
+            "last_health_check": self.last_health_check.isoformat()
+            if self.last_health_check
+            else None,
         }
 
 
@@ -121,7 +70,9 @@ class DatabaseManager:
 
     def __init__(self, config: BaseConfig, pool_config: ConnectionPoolConfig | None = None):
         self.config = config
-        self.pool_config = pool_config or ConnectionPoolConfig()
+        self.pool_config = pool_config or ConnectionPoolConfig.for_environment(
+            config.environment, self._get_database_type_from_config(config)
+        )
         self._engine: Engine | None = None
         self._async_engine: AsyncEngine | None = None
         self._session_factory: sessionmaker | None = None
@@ -171,9 +122,9 @@ class DatabaseManager:
         if db_type == DatabaseType.SQLITE:
             # StaticPool doesn't support size parameters
             sync_kwargs = {
-                'poolclass': StaticPool,
-                'connect_args': self.pool_config.get_connection_kwargs(db_type),
-                'echo': self.pool_config.echo,
+                "poolclass": StaticPool,
+                "connect_args": self.pool_config.get_connection_kwargs(db_type),
+                "echo": self.pool_config.echo,
             }
 
         self._engine = create_engine(database_url, **sync_kwargs)
@@ -184,9 +135,9 @@ class DatabaseManager:
         if db_type == DatabaseType.SQLITE:
             # StaticPool doesn't support size parameters
             async_kwargs = {
-                'poolclass': StaticPool,
-                'connect_args': self.pool_config.get_connection_kwargs(db_type),
-                'echo': self.pool_config.echo,
+                "poolclass": StaticPool,
+                "connect_args": self.pool_config.get_connection_kwargs(db_type),
+                "echo": self.pool_config.echo,
             }
 
         self._async_engine = create_async_engine(async_database_url, **async_kwargs)
@@ -200,10 +151,7 @@ class DatabaseManager:
 
         # Synchronous session factory
         self._session_factory = sessionmaker(
-            bind=self._engine,
-            autocommit=False,
-            autoflush=False,
-            expire_on_commit=False
+            bind=self._engine, autocommit=False, autoflush=False, expire_on_commit=False
         )
 
         # Asynchronous session factory
@@ -213,7 +161,7 @@ class DatabaseManager:
                 class_=AsyncSession,
                 autocommit=False,
                 autoflush=False,
-                expire_on_commit=False
+                expire_on_commit=False,
             )
 
         logger.debug("Session factories created")
@@ -228,17 +176,21 @@ class DatabaseManager:
             """Track new connections."""
             self.metrics.total_connections += 1
             connection_record.connection_start_time = time.time()
-            logger.debug(f"New database connection established (total: {self.metrics.total_connections})")
+            logger.debug(
+                f"New database connection established (total: {self.metrics.total_connections})"
+            )
 
         @event.listens_for(self._engine, "checkout")
         def receive_checkout(dbapi_connection, connection_record, connection_proxy):
             """Track connection checkouts."""
             self.metrics.active_connections += 1
-            if hasattr(connection_record, 'connection_start_time'):
+            if hasattr(connection_record, "connection_start_time"):
                 connection_time = time.time() - connection_record.connection_start_time
                 # Update moving average
                 total_time = self.metrics.avg_connection_time * (self.metrics.total_connections - 1)
-                self.metrics.avg_connection_time = (total_time + connection_time) / self.metrics.total_connections
+                self.metrics.avg_connection_time = (
+                    total_time + connection_time
+                ) / self.metrics.total_connections
 
         @event.listens_for(self._engine, "checkin")
         def receive_checkin(dbapi_connection, connection_record):
@@ -308,6 +260,11 @@ class DatabaseManager:
         else:
             return DatabaseType.SQLITE  # Default fallback
 
+    def _get_database_type_from_config(self, config: BaseConfig) -> DatabaseType:
+        """Get database type from configuration."""
+        database_url = config.get_database_url()
+        return self._get_database_type(database_url)
+
     @asynccontextmanager
     async def get_async_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Get async database session with automatic cleanup."""
@@ -364,14 +321,14 @@ class DatabaseManager:
     def get_health_status(self) -> dict[str, Any]:
         """Get current database health status."""
         return {
-            'healthy': self._is_healthy,
-            'metrics': self.metrics.get_metrics_dict(),
-            'pool_config': {
-                'pool_size': self.pool_config.pool_size,
-                'max_overflow': self.pool_config.max_overflow,
-                'pool_timeout': self.pool_config.pool_timeout,
+            "healthy": self._is_healthy,
+            "metrics": self.metrics.get_metrics_dict(),
+            "pool_config": {
+                "pool_size": self.pool_config.pool_size,
+                "max_overflow": self.pool_config.max_overflow,
+                "pool_timeout": self.pool_config.pool_timeout,
             },
-            'database_type': self._get_database_type(self.config.get_database_url()).value,
+            "database_type": self._get_database_type(self.config.get_database_url()).value,
         }
 
     async def shutdown(self) -> None:

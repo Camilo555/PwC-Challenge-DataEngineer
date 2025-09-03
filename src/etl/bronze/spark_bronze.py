@@ -2,6 +2,7 @@
 Spark-based Bronze Layer Implementation
 Provides scalable data ingestion using PySpark
 """
+
 from __future__ import annotations
 
 import uuid
@@ -9,7 +10,13 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import *
+from pyspark.sql.types import (
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 from core.config import settings
 from core.logging import get_logger
@@ -17,16 +24,18 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 # Define schema for sales data
-SALES_SCHEMA = StructType([
-    StructField("InvoiceNo", StringType(), True),
-    StructField("StockCode", StringType(), True),
-    StructField("Description", StringType(), True),
-    StructField("Quantity", IntegerType(), True),
-    StructField("InvoiceDate", StringType(), True),
-    StructField("UnitPrice", DoubleType(), True),
-    StructField("CustomerID", StringType(), True),
-    StructField("Country", StringType(), True)
-])
+SALES_SCHEMA = StructType(
+    [
+        StructField("InvoiceNo", StringType(), True),
+        StructField("StockCode", StringType(), True),
+        StructField("Description", StringType(), True),
+        StructField("Quantity", IntegerType(), True),
+        StructField("InvoiceDate", StringType(), True),
+        StructField("UnitPrice", DoubleType(), True),
+        StructField("CustomerID", StringType(), True),
+        StructField("Country", StringType(), True),
+    ]
+)
 
 
 def _create_spark_session() -> SparkSession:
@@ -37,6 +46,7 @@ def _create_spark_session() -> SparkSession:
     if platform.system() == "Windows":
         try:
             from etl.utils.windows_spark import create_windows_spark_session
+
             logger.info("Using Windows-optimized Spark session for Bronze layer")
             return create_windows_spark_session("RetailETL-BronzeLayer")
         except Exception as e:
@@ -44,8 +54,7 @@ def _create_spark_session() -> SparkSession:
 
     # Standard configuration for non-Windows systems
     return (
-        SparkSession.builder
-        .appName("RetailETL-BronzeLayer")
+        SparkSession.builder.appName("RetailETL-BronzeLayer")
         .master("local[*]")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
@@ -70,9 +79,7 @@ def _list_raw_csvs(raw_dir: Path) -> list[str]:
 def _read_and_normalize_csvs(spark: SparkSession, files: list[str]) -> DataFrame:
     """Read and normalize CSV files with chunked processing for memory efficiency."""
     if not files:
-        raise FileNotFoundError(
-            f"No raw CSV files found under {settings.raw_data_path.resolve()}"
-        )
+        raise FileNotFoundError(f"No raw CSV files found under {settings.raw_data_path.resolve()}")
 
     job_id = str(uuid.uuid4())
     logger.info(f"Processing {len(files)} CSV files with job ID: {job_id}")
@@ -96,8 +103,7 @@ def _read_and_normalize_csvs(spark: SparkSession, files: list[str]) -> DataFrame
         try:
             # Read CSV with flexible schema detection
             df = (
-                spark.read
-                .option("header", "true")
+                spark.read.option("header", "true")
                 .option("inferSchema", "true")
                 .option("timestampFormat", "M/d/yyyy H:mm")
                 .csv(file_path)
@@ -120,8 +126,7 @@ def _read_and_normalize_csvs(spark: SparkSession, files: list[str]) -> DataFrame
         try:
             # Read large files with additional memory optimizations
             df = (
-                spark.read
-                .option("header", "true")
+                spark.read.option("header", "true")
                 .option("inferSchema", "false")  # Skip schema inference for large files
                 .option("timestampFormat", "M/d/yyyy H:mm")
                 .option("multiline", "false")
@@ -161,7 +166,7 @@ def _read_and_normalize_csvs(spark: SparkSession, files: list[str]) -> DataFrame
                 # Cache periodically to avoid recomputation
                 if i % 3 == 0:
                     combined_df.cache()
-                    logger.debug(f"Cached dataframe after unioning {i+1} files")
+                    logger.debug(f"Cached dataframe after unioning {i + 1} files")
 
             except Exception as e:
                 logger.error(f"Failed to union dataframe {i}: {e}")
@@ -191,7 +196,7 @@ def _normalize_column_names(df: DataFrame) -> DataFrame:
         "unitprice": "unit_price",
         "CustomerID": "customer_id",
         "customerid": "customer_id",
-        "Country": "country"
+        "Country": "country",
     }
 
     # Handle InvoiceDate -> invoice_timestamp mapping carefully
@@ -224,9 +229,12 @@ def _add_metadata_and_partitioning(df: DataFrame) -> DataFrame:
     # Parse invoice timestamp and add partitioning columns
     if "invoice_timestamp" in df.columns:
         # Ensure proper timestamp format
-        df = df.withColumn("invoice_timestamp_parsed",
-                          F.to_timestamp(F.col("invoice_timestamp"), "M/d/yyyy H:mm"))
-        df = df.drop("invoice_timestamp").withColumnRenamed("invoice_timestamp_parsed", "invoice_timestamp")
+        df = df.withColumn(
+            "invoice_timestamp_parsed", F.to_timestamp(F.col("invoice_timestamp"), "M/d/yyyy H:mm")
+        )
+        df = df.drop("invoice_timestamp").withColumnRenamed(
+            "invoice_timestamp_parsed", "invoice_timestamp"
+        )
         df = df.withColumn("invoice_date", F.to_date(F.col("invoice_timestamp")))
 
     # Add ingestion date for partitioning
@@ -238,8 +246,14 @@ def _add_metadata_and_partitioning(df: DataFrame) -> DataFrame:
 def _ensure_required_columns(df: DataFrame) -> DataFrame:
     """Ensure all required columns exist."""
     required_columns = [
-        "invoice_no", "stock_code", "description", "quantity",
-        "unit_price", "invoice_timestamp", "customer_id", "country"
+        "invoice_no",
+        "stock_code",
+        "description",
+        "quantity",
+        "unit_price",
+        "invoice_timestamp",
+        "customer_id",
+        "country",
     ]
 
     for col in required_columns:
@@ -257,14 +271,30 @@ def _apply_data_quality_rules(df: DataFrame) -> DataFrame:
     original_count = df.count()
 
     # Add data quality flags instead of filtering
-    df = (df
-          .withColumn("is_valid_quantity", F.when(F.col("quantity").isNull() | (F.col("quantity") <= 0), False).otherwise(True))
-          .withColumn("is_valid_price", F.when(F.col("unit_price").isNull() | (F.col("unit_price") < 0), False).otherwise(True))
-          .withColumn("has_invoice_no", F.when(F.col("invoice_no").isNull() | (F.trim(F.col("invoice_no")) == ""), False).otherwise(True))
-          .withColumn("data_quality_score",
-                     (F.col("is_valid_quantity").cast("int") +
-                      F.col("is_valid_price").cast("int") +
-                      F.col("has_invoice_no").cast("int")) / 3.0)
+    df = (
+        df.withColumn(
+            "is_valid_quantity",
+            F.when(F.col("quantity").isNull() | (F.col("quantity") <= 0), False).otherwise(True),
+        )
+        .withColumn(
+            "is_valid_price",
+            F.when(F.col("unit_price").isNull() | (F.col("unit_price") < 0), False).otherwise(True),
+        )
+        .withColumn(
+            "has_invoice_no",
+            F.when(
+                F.col("invoice_no").isNull() | (F.trim(F.col("invoice_no")) == ""), False
+            ).otherwise(True),
+        )
+        .withColumn(
+            "data_quality_score",
+            (
+                F.col("is_valid_quantity").cast("int")
+                + F.col("is_valid_price").cast("int")
+                + F.col("has_invoice_no").cast("int")
+            )
+            / 3.0,
+        )
     )
 
     logger.info(f"Applied data quality flags to {original_count} records")
@@ -305,17 +335,24 @@ def ingest_bronze_spark() -> bool:
         logger.info(f"Writing {df.count()} records to Bronze layer...")
 
         import platform
+
         if platform.system() == "Windows":
             # Use Windows-compatible writing approach
             try:
                 # Try to write as single file to avoid partitioning issues on Windows
                 df.coalesce(1).write.mode("overwrite").parquet(str(out_dir / "bronze_data.parquet"))
-                logger.info(f"Bronze ingest complete -> {out_dir}/bronze_data.parquet (Windows-compatible mode)")
+                logger.info(
+                    f"Bronze ingest complete -> {out_dir}/bronze_data.parquet (Windows-compatible mode)"
+                )
             except Exception as e:
                 logger.warning(f"Parquet writing failed on Windows, trying CSV: {e}")
                 # Fallback to CSV if Parquet fails
-                df.coalesce(1).write.mode("overwrite").option("header", "true").csv(str(out_dir / "bronze_data.csv"))
-                logger.info(f"Bronze ingest complete -> {out_dir}/bronze_data.csv (CSV fallback mode)")
+                df.coalesce(1).write.mode("overwrite").option("header", "true").csv(
+                    str(out_dir / "bronze_data.csv")
+                )
+                logger.info(
+                    f"Bronze ingest complete -> {out_dir}/bronze_data.csv (CSV fallback mode)"
+                )
         else:
             # Standard partitioned approach for Linux/Unix
             df.write.mode("overwrite").partitionBy("ingestion_date").parquet(str(out_dir))

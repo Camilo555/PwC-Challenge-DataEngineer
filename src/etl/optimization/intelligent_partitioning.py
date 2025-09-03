@@ -2,6 +2,7 @@
 Intelligent Data Partitioning and Query Optimization System
 Provides automatic partitioning strategies and query optimization for different data engines.
 """
+
 import math
 import statistics
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from core.logging import get_logger
 
 class PartitionStrategy(Enum):
     """Different partitioning strategies"""
+
     TIME_BASED = "time_based"
     HASH_BASED = "hash_based"
     RANGE_BASED = "range_based"
@@ -28,6 +30,7 @@ class PartitionStrategy(Enum):
 
 class QueryType(Enum):
     """Types of queries for optimization"""
+
     POINT_LOOKUP = "point_lookup"
     RANGE_SCAN = "range_scan"
     AGGREGATION = "aggregation"
@@ -39,6 +42,7 @@ class QueryType(Enum):
 @dataclass
 class PartitionMetadata:
     """Metadata for a data partition"""
+
     partition_id: str
     partition_key: str
     partition_value: Any
@@ -56,6 +60,7 @@ class PartitionMetadata:
 @dataclass
 class QueryProfile:
     """Query performance profile"""
+
     query_id: str
     query_type: QueryType
     execution_time_ms: float
@@ -71,6 +76,7 @@ class QueryProfile:
 @dataclass
 class PartitioningRecommendation:
     """Partitioning strategy recommendation"""
+
     strategy: PartitionStrategy
     partition_columns: list[str]
     partition_count: int
@@ -93,33 +99,33 @@ class DataProfiler:
             data = data.to_pandas()  # Convert for analysis
 
         analysis = {
-            'row_count': len(data),
-            'column_count': len(data.columns),
-            'memory_usage_mb': data.memory_usage(deep=True).sum() / 1024 / 1024,
-            'columns': {}
+            "row_count": len(data),
+            "column_count": len(data.columns),
+            "memory_usage_mb": data.memory_usage(deep=True).sum() / 1024 / 1024,
+            "columns": {},
         }
 
         for column in data.columns:
-            analysis['columns'][column] = self._analyze_column(data[column])
+            analysis["columns"][column] = self._analyze_column(data[column])
 
         return analysis
 
     def _analyze_column(self, series: pd.Series) -> dict[str, Any]:
         """Analyze individual column characteristics"""
         analysis = {
-            'dtype': str(series.dtype),
-            'null_count': series.isnull().sum(),
-            'null_percentage': series.isnull().sum() / len(series) * 100,
-            'unique_count': series.nunique(),
-            'cardinality': series.nunique() / len(series),
-            'is_temporal': self._is_temporal_column(series),
-            'is_categorical': self._is_categorical_column(series),
-            'data_skew': self._calculate_data_skew(series),
-            'partition_suitability': 0.0
+            "dtype": str(series.dtype),
+            "null_count": series.isnull().sum(),
+            "null_percentage": series.isnull().sum() / len(series) * 100,
+            "unique_count": series.nunique(),
+            "cardinality": series.nunique() / len(series),
+            "is_temporal": self._is_temporal_column(series),
+            "is_categorical": self._is_categorical_column(series),
+            "data_skew": self._calculate_data_skew(series),
+            "partition_suitability": 0.0,
         }
 
         # Calculate partition suitability score
-        analysis['partition_suitability'] = self._calculate_partition_suitability(series, analysis)
+        analysis["partition_suitability"] = self._calculate_partition_suitability(series, analysis)
 
         if pd.api.types.is_numeric_dtype(series):
             analysis.update(self._analyze_numeric_column(series))
@@ -139,7 +145,7 @@ class DataProfiler:
         if pd.api.types.is_string_dtype(series):
             sample = series.dropna().head(100)
             try:
-                pd.to_datetime(sample, errors='raise')
+                pd.to_datetime(sample, errors="raise")
                 return True
             except:
                 pass
@@ -170,6 +176,7 @@ class DataProfiler:
 
         try:
             from scipy import stats
+
             return abs(stats.skew(series.dropna()))
         except ImportError:
             # Fallback calculation
@@ -186,13 +193,15 @@ class DataProfiler:
 
             return abs(3 * (mean_val - median_val) / std_val)
 
-    def _calculate_partition_suitability(self, series: pd.Series, analysis: dict[str, Any]) -> float:
+    def _calculate_partition_suitability(
+        self, series: pd.Series, analysis: dict[str, Any]
+    ) -> float:
         """Calculate how suitable a column is for partitioning"""
         score = 0.0
 
         # Cardinality score (sweet spot around 10-1000 unique values)
-        cardinality = analysis['cardinality']
-        unique_count = analysis['unique_count']
+        analysis["cardinality"]
+        unique_count = analysis["unique_count"]
 
         if unique_count < 2:
             score += 0.0  # Not suitable for partitioning
@@ -206,15 +215,15 @@ class DataProfiler:
             score += 0.1  # Likely too many partitions
 
         # Temporal columns are excellent for partitioning
-        if analysis['is_temporal']:
+        if analysis["is_temporal"]:
             score += 1.5
 
         # Categorical columns are good for partitioning
-        if analysis['is_categorical']:
+        if analysis["is_categorical"]:
             score += 1.0
 
         # Low data skew is better for partitioning
-        skew = analysis['data_skew']
+        skew = analysis["data_skew"]
         if skew < 0.5:
             score += 0.8
         elif skew < 1.0:
@@ -223,7 +232,7 @@ class DataProfiler:
             score += 0.2
 
         # Penalize high null percentage
-        null_percentage = analysis['null_percentage']
+        null_percentage = analysis["null_percentage"]
         if null_percentage < 5:
             score += 0.5
         elif null_percentage < 20:
@@ -240,12 +249,12 @@ class DataProfiler:
             return {}
 
         return {
-            'min_value': clean_series.min(),
-            'max_value': clean_series.max(),
-            'mean_value': clean_series.mean(),
-            'std_value': clean_series.std(),
-            'range': clean_series.max() - clean_series.min(),
-            'has_outliers': self._detect_outliers(clean_series)
+            "min_value": clean_series.min(),
+            "max_value": clean_series.max(),
+            "mean_value": clean_series.mean(),
+            "std_value": clean_series.std(),
+            "range": clean_series.max() - clean_series.min(),
+            "has_outliers": self._detect_outliers(clean_series),
         }
 
     def _analyze_string_column(self, series: pd.Series) -> dict[str, Any]:
@@ -258,11 +267,11 @@ class DataProfiler:
         value_counts = clean_series.value_counts()
 
         return {
-            'avg_length': lengths.mean(),
-            'max_length': lengths.max(),
-            'min_length': lengths.min(),
-            'most_common_values': value_counts.head(10).to_dict(),
-            'has_patterns': self._detect_string_patterns(clean_series)
+            "avg_length": lengths.mean(),
+            "max_length": lengths.max(),
+            "min_length": lengths.min(),
+            "most_common_values": value_counts.head(10).to_dict(),
+            "has_patterns": self._detect_string_patterns(clean_series),
         }
 
     def _analyze_datetime_column(self, series: pd.Series) -> dict[str, Any]:
@@ -272,11 +281,11 @@ class DataProfiler:
             return {}
 
         return {
-            'min_date': clean_series.min(),
-            'max_date': clean_series.max(),
-            'date_range_days': (clean_series.max() - clean_series.min()).days,
-            'temporal_granularity': self._detect_temporal_granularity(clean_series),
-            'seasonality_detected': self._detect_seasonality(clean_series)
+            "min_date": clean_series.min(),
+            "max_date": clean_series.max(),
+            "date_range_days": (clean_series.max() - clean_series.min()).days,
+            "temporal_granularity": self._detect_temporal_granularity(clean_series),
+            "seasonality_detected": self._detect_seasonality(clean_series),
         }
 
     def _detect_outliers(self, series: pd.Series) -> bool:
@@ -345,7 +354,7 @@ class DataProfiler:
             return False
 
         # Simple seasonality detection based on day of week/month patterns
-        if hasattr(series, 'dt'):
+        if hasattr(series, "dt"):
             day_of_week_var = series.dt.dayofweek.value_counts().var()
             day_of_month_var = series.dt.day.value_counts().var()
 
@@ -366,7 +375,7 @@ class PartitioningStrategist:
         self,
         data: pd.DataFrame | pl.DataFrame,
         query_patterns: list[QueryProfile] = None,
-        storage_constraints: dict[str, Any] = None
+        storage_constraints: dict[str, Any] = None,
     ) -> PartitioningRecommendation:
         """Recommend optimal partitioning strategy"""
 
@@ -390,37 +399,37 @@ class PartitioningStrategist:
     def _analyze_query_patterns(self, query_patterns: list[QueryProfile]) -> dict[str, Any]:
         """Analyze historical query patterns"""
         if not query_patterns:
-            return {'has_patterns': False}
+            return {"has_patterns": False}
 
         analysis = {
-            'has_patterns': True,
-            'total_queries': len(query_patterns),
-            'avg_execution_time': statistics.mean([q.execution_time_ms for q in query_patterns]),
-            'query_types': {},
-            'filter_columns': {},
-            'group_by_columns': {},
-            'join_columns': {},
-            'temporal_patterns': {}
+            "has_patterns": True,
+            "total_queries": len(query_patterns),
+            "avg_execution_time": statistics.mean([q.execution_time_ms for q in query_patterns]),
+            "query_types": {},
+            "filter_columns": {},
+            "group_by_columns": {},
+            "join_columns": {},
+            "temporal_patterns": {},
         }
 
         # Analyze query type distribution
         for pattern in query_patterns:
             query_type = pattern.query_type.value
-            if query_type not in analysis['query_types']:
-                analysis['query_types'][query_type] = 0
-            analysis['query_types'][query_type] += 1
+            if query_type not in analysis["query_types"]:
+                analysis["query_types"][query_type] = 0
+            analysis["query_types"][query_type] += 1
 
             # Track commonly filtered columns
             for col in pattern.filter_columns:
-                if col not in analysis['filter_columns']:
-                    analysis['filter_columns'][col] = 0
-                analysis['filter_columns'][col] += 1
+                if col not in analysis["filter_columns"]:
+                    analysis["filter_columns"][col] = 0
+                analysis["filter_columns"][col] += 1
 
             # Track commonly grouped columns
             for col in pattern.group_by_columns:
-                if col not in analysis['group_by_columns']:
-                    analysis['group_by_columns'][col] = 0
-                analysis['group_by_columns'][col] += 1
+                if col not in analysis["group_by_columns"]:
+                    analysis["group_by_columns"][col] = 0
+                analysis["group_by_columns"][col] += 1
 
         return analysis
 
@@ -428,7 +437,7 @@ class PartitioningStrategist:
         self,
         data_analysis: dict[str, Any],
         query_analysis: dict[str, Any],
-        storage_constraints: dict[str, Any]
+        storage_constraints: dict[str, Any],
     ) -> list[PartitioningRecommendation]:
         """Generate multiple partitioning strategy recommendations"""
 
@@ -457,16 +466,13 @@ class PartitioningStrategist:
         return recommendations
 
     def _evaluate_time_based_partitioning(
-        self,
-        data_analysis: dict[str, Any],
-        query_analysis: dict[str, Any]
+        self, data_analysis: dict[str, Any], query_analysis: dict[str, Any]
     ) -> PartitioningRecommendation | None:
         """Evaluate time-based partitioning strategy"""
 
         # Find temporal columns
         temporal_columns = [
-            col for col, info in data_analysis['columns'].items()
-            if info['is_temporal']
+            col for col, info in data_analysis["columns"].items() if info["is_temporal"]
         ]
 
         if not temporal_columns:
@@ -474,29 +480,28 @@ class PartitioningStrategist:
 
         # Select best temporal column
         best_temporal_col = max(
-            temporal_columns,
-            key=lambda col: data_analysis['columns'][col]['partition_suitability']
+            temporal_columns, key=lambda col: data_analysis["columns"][col]["partition_suitability"]
         )
 
-        col_info = data_analysis['columns'][best_temporal_col]
+        col_info = data_analysis["columns"][best_temporal_col]
 
         # Calculate confidence based on temporal characteristics
         confidence = 0.0
 
         # High confidence if commonly filtered by time
-        if query_analysis.get('has_patterns'):
-            filter_frequency = query_analysis['filter_columns'].get(best_temporal_col, 0)
-            confidence += min(filter_frequency / query_analysis['total_queries'], 0.5)
+        if query_analysis.get("has_patterns"):
+            filter_frequency = query_analysis["filter_columns"].get(best_temporal_col, 0)
+            confidence += min(filter_frequency / query_analysis["total_queries"], 0.5)
 
         # Add base confidence for temporal suitability
-        confidence += min(col_info['partition_suitability'] / 5.0, 0.4)
+        confidence += min(col_info["partition_suitability"] / 5.0, 0.4)
 
         # Determine partition granularity
-        if 'temporal_granularity' in col_info:
-            granularity = col_info['temporal_granularity']
-            if granularity in ['day', 'week']:
+        if "temporal_granularity" in col_info:
+            granularity = col_info["temporal_granularity"]
+            if granularity in ["day", "week"]:
                 confidence += 0.2
-            elif granularity in ['hour', 'month']:
+            elif granularity in ["hour", "month"]:
                 confidence += 0.1
 
         # Estimate partition count based on date range
@@ -510,44 +515,44 @@ class PartitioningStrategist:
             storage_overhead=15.0,  # Typical overhead for time partitioning
             maintenance_complexity=2.0,  # Low complexity
             confidence_score=confidence,
-            reasoning=f"Temporal column '{best_temporal_col}' shows good partitioning characteristics"
+            reasoning=f"Temporal column '{best_temporal_col}' shows good partitioning characteristics",
         )
 
     def _evaluate_hash_based_partitioning(
-        self,
-        data_analysis: dict[str, Any],
-        query_analysis: dict[str, Any]
+        self, data_analysis: dict[str, Any], query_analysis: dict[str, Any]
     ) -> PartitioningRecommendation | None:
         """Evaluate hash-based partitioning strategy"""
 
         # Find high-cardinality columns suitable for hashing
         suitable_columns = []
 
-        for col, info in data_analysis['columns'].items():
-            if (info['unique_count'] > 1000 and
-                info['cardinality'] > 0.8 and
-                info['data_skew'] < 1.0):
+        for col, info in data_analysis["columns"].items():
+            if (
+                info["unique_count"] > 1000
+                and info["cardinality"] > 0.8
+                and info["data_skew"] < 1.0
+            ):
                 suitable_columns.append((col, info))
 
         if not suitable_columns:
             return None
 
         # Select best column for hashing
-        best_col, best_info = max(suitable_columns, key=lambda x: x[1]['partition_suitability'])
+        best_col, best_info = max(suitable_columns, key=lambda x: x[1]["partition_suitability"])
 
         # Calculate confidence
         confidence = 0.3  # Base confidence for hash partitioning
 
-        if best_info['data_skew'] < 0.5:
+        if best_info["data_skew"] < 0.5:
             confidence += 0.2  # Bonus for low skew
 
-        if query_analysis.get('has_patterns'):
+        if query_analysis.get("has_patterns"):
             # Hash partitioning good for point lookups
-            point_lookups = query_analysis['query_types'].get('point_lookup', 0)
-            confidence += min(point_lookups / query_analysis['total_queries'], 0.3)
+            point_lookups = query_analysis["query_types"].get("point_lookup", 0)
+            confidence += min(point_lookups / query_analysis["total_queries"], 0.3)
 
         # Optimal partition count for hash partitioning (power of 2)
-        partition_count = 2 ** int(math.log2(min(64, max(4, data_analysis['row_count'] // 100000))))
+        partition_count = 2 ** int(math.log2(min(64, max(4, data_analysis["row_count"] // 100000))))
 
         return PartitioningRecommendation(
             strategy=PartitionStrategy.HASH_BASED,
@@ -557,45 +562,45 @@ class PartitioningStrategist:
             storage_overhead=10.0,  # Lower overhead than time-based
             maintenance_complexity=1.0,  # Low maintenance
             confidence_score=confidence,
-            reasoning=f"High-cardinality column '{best_col}' suitable for hash partitioning"
+            reasoning=f"High-cardinality column '{best_col}' suitable for hash partitioning",
         )
 
     def _evaluate_range_based_partitioning(
-        self,
-        data_analysis: dict[str, Any],
-        query_analysis: dict[str, Any]
+        self, data_analysis: dict[str, Any], query_analysis: dict[str, Any]
     ) -> PartitioningRecommendation | None:
         """Evaluate range-based partitioning strategy"""
 
         # Find numeric columns suitable for range partitioning
         suitable_columns = []
 
-        for col, info in data_analysis['columns'].items():
-            if (info['dtype'] in ['int64', 'float64'] and
-                info['partition_suitability'] > 2.0 and
-                'range' in info and
-                info['range'] > 0):
+        for col, info in data_analysis["columns"].items():
+            if (
+                info["dtype"] in ["int64", "float64"]
+                and info["partition_suitability"] > 2.0
+                and "range" in info
+                and info["range"] > 0
+            ):
                 suitable_columns.append((col, info))
 
         if not suitable_columns:
             return None
 
-        best_col, best_info = max(suitable_columns, key=lambda x: x[1]['partition_suitability'])
+        best_col, best_info = max(suitable_columns, key=lambda x: x[1]["partition_suitability"])
 
         # Calculate confidence
         confidence = 0.25  # Base confidence
 
-        if query_analysis.get('has_patterns'):
+        if query_analysis.get("has_patterns"):
             # Range partitioning good for range scans
-            range_scans = query_analysis['query_types'].get('range_scan', 0)
-            confidence += min(range_scans / query_analysis['total_queries'], 0.4)
+            range_scans = query_analysis["query_types"].get("range_scan", 0)
+            confidence += min(range_scans / query_analysis["total_queries"], 0.4)
 
             # Check if this column is commonly used in filters
-            filter_frequency = query_analysis['filter_columns'].get(best_col, 0)
-            confidence += min(filter_frequency / query_analysis['total_queries'], 0.3)
+            filter_frequency = query_analysis["filter_columns"].get(best_col, 0)
+            confidence += min(filter_frequency / query_analysis["total_queries"], 0.3)
 
         # Determine optimal partition count based on data distribution
-        partition_count = min(20, max(4, int(best_info['unique_count'] ** 0.5)))
+        partition_count = min(20, max(4, int(best_info["unique_count"] ** 0.5)))
 
         return PartitioningRecommendation(
             strategy=PartitionStrategy.RANGE_BASED,
@@ -605,21 +610,19 @@ class PartitioningStrategist:
             storage_overhead=12.0,
             maintenance_complexity=3.0,  # Medium complexity due to range management
             confidence_score=confidence,
-            reasoning=f"Numeric column '{best_col}' shows good range distribution"
+            reasoning=f"Numeric column '{best_col}' shows good range distribution",
         )
 
     def _evaluate_hybrid_partitioning(
-        self,
-        data_analysis: dict[str, Any],
-        query_analysis: dict[str, Any]
+        self, data_analysis: dict[str, Any], query_analysis: dict[str, Any]
     ) -> PartitioningRecommendation | None:
         """Evaluate hybrid partitioning strategy (multiple columns)"""
 
         # Find top 2 columns for hybrid partitioning
         column_scores = [
-            (col, info['partition_suitability'])
-            for col, info in data_analysis['columns'].items()
-            if info['partition_suitability'] > 1.5
+            (col, info["partition_suitability"])
+            for col, info in data_analysis["columns"].items()
+            if info["partition_suitability"] > 1.5
         ]
 
         column_scores.sort(key=lambda x: x[1], reverse=True)
@@ -633,18 +636,22 @@ class PartitioningStrategist:
         # Calculate confidence
         confidence = min((primary_score + secondary_score) / 10.0, 0.8)
 
-        if query_analysis.get('has_patterns'):
+        if query_analysis.get("has_patterns"):
             # Hybrid works well when both columns are frequently used
-            primary_filter_freq = query_analysis['filter_columns'].get(primary_col, 0)
-            secondary_filter_freq = query_analysis['filter_columns'].get(secondary_col, 0)
+            primary_filter_freq = query_analysis["filter_columns"].get(primary_col, 0)
+            secondary_filter_freq = query_analysis["filter_columns"].get(secondary_col, 0)
 
-            total_queries = query_analysis['total_queries']
+            total_queries = query_analysis["total_queries"]
             both_used_freq = min(primary_filter_freq, secondary_filter_freq) / total_queries
             confidence += both_used_freq * 0.3
 
         # Estimate partition count (multiplicative)
-        primary_partitions = min(10, max(3, int(data_analysis['columns'][primary_col]['unique_count'] ** 0.4)))
-        secondary_partitions = min(5, max(2, int(data_analysis['columns'][secondary_col]['unique_count'] ** 0.3)))
+        primary_partitions = min(
+            10, max(3, int(data_analysis["columns"][primary_col]["unique_count"] ** 0.4))
+        )
+        secondary_partitions = min(
+            5, max(2, int(data_analysis["columns"][secondary_col]["unique_count"] ** 0.3))
+        )
 
         return PartitioningRecommendation(
             strategy=PartitionStrategy.HYBRID,
@@ -654,15 +661,15 @@ class PartitioningStrategist:
             storage_overhead=25.0,  # Higher overhead due to multiple levels
             maintenance_complexity=4.0,  # Higher complexity
             confidence_score=confidence,
-            reasoning=f"Hybrid partitioning on '{primary_col}' and '{secondary_col}' for complex queries"
+            reasoning=f"Hybrid partitioning on '{primary_col}' and '{secondary_col}' for complex queries",
         )
 
     def _estimate_temporal_partitions(self, col_info: dict[str, Any]) -> int:
         """Estimate number of partitions for temporal column"""
-        if 'date_range_days' not in col_info:
+        if "date_range_days" not in col_info:
             return 12  # Default monthly partitioning
 
-        days = col_info['date_range_days']
+        days = col_info["date_range_days"]
 
         if days <= 7:
             return max(1, days)  # Daily
@@ -686,36 +693,36 @@ class QueryOptimizer:
         self,
         query: dict[str, Any],
         partition_metadata: list[PartitionMetadata],
-        strategy: PartitioningRecommendation
+        strategy: PartitioningRecommendation,
     ) -> dict[str, Any]:
         """Optimize query execution plan based on partitioning"""
 
         optimizations = {
-            'partition_pruning': [],
-            'predicate_pushdown': [],
-            'join_optimizations': [],
-            'aggregation_optimizations': [],
-            'estimated_speedup': 1.0
+            "partition_pruning": [],
+            "predicate_pushdown": [],
+            "join_optimizations": [],
+            "aggregation_optimizations": [],
+            "estimated_speedup": 1.0,
         }
 
         # Partition pruning optimization
         pruning = self._optimize_partition_pruning(query, partition_metadata, strategy)
-        optimizations['partition_pruning'] = pruning
+        optimizations["partition_pruning"] = pruning
 
         # Predicate pushdown
         pushdown = self._optimize_predicate_pushdown(query, strategy)
-        optimizations['predicate_pushdown'] = pushdown
+        optimizations["predicate_pushdown"] = pushdown
 
         # Join optimizations
         join_opts = self._optimize_joins(query, strategy)
-        optimizations['join_optimizations'] = join_opts
+        optimizations["join_optimizations"] = join_opts
 
         # Aggregation optimizations
         agg_opts = self._optimize_aggregations(query, strategy)
-        optimizations['aggregation_optimizations'] = agg_opts
+        optimizations["aggregation_optimizations"] = agg_opts
 
         # Calculate estimated speedup
-        optimizations['estimated_speedup'] = self._calculate_estimated_speedup(optimizations)
+        optimizations["estimated_speedup"] = self._calculate_estimated_speedup(optimizations)
 
         return optimizations
 
@@ -723,131 +730,139 @@ class QueryOptimizer:
         self,
         query: dict[str, Any],
         partition_metadata: list[PartitionMetadata],
-        strategy: PartitioningRecommendation
+        strategy: PartitioningRecommendation,
     ) -> list[dict[str, Any]]:
         """Optimize partition pruning"""
 
         pruning_rules = []
 
-        if not query.get('filters'):
+        if not query.get("filters"):
             return pruning_rules
 
-        for filter_col, filter_value in query['filters'].items():
+        for filter_col, filter_value in query["filters"].items():
             if filter_col in strategy.partition_columns:
                 # Find relevant partitions
                 relevant_partitions = self._find_relevant_partitions(
                     filter_col, filter_value, partition_metadata
                 )
 
-                pruning_rules.append({
-                    'column': filter_col,
-                    'filter_value': filter_value,
-                    'partitions_to_scan': [p.partition_id for p in relevant_partitions],
-                    'partitions_pruned': len(partition_metadata) - len(relevant_partitions),
-                    'data_reduction_percent': (1 - len(relevant_partitions) / len(partition_metadata)) * 100
-                })
+                pruning_rules.append(
+                    {
+                        "column": filter_col,
+                        "filter_value": filter_value,
+                        "partitions_to_scan": [p.partition_id for p in relevant_partitions],
+                        "partitions_pruned": len(partition_metadata) - len(relevant_partitions),
+                        "data_reduction_percent": (
+                            1 - len(relevant_partitions) / len(partition_metadata)
+                        )
+                        * 100,
+                    }
+                )
 
         return pruning_rules
 
     def _optimize_predicate_pushdown(
-        self,
-        query: dict[str, Any],
-        strategy: PartitioningRecommendation
+        self, query: dict[str, Any], strategy: PartitioningRecommendation
     ) -> list[dict[str, Any]]:
         """Optimize predicate pushdown"""
 
         pushdown_rules = []
 
-        if not query.get('filters'):
+        if not query.get("filters"):
             return pushdown_rules
 
-        for filter_col, filter_value in query['filters'].items():
+        for filter_col, filter_value in query["filters"].items():
             # Always push down filters on partition columns
             if filter_col in strategy.partition_columns:
-                pushdown_rules.append({
-                    'column': filter_col,
-                    'operation': 'push_to_storage',
-                    'expected_benefit': 'high'
-                })
+                pushdown_rules.append(
+                    {
+                        "column": filter_col,
+                        "operation": "push_to_storage",
+                        "expected_benefit": "high",
+                    }
+                )
             # Push down selective filters
             elif self._is_selective_filter(filter_col, filter_value):
-                pushdown_rules.append({
-                    'column': filter_col,
-                    'operation': 'push_to_storage',
-                    'expected_benefit': 'medium'
-                })
+                pushdown_rules.append(
+                    {
+                        "column": filter_col,
+                        "operation": "push_to_storage",
+                        "expected_benefit": "medium",
+                    }
+                )
 
         return pushdown_rules
 
     def _optimize_joins(
-        self,
-        query: dict[str, Any],
-        strategy: PartitioningRecommendation
+        self, query: dict[str, Any], strategy: PartitioningRecommendation
     ) -> list[dict[str, Any]]:
         """Optimize join operations"""
 
         join_optimizations = []
 
-        if not query.get('joins'):
+        if not query.get("joins"):
             return join_optimizations
 
-        for join in query['joins']:
+        for join in query["joins"]:
             # If join key matches partition key, use partition-wise join
-            if join['key'] in strategy.partition_columns:
-                join_optimizations.append({
-                    'join_key': join['key'],
-                    'optimization': 'partition_wise_join',
-                    'expected_benefit': 'high'
-                })
+            if join["key"] in strategy.partition_columns:
+                join_optimizations.append(
+                    {
+                        "join_key": join["key"],
+                        "optimization": "partition_wise_join",
+                        "expected_benefit": "high",
+                    }
+                )
             # Use broadcast join for small tables
-            elif join.get('right_table_size_mb', 0) < 100:
-                join_optimizations.append({
-                    'join_key': join['key'],
-                    'optimization': 'broadcast_join',
-                    'expected_benefit': 'medium'
-                })
+            elif join.get("right_table_size_mb", 0) < 100:
+                join_optimizations.append(
+                    {
+                        "join_key": join["key"],
+                        "optimization": "broadcast_join",
+                        "expected_benefit": "medium",
+                    }
+                )
 
         return join_optimizations
 
     def _optimize_aggregations(
-        self,
-        query: dict[str, Any],
-        strategy: PartitioningRecommendation
+        self, query: dict[str, Any], strategy: PartitioningRecommendation
     ) -> list[dict[str, Any]]:
         """Optimize aggregation operations"""
 
         agg_optimizations = []
 
-        if not query.get('group_by'):
+        if not query.get("group_by"):
             return agg_optimizations
 
-        group_by_cols = query['group_by']
+        group_by_cols = query["group_by"]
 
         # If grouping by partition column, use partition-wise aggregation
         partition_cols_in_group_by = set(group_by_cols) & set(strategy.partition_columns)
 
         if partition_cols_in_group_by:
-            agg_optimizations.append({
-                'columns': list(partition_cols_in_group_by),
-                'optimization': 'partition_wise_aggregation',
-                'expected_benefit': 'high'
-            })
+            agg_optimizations.append(
+                {
+                    "columns": list(partition_cols_in_group_by),
+                    "optimization": "partition_wise_aggregation",
+                    "expected_benefit": "high",
+                }
+            )
 
         # Pre-aggregation for frequently grouped columns
         if len(group_by_cols) > 1:
-            agg_optimizations.append({
-                'columns': group_by_cols,
-                'optimization': 'pre_aggregation',
-                'expected_benefit': 'medium'
-            })
+            agg_optimizations.append(
+                {
+                    "columns": group_by_cols,
+                    "optimization": "pre_aggregation",
+                    "expected_benefit": "medium",
+                }
+            )
 
         return agg_optimizations
 
     def _find_relevant_partitions(
-        self,
-        filter_col: str,
-        filter_value: Any,
-        partition_metadata: list[PartitionMetadata]
+        self, filter_col: str, filter_value: Any, partition_metadata: list[PartitionMetadata]
     ) -> list[PartitionMetadata]:
         """Find partitions that need to be scanned for a filter"""
 
@@ -856,13 +871,14 @@ class QueryOptimizer:
         for partition in partition_metadata:
             if partition.partition_key == filter_col:
                 # For exact match filters
-                if isinstance(filter_value, (str, int, float)):
+                if isinstance(filter_value, str | int | float):
                     if partition.min_value <= filter_value <= partition.max_value:
                         relevant.append(partition)
                 # For range filters
-                elif isinstance(filter_value, dict) and 'min' in filter_value:
-                    if (partition.max_value >= filter_value.get('min', float('-inf')) and
-                        partition.min_value <= filter_value.get('max', float('inf'))):
+                elif isinstance(filter_value, dict) and "min" in filter_value:
+                    if partition.max_value >= filter_value.get(
+                        "min", float("-inf")
+                    ) and partition.min_value <= filter_value.get("max", float("inf")):
                         relevant.append(partition)
 
         return relevant
@@ -872,7 +888,7 @@ class QueryOptimizer:
         # Simple heuristic - in practice, would use statistics
         if isinstance(filter_value, str):
             return len(filter_value) > 2  # Non-trivial string filters
-        elif isinstance(filter_value, (int, float)):
+        elif isinstance(filter_value, int | float):
             return True  # Numeric filters are usually selective
         elif isinstance(filter_value, dict):
             return True  # Range filters are selective
@@ -885,25 +901,53 @@ class QueryOptimizer:
         speedup = 1.0
 
         # Partition pruning speedup
-        for pruning in optimizations['partition_pruning']:
-            data_reduction = pruning['data_reduction_percent'] / 100
+        for pruning in optimizations["partition_pruning"]:
+            data_reduction = pruning["data_reduction_percent"] / 100
             speedup *= 1 + (data_reduction * 2)  # 2x speedup per % of data pruned
 
         # Predicate pushdown speedup
-        high_benefit_pushdowns = len([p for p in optimizations['predicate_pushdown'] if p['expected_benefit'] == 'high'])
-        medium_benefit_pushdowns = len([p for p in optimizations['predicate_pushdown'] if p['expected_benefit'] == 'medium'])
+        high_benefit_pushdowns = len(
+            [p for p in optimizations["predicate_pushdown"] if p["expected_benefit"] == "high"]
+        )
+        medium_benefit_pushdowns = len(
+            [p for p in optimizations["predicate_pushdown"] if p["expected_benefit"] == "medium"]
+        )
 
         speedup *= 1 + (high_benefit_pushdowns * 0.3) + (medium_benefit_pushdowns * 0.15)
 
         # Join optimization speedup
-        partition_joins = len([j for j in optimizations['join_optimizations'] if j['optimization'] == 'partition_wise_join'])
-        broadcast_joins = len([j for j in optimizations['join_optimizations'] if j['optimization'] == 'broadcast_join'])
+        partition_joins = len(
+            [
+                j
+                for j in optimizations["join_optimizations"]
+                if j["optimization"] == "partition_wise_join"
+            ]
+        )
+        broadcast_joins = len(
+            [
+                j
+                for j in optimizations["join_optimizations"]
+                if j["optimization"] == "broadcast_join"
+            ]
+        )
 
         speedup *= 1 + (partition_joins * 0.4) + (broadcast_joins * 0.2)
 
         # Aggregation optimization speedup
-        partition_aggs = len([a for a in optimizations['aggregation_optimizations'] if a['optimization'] == 'partition_wise_aggregation'])
-        pre_aggs = len([a for a in optimizations['aggregation_optimizations'] if a['optimization'] == 'pre_aggregation'])
+        partition_aggs = len(
+            [
+                a
+                for a in optimizations["aggregation_optimizations"]
+                if a["optimization"] == "partition_wise_aggregation"
+            ]
+        )
+        pre_aggs = len(
+            [
+                a
+                for a in optimizations["aggregation_optimizations"]
+                if a["optimization"] == "pre_aggregation"
+            ]
+        )
 
         speedup *= 1 + (partition_aggs * 0.5) + (pre_aggs * 0.25)
 
@@ -934,22 +978,17 @@ def get_query_optimizer() -> QueryOptimizer:
 # Decorator for automatic query optimization
 def optimize_query(partition_strategy: PartitioningRecommendation = None):
     """Decorator for automatic query optimization"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             optimizer = get_query_optimizer()
 
             # Extract query information from function arguments
-            query_info = {
-                'function': func.__name__,
-                'args': args,
-                'kwargs': kwargs
-            }
+            query_info = {"function": func.__name__, "args": args, "kwargs": kwargs}
 
             # Apply optimizations if strategy provided
             if partition_strategy:
-                optimizations = optimizer.optimize_query_plan(
-                    query_info, [], partition_strategy
-                )
+                optimizations = optimizer.optimize_query_plan(query_info, [], partition_strategy)
 
                 # Log optimization suggestions
                 logger = get_logger(__name__)
@@ -958,4 +997,5 @@ def optimize_query(partition_strategy: PartitioningRecommendation = None):
             return func(*args, **kwargs)
 
         return wrapper
+
     return decorator

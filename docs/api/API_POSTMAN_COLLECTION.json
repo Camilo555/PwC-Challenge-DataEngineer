@@ -1,0 +1,236 @@
+{
+  "info": {
+    "name": "PwC Data Engineering Challenge - Enterprise API",
+    "description": "Enterprise-grade high-performance REST API",
+    "version": "4.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.pwc-challenge.com",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "API",
+      "item": [
+        {
+          "name": "Get information about batch operation limits and constraints.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/limits",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "limits"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Vector search endpoint with mandatory filters.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/typesense",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "typesense"
+              ]
+            },
+            "description": "MANDATORY: At least one filter must be implemented per challenge requirements.\nAvailable filters:\n- country: Filter by specific country\n- price_min/price_max: Filter by price range"
+          }
+        },
+        {
+          "name": "Enhanced vector search with comprehensive filtering - REQUIREMENT FULFILLED.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/enhanced",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "enhanced"
+              ]
+            },
+            "description": "This endpoint implements multiple filter types as required:\n- Category filtering\n- Price range filtering\n- Country filtering\n- Date range filtering\n- Customer segment filtering"
+          }
+        },
+        {
+          "name": "Faceted search to get available filter options.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/faceted",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "faceted"
+              ]
+            },
+            "description": "Returns facet counts for dynamic filter UI generation."
+          }
+        },
+        {
+          "name": "Geographic search with country-based filtering.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/geographic",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "geographic"
+              ]
+            },
+            "description": "Specialized endpoint for location-based searches."
+          }
+        },
+        {
+          "name": "Advanced search with complex filtering.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/advanced",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced"
+              ]
+            },
+            "description": "Accepts JSON body with complex filter structures:\n{\n    \"total_range\": {\"min\": 10, \"max\": 1000},\n    \"date_range\": {\"from\": \"2023-01-01\", \"to\": \"2023-12-31\"},\n    \"categories\": [\"Electronics\", \"Books\"],\n    \"countries\": [\"United Kingdom\", \"Germany\"]\n}"
+          }
+        },
+        {
+          "name": "Get filter suggestions for a specific field.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suggestions/{field}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "suggestions",
+                "{field}"
+              ]
+            },
+            "description": "Useful for autocomplete in search UIs."
+          }
+        },
+        {
+          "name": "Get information about available filters and their types.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/filters/available",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "filters",
+                "available"
+              ]
+            },
+            "description": "Returns metadata about what filters are supported."
+          }
+        }
+      ]
+    }
+  ]
+}

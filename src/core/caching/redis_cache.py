@@ -2,6 +2,7 @@
 Distributed Messaging Cache Implementation
 Replaces Redis with RabbitMQ for task queuing and Kafka for event streaming.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,9 +14,13 @@ from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any
 
-from messaging.rabbitmq_manager import RabbitMQManager, QueueType, MessagePriority, TaskMessage, ResultMessage
-from streaming.kafka_manager import KafkaManager, StreamingTopic, StreamingMessage
 from core.logging import get_logger
+from messaging.rabbitmq_manager import (
+    MessagePriority,
+    QueueType,
+    RabbitMQManager,
+)
+from streaming.kafka_manager import KafkaManager, StreamingTopic
 
 logger = get_logger(__name__)
 
@@ -51,10 +56,12 @@ class ICache:
 class DistributedMessagingCache(ICache):
     """Distributed messaging cache implementation using RabbitMQ and Kafka."""
 
-    def __init__(self, key_prefix: str = "pwc_challenge:",
-                 default_ttl: int = 300,
-                 cache_queue_name: str = "cache_operations"):
-
+    def __init__(
+        self,
+        key_prefix: str = "pwc_challenge:",
+        default_ttl: int = 300,
+        cache_queue_name: str = "cache_operations",
+    ):
         self.key_prefix = key_prefix
         self.default_ttl = default_ttl
         self.cache_queue_name = cache_queue_name
@@ -62,16 +69,16 @@ class DistributedMessagingCache(ICache):
         # Initialize messaging systems
         self.rabbitmq_manager = RabbitMQManager()
         self.kafka_manager = KafkaManager()
-        
+
         # In-memory cache for frequently accessed items
         self.local_cache: dict[str, dict[str, Any]] = {}
         self.cache_timestamps: dict[str, datetime] = {}
-        
+
         # Metrics
         self.hit_count = 0
         self.miss_count = 0
         self.error_count = 0
-        
+
         logger.info("DistributedMessagingCache initialized")
 
     def _build_key(self, key: str) -> str:
@@ -93,51 +100,53 @@ class DistributedMessagingCache(ICache):
         except Exception as e:
             logger.error(f"Deserialization error: {e}")
             raise
-            
+
     def _is_expired(self, timestamp: datetime, ttl: int) -> bool:
         """Check if cache entry is expired."""
         return datetime.now() > timestamp + timedelta(seconds=ttl)
-        
-    async def _publish_cache_operation(self, operation: str, key: str, value: Any = None, ttl: int = None) -> str:
+
+    async def _publish_cache_operation(
+        self, operation: str, key: str, value: Any = None, ttl: int = None
+    ) -> str:
         """Publish cache operation to RabbitMQ for distributed processing."""
         task_data = {
             "operation": operation,
             "key": key,
             "value": self._serialize(value) if value is not None else None,
             "ttl": ttl or self.default_ttl,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         task_id = self.rabbitmq_manager.publish_task(
             task_name="cache_operation",
             payload=task_data,
             queue=QueueType.TASK_QUEUE,
-            priority=MessagePriority.HIGH
+            priority=MessagePriority.HIGH,
         )
-        
+
         return task_id
 
     async def get(self, key: str) -> Any | None:
         """Get value from distributed cache system."""
         try:
             full_key = self._build_key(key)
-            
+
             # Check local cache first for performance
             if full_key in self.local_cache:
                 if not self._is_expired(
-                    self.cache_timestamps[full_key], 
-                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                    self.cache_timestamps[full_key],
+                    self.local_cache[full_key].get("ttl", self.default_ttl),
                 ):
                     self.hit_count += 1
-                    return self.local_cache[full_key]['value']
+                    return self.local_cache[full_key]["value"]
                 else:
                     # Remove expired entry
                     del self.local_cache[full_key]
                     del self.cache_timestamps[full_key]
-            
+
             # Publish cache get operation to RabbitMQ
             await self._publish_cache_operation("get", full_key)
-            
+
             # For now, return None for cache miss
             # In a full implementation, this would wait for a response from the cache worker
             self.miss_count += 1
@@ -153,17 +162,14 @@ class DistributedMessagingCache(ICache):
         try:
             full_key = self._build_key(key)
             cache_ttl = ttl or self.default_ttl
-            
+
             # Store in local cache immediately
-            self.local_cache[full_key] = {
-                'value': value,
-                'ttl': cache_ttl
-            }
+            self.local_cache[full_key] = {"value": value, "ttl": cache_ttl}
             self.cache_timestamps[full_key] = datetime.now()
-            
+
             # Publish cache set operation to RabbitMQ for distribution
             await self._publish_cache_operation("set", full_key, value, cache_ttl)
-            
+
             # Publish cache event to Kafka for analytics/monitoring
             self.kafka_manager.produce_message(
                 topic=StreamingTopic.SYSTEM_EVENTS,
@@ -171,11 +177,11 @@ class DistributedMessagingCache(ICache):
                     "event_type": "cache_set",
                     "key": full_key,
                     "ttl": cache_ttl,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
-                key=full_key
+                key=full_key,
             )
-            
+
             return True
 
         except Exception as e:
@@ -187,26 +193,26 @@ class DistributedMessagingCache(ICache):
         """Delete key from distributed cache system."""
         try:
             full_key = self._build_key(key)
-            
+
             # Remove from local cache
             if full_key in self.local_cache:
                 del self.local_cache[full_key]
                 del self.cache_timestamps[full_key]
-            
+
             # Publish delete operation to RabbitMQ
             await self._publish_cache_operation("delete", full_key)
-            
+
             # Publish delete event to Kafka
             self.kafka_manager.produce_message(
                 topic=StreamingTopic.SYSTEM_EVENTS,
                 message={
                     "event_type": "cache_delete",
                     "key": full_key,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
-                key=full_key
+                key=full_key,
             )
-            
+
             return True
 
         except Exception as e:
@@ -218,22 +224,22 @@ class DistributedMessagingCache(ICache):
         """Check if key exists in distributed cache system."""
         try:
             full_key = self._build_key(key)
-            
+
             # Check local cache first
             if full_key in self.local_cache:
                 if not self._is_expired(
-                    self.cache_timestamps[full_key], 
-                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                    self.cache_timestamps[full_key],
+                    self.local_cache[full_key].get("ttl", self.default_ttl),
                 ):
                     return True
                 else:
                     # Remove expired entry
                     del self.local_cache[full_key]
                     del self.cache_timestamps[full_key]
-            
+
             # For distributed check, publish existence check operation
             await self._publish_cache_operation("exists", full_key)
-            
+
             return False
 
         except Exception as e:
@@ -245,24 +251,24 @@ class DistributedMessagingCache(ICache):
         """Invalidate keys matching pattern in distributed cache system."""
         try:
             import fnmatch
-            
+
             full_pattern = self._build_key(pattern)
             deleted_count = 0
-            
+
             # Clear matching keys from local cache
             keys_to_delete = []
             for key in self.local_cache.keys():
                 if fnmatch.fnmatch(key, full_pattern):
                     keys_to_delete.append(key)
-            
+
             for key in keys_to_delete:
                 del self.local_cache[key]
                 del self.cache_timestamps[key]
                 deleted_count += 1
-            
+
             # Publish invalidation operation to RabbitMQ for distributed clearing
             await self._publish_cache_operation("invalidate", full_pattern)
-            
+
             # Publish invalidation event to Kafka
             self.kafka_manager.produce_message(
                 topic=StreamingTopic.SYSTEM_EVENTS,
@@ -270,11 +276,11 @@ class DistributedMessagingCache(ICache):
                     "event_type": "cache_invalidate",
                     "pattern": full_pattern,
                     "local_deleted_count": deleted_count,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
-                key=f"invalidate_{uuid.uuid4()}"
+                key=f"invalidate_{uuid.uuid4()}",
             )
-            
+
             logger.info(f"Invalidated {deleted_count} local keys matching pattern: {pattern}")
             return deleted_count
 
@@ -299,20 +305,20 @@ class DistributedMessagingCache(ICache):
         """Increment numeric value in distributed cache system."""
         try:
             full_key = self._build_key(key)
-            
+
             # Get current value from local cache
             current_value = 0
             if full_key in self.local_cache:
                 if not self._is_expired(
-                    self.cache_timestamps[full_key], 
-                    self.local_cache[full_key].get('ttl', self.default_ttl)
+                    self.cache_timestamps[full_key],
+                    self.local_cache[full_key].get("ttl", self.default_ttl),
                 ):
-                    current_value = self.local_cache[full_key]['value']
-            
+                    current_value = self.local_cache[full_key]["value"]
+
             # Increment and store
             new_value = current_value + amount
             await self.set(key, new_value)
-            
+
             return new_value
 
         except Exception as e:
@@ -324,14 +330,14 @@ class DistributedMessagingCache(ICache):
         """Set expiration for existing key."""
         try:
             full_key = self._build_key(key)
-            
+
             if full_key in self.local_cache:
-                self.local_cache[full_key]['ttl'] = ttl
+                self.local_cache[full_key]["ttl"] = ttl
                 self.cache_timestamps[full_key] = datetime.now()
-            
+
             # Publish expire operation to RabbitMQ
             await self._publish_cache_operation("expire", full_key, ttl=ttl)
-            
+
             return True
 
         except Exception as e:
@@ -343,13 +349,13 @@ class DistributedMessagingCache(ICache):
         """Get remaining TTL for key."""
         try:
             full_key = self._build_key(key)
-            
+
             if full_key in self.local_cache and full_key in self.cache_timestamps:
-                ttl = self.local_cache[full_key].get('ttl', self.default_ttl)
+                ttl = self.local_cache[full_key].get("ttl", self.default_ttl)
                 elapsed = (datetime.now() - self.cache_timestamps[full_key]).total_seconds()
                 remaining = max(0, int(ttl - elapsed))
                 return remaining
-            
+
             return -1
 
         except Exception as e:
@@ -376,17 +382,17 @@ class DistributedMessagingCache(ICache):
 
             # Store in cache
             await self.set(key, result, ttl)
-            
+
             # Publish cache miss event to Kafka for analytics
             self.kafka_manager.produce_message(
                 topic=StreamingTopic.SYSTEM_EVENTS,
                 message={
                     "event_type": "cache_miss",
                     "key": key,
-                    "function": func.__name__ if hasattr(func, '__name__') else str(func),
-                    "timestamp": datetime.now().isoformat()
+                    "function": func.__name__ if hasattr(func, "__name__") else str(func),
+                    "timestamp": datetime.now().isoformat(),
                 },
-                key=key
+                key=key,
             )
 
             return result
@@ -403,10 +409,10 @@ class DistributedMessagingCache(ICache):
         """Get distributed cache statistics."""
         total_requests = self.hit_count + self.miss_count
         hit_ratio = self.hit_count / total_requests if total_requests > 0 else 0
-        
+
         # Get local cache info
         local_cache_size = len(self.local_cache)
-        
+
         # Get messaging system stats
         try:
             rabbitmq_stats = self.rabbitmq_manager.get_queue_stats(QueueType.TASK_QUEUE)
@@ -416,50 +422,43 @@ class DistributedMessagingCache(ICache):
             kafka_stats = {}
 
         return {
-            'hit_count': self.hit_count,
-            'miss_count': self.miss_count,
-            'error_count': self.error_count,
-            'hit_ratio': hit_ratio,
-            'total_requests': total_requests,
-            'local_cache_size': local_cache_size,
-            'messaging_stats': {
-                'rabbitmq': rabbitmq_stats,
-                'kafka': kafka_stats
-            }
+            "hit_count": self.hit_count,
+            "miss_count": self.miss_count,
+            "error_count": self.error_count,
+            "hit_ratio": hit_ratio,
+            "total_requests": total_requests,
+            "local_cache_size": local_cache_size,
+            "messaging_stats": {"rabbitmq": rabbitmq_stats, "kafka": kafka_stats},
         }
 
     async def health_check(self) -> dict[str, Any]:
         """Perform health check on distributed messaging systems."""
         try:
             start_time = datetime.now()
-            
+
             # Check RabbitMQ connection
             rabbitmq_healthy = self.rabbitmq_manager.connect()
-            
+
             # Check Kafka connection
             kafka_healthy = bool(self.kafka_manager.producer)
-            
+
             response_time = (datetime.now() - start_time).total_seconds() * 1000
-            
-            overall_status = 'healthy' if rabbitmq_healthy and kafka_healthy else 'degraded'
+
+            overall_status = "healthy" if rabbitmq_healthy and kafka_healthy else "degraded"
 
             return {
-                'status': overall_status,
-                'response_time_ms': response_time,
-                'components': {
-                    'rabbitmq': 'healthy' if rabbitmq_healthy else 'unhealthy',
-                    'kafka': 'healthy' if kafka_healthy else 'unhealthy',
-                    'local_cache': 'healthy'
+                "status": overall_status,
+                "response_time_ms": response_time,
+                "components": {
+                    "rabbitmq": "healthy" if rabbitmq_healthy else "unhealthy",
+                    "kafka": "healthy" if kafka_healthy else "unhealthy",
+                    "local_cache": "healthy",
                 },
-                'timestamp': datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
-            return {
-                'status': 'unhealthy',
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
+            return {"status": "unhealthy", "error": str(e), "timestamp": datetime.now().isoformat()}
 
 
 class MemoryCache(ICache):
@@ -474,9 +473,9 @@ class MemoryCache(ICache):
 
     def _is_expired(self, entry: dict[str, Any]) -> bool:
         """Check if cache entry is expired."""
-        if 'expires_at' not in entry:
+        if "expires_at" not in entry:
             return False
-        return datetime.now() > entry['expires_at']
+        return datetime.now() > entry["expires_at"]
 
     async def get(self, key: str) -> Any | None:
         """Get value from memory cache."""
@@ -484,7 +483,7 @@ class MemoryCache(ICache):
             entry = self.cache[key]
             if not self._is_expired(entry):
                 self.hit_count += 1
-                return entry['value']
+                return entry["value"]
             else:
                 del self.cache[key]
 
@@ -502,11 +501,7 @@ class MemoryCache(ICache):
         cache_ttl = ttl or self.default_ttl
         expires_at = datetime.now() + timedelta(seconds=cache_ttl)
 
-        self.cache[key] = {
-            'value': value,
-            'expires_at': expires_at,
-            'created_at': datetime.now()
-        }
+        self.cache[key] = {"value": value, "expires_at": expires_at, "created_at": datetime.now()}
         return True
 
     async def delete(self, key: str) -> bool:
@@ -547,15 +542,17 @@ class MemoryCache(ICache):
 
 # Cache decorators
 
+
 def cached(ttl: int = 300, key_builder: Callable | None = None, cache: ICache | None = None):
     """
     Decorator for caching function results.
-    
+
     Args:
         ttl: Time to live in seconds
         key_builder: Function to build cache key from arguments
         cache: Cache instance to use
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -589,17 +586,19 @@ def cached(ttl: int = 300, key_builder: Callable | None = None, cache: ICache | 
             return result
 
         return wrapper
+
     return decorator
 
 
 def cache_invalidate(pattern: str, cache: ICache | None = None):
     """
     Decorator to invalidate cache after function execution.
-    
+
     Args:
         pattern: Cache key pattern to invalidate
         cache: Cache instance to use
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -616,10 +615,12 @@ def cache_invalidate(pattern: str, cache: ICache | None = None):
             return result
 
         return wrapper
+
     return decorator
 
 
 # Cache factory
+
 
 class CacheFactory:
     """Factory for creating cache instances."""

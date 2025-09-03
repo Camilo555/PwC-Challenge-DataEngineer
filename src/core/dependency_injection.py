@@ -8,7 +8,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class DIContainer:
@@ -25,10 +25,12 @@ class DIContainer:
         self._instances: dict[str, Any] = {}
         self._resolution_stack: list[str] = []
 
-    def bind(self, interface: type[T], implementation: type[T], lifetime: str = 'transient') -> 'DIContainer':
+    def bind(
+        self, interface: type[T], implementation: type[T], lifetime: str = "transient"
+    ) -> "DIContainer":
         """
         Bind interface to implementation.
-        
+
         Args:
             interface: Interface type to bind
             implementation: Implementation type
@@ -38,10 +40,10 @@ class DIContainer:
         self._bindings[key] = Binding(interface, implementation, lifetime)
         return self
 
-    def bind_instance(self, interface: type[T], instance: T) -> 'DIContainer':
+    def bind_instance(self, interface: type[T], instance: T) -> "DIContainer":
         """Bind interface to a specific instance (singleton)."""
         key = self._get_type_key(interface)
-        self._bindings[key] = Binding(interface, type(instance), 'singleton')
+        self._bindings[key] = Binding(interface, type(instance), "singleton")
         self._instances[key] = instance
         return self
 
@@ -51,7 +53,7 @@ class DIContainer:
 
         # Check for circular dependencies
         if key in self._resolution_stack:
-            cycle = ' -> '.join(self._resolution_stack + [key])
+            cycle = " -> ".join(self._resolution_stack + [key])
             raise ValueError(f"Circular dependency detected: {cycle}")
 
         try:
@@ -72,14 +74,14 @@ class DIContainer:
         binding = self._bindings[key]
 
         # Return existing singleton instance
-        if binding.lifetime == 'singleton' and key in self._instances:
+        if binding.lifetime == "singleton" and key in self._instances:
             return self._instances[key]
 
         # Create new instance
         instance = self._create_instance(binding.implementation)
 
         # Store singleton instance
-        if binding.lifetime == 'singleton':
+        if binding.lifetime == "singleton":
             self._instances[key] = instance
 
         return instance
@@ -91,7 +93,7 @@ class DIContainer:
         parameters = {}
 
         for param_name, param in signature.parameters.items():
-            if param_name == 'self':
+            if param_name == "self":
                 continue
 
             # Skip parameters with default values for now
@@ -131,24 +133,28 @@ def get_container() -> DIContainer:
 def inject(interface: type[T]) -> Callable[[], T]:
     """
     Decorator for dependency injection.
-    
+
     Usage:
         @inject(ISalesRepository)
         def get_sales_repository() -> ISalesRepository:
             pass  # Implementation is replaced by decorator
     """
+
     def decorator(func: Callable[[], T]) -> Callable[[], T]:
         @functools.wraps(func)
         def wrapper() -> T:
             return _container.resolve(interface)
+
         return wrapper
+
     return decorator
 
 
 class ServiceLifetime:
     """Service lifetime constants."""
-    SINGLETON = 'singleton'
-    TRANSIENT = 'transient'
+
+    SINGLETON = "singleton"
+    TRANSIENT = "transient"
 
 
 def configure_dependencies() -> None:

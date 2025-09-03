@@ -2,6 +2,7 @@
 Data Mart API Router
 Provides access to star schema data marts for analytics and business intelligence.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,21 +22,18 @@ logger = get_logger(__name__)
 async def get_dashboard_overview(
     date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     """Get high-level dashboard overview metrics from the data mart."""
     service = DataMartService(session)
 
     try:
-        return await service.get_dashboard_overview(
-            date_from=date_from,
-            date_to=date_to
-        )
+        return await service.get_dashboard_overview(date_from=date_from, date_to=date_to)
     except Exception as e:
         logger.error(f"Error getting dashboard overview: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve dashboard overview"
+            detail="Failed to retrieve dashboard overview",
         )
 
 
@@ -46,7 +44,7 @@ async def get_sales_analytics(
     date_to: str | None = Query(None),
     country: str | None = Query(None),
     product_category: str | None = Query(None),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     """Get detailed sales analytics with various time granularities."""
     service = DataMartService(session)
@@ -57,20 +55,18 @@ async def get_sales_analytics(
             date_from=date_from,
             date_to=date_to,
             country=country,
-            product_category=product_category
+            product_category=product_category,
         )
     except Exception as e:
         logger.error(f"Error getting sales analytics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve sales analytics"
+            detail="Failed to retrieve sales analytics",
         )
 
 
 @router.get("/customers/segments", response_model=list[dict[str, Any]])
-async def get_customer_segments(
-    session: Session = Depends(get_session)
-) -> list[dict[str, Any]]:
+async def get_customer_segments(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     """Get customer segmentation analysis from RFM scoring."""
     service = DataMartService(session)
 
@@ -80,14 +76,13 @@ async def get_customer_segments(
         logger.error(f"Error getting customer segments: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve customer segments"
+            detail="Failed to retrieve customer segments",
         )
 
 
 @router.get("/customers/{customer_id}/analytics", response_model=dict[str, Any])
 async def get_customer_analytics(
-    customer_id: str,
-    session: Session = Depends(get_session)
+    customer_id: str, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     """Get detailed analytics for a specific customer."""
     service = DataMartService(session)
@@ -96,8 +91,7 @@ async def get_customer_analytics(
         result = await service.get_customer_analytics(customer_id)
         if not result:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Customer {customer_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Customer {customer_id} not found"
             )
         return result
     except HTTPException:
@@ -106,7 +100,7 @@ async def get_customer_analytics(
         logger.error(f"Error getting customer analytics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve customer analytics"
+            detail="Failed to retrieve customer analytics",
         )
 
 
@@ -116,30 +110,25 @@ async def get_product_performance(
     metric: str = Query("revenue", regex="^(revenue|quantity|profit|margin)$"),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> list[dict[str, Any]]:
     """Get top-performing products by various metrics."""
     service = DataMartService(session)
 
     try:
         return await service.get_product_performance(
-            top_n=top_n,
-            metric=metric,
-            date_from=date_from,
-            date_to=date_to
+            top_n=top_n, metric=metric, date_from=date_from, date_to=date_to
         )
     except Exception as e:
         logger.error(f"Error getting product performance: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve product performance"
+            detail="Failed to retrieve product performance",
         )
 
 
 @router.get("/countries/performance", response_model=list[dict[str, Any]])
-async def get_country_performance(
-    session: Session = Depends(get_session)
-) -> list[dict[str, Any]]:
+async def get_country_performance(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     """Get sales performance by country."""
     service = DataMartService(session)
 
@@ -149,14 +138,13 @@ async def get_country_performance(
         logger.error(f"Error getting country performance: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve country performance"
+            detail="Failed to retrieve country performance",
         )
 
 
 @router.get("/trends/seasonal", response_model=dict[str, Any])
 async def get_seasonal_trends(
-    year: int | None = Query(None, ge=2000, le=2030),
-    session: Session = Depends(get_session)
+    year: int | None = Query(None, ge=2000, le=2030), session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     """Get seasonal sales trends and patterns."""
     service = DataMartService(session)
@@ -167,14 +155,14 @@ async def get_seasonal_trends(
         logger.error(f"Error getting seasonal trends: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve seasonal trends"
+            detail="Failed to retrieve seasonal trends",
         )
 
 
 @router.get("/cohorts/analysis", response_model=dict[str, Any])
 async def get_cohort_analysis(
     cohort_type: str = Query("monthly", regex="^(weekly|monthly|quarterly)$"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     """Get customer cohort analysis for retention insights."""
     service = DataMartService(session)
@@ -185,14 +173,12 @@ async def get_cohort_analysis(
         logger.error(f"Error getting cohort analysis: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve cohort analysis"
+            detail="Failed to retrieve cohort analysis",
         )
 
 
 @router.get("/metrics/business", response_model=dict[str, Any])
-async def get_business_metrics(
-    session: Session = Depends(get_session)
-) -> dict[str, Any]:
+async def get_business_metrics(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Get key business metrics and KPIs."""
     service = DataMartService(session)
 
@@ -202,5 +188,5 @@ async def get_business_metrics(
         logger.error(f"Error getting business metrics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve business metrics"
+            detail="Failed to retrieve business metrics",
         )

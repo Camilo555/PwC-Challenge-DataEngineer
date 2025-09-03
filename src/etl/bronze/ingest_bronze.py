@@ -29,9 +29,7 @@ def _list_raw_csvs(raw_dir: Path) -> list[Path]:
 
 def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
     if not files:
-        raise FileNotFoundError(
-            f"No raw CSV files found under {settings.raw_data_path.resolve()}"
-        )
+        raise FileNotFoundError(f"No raw CSV files found under {settings.raw_data_path.resolve()}")
 
     # Read all files at once for better performance
     job_id = str(uuid.uuid4())
@@ -65,15 +63,23 @@ def _read_raw_csvs(spark: SparkSession, files: list[Path]) -> DataFrame:
 
     # Generate stable row fingerprint for downstream quarantine matching
     fingerprint_columns = [
-        "invoice_no", "stock_code", "description", "quantity",
-        "unit_price", "invoice_timestamp", "customer_id", "country"
+        "invoice_no",
+        "stock_code",
+        "description",
+        "quantity",
+        "unit_price",
+        "invoice_timestamp",
+        "customer_id",
+        "country",
     ]
 
     parts = []
     for c in fingerprint_columns:
         if c in df.columns:
             if c == "invoice_timestamp":
-                parts.append(F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit("")))
+                parts.append(
+                    F.coalesce(F.date_format(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"), F.lit(""))
+                )
             else:
                 parts.append(F.coalesce(F.col(c).cast("string"), F.lit("")))
         else:
@@ -118,6 +124,7 @@ def ingest_bronze() -> None:
 
     # Use Parquet for Windows compatibility (Delta has native library issues)
     import platform
+
     if platform.system() == "Windows":
         (
             dfw.write.mode("overwrite")

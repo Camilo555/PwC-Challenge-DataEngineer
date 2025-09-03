@@ -88,12 +88,14 @@ def file_drop_sensor(context: SensorEvaluationContext) -> SensorResult:
                 "file_size": str(file_path.stat().st_size),
                 "trigger": "file_drop",
                 "timestamp": str(file_timestamp),
-            }
+            },
         )
 
         run_requests.append(run_request)
 
-        context.log.info(f"Detected new file: {file_path.name} (size: {file_path.stat().st_size} bytes)")
+        context.log.info(
+            f"Detected new file: {file_path.name} (size: {file_path.stat().st_size} bytes)"
+        )
 
     # Update cursor to latest timestamp
     new_cursor = str(latest_timestamp)
@@ -188,7 +190,7 @@ def large_file_sensor(context: SensorEvaluationContext) -> SensorResult:
                 "trigger": "large_file",
                 "batch_size": str(batch_size),
                 "processing_mode": "large_file_optimized",
-            }
+            },
         )
 
         run_requests.append(run_request)
@@ -239,6 +241,7 @@ def error_file_sensor(context: SensorEvaluationContext) -> SensorResult:
 
         # Only retry files that are at least 5 minutes old (avoid immediate retry loops)
         import time
+
         if file_timestamp > last_processed_time and (time.time() - file_timestamp) > 300:
             retry_files.append((file_path, file_timestamp))
             latest_timestamp = max(latest_timestamp, file_timestamp)
@@ -270,7 +273,7 @@ def error_file_sensor(context: SensorEvaluationContext) -> SensorResult:
                 "trigger": "error_retry",
                 "retry_attempt": "true",
                 "processing_mode": "conservative",
-            }
+            },
         )
 
         run_requests.append(run_request)

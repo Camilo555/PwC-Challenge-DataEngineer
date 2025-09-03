@@ -2,6 +2,7 @@
 Windows-specific PySpark configuration and utilities.
 Handles Hadoop winutils, Java detection, and proper environment setup.
 """
+
 from __future__ import annotations
 
 import os
@@ -50,14 +51,9 @@ def detect_java_home() -> str | None:
 
     # Try to find java.exe in PATH
     try:
-        result = subprocess.run(
-            ["where", "java"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["where", "java"], capture_output=True, text=True, check=True)
         if result.stdout:
-            java_exe = Path(result.stdout.strip().split('\n')[0])
+            java_exe = Path(result.stdout.strip().split("\n")[0])
             java_home_path = java_exe.parent.parent
             if java_home_path.exists():
                 java_home = str(java_home_path)
@@ -73,59 +69,56 @@ def detect_java_home() -> str | None:
 def validate_windows_environment() -> dict:
     """
     Validate Windows environment for Spark/Hadoop compatibility.
-    
+
     Returns:
         Dictionary containing validation results and environment information
     """
     import platform
 
-    result = {
-        'is_valid': True,
-        'platform': platform.system(),
-        'errors': [],
-        'warnings': []
-    }
+    result = {"is_valid": True, "platform": platform.system(), "errors": [], "warnings": []}
 
     # Check if we're on Windows
-    if result['platform'] != 'Windows':
-        result['is_valid'] = False
-        result['error'] = f"This function is for Windows only, current platform: {result['platform']}"
+    if result["platform"] != "Windows":
+        result["is_valid"] = False
+        result["error"] = (
+            f"This function is for Windows only, current platform: {result['platform']}"
+        )
         return result
 
     # Check Java installation
-    java_home = os.environ.get('JAVA_HOME')
+    java_home = os.environ.get("JAVA_HOME")
     if java_home:
-        result['java_home'] = java_home
+        result["java_home"] = java_home
         if not Path(java_home).exists():
-            result['errors'].append(f"JAVA_HOME path does not exist: {java_home}")
-            result['is_valid'] = False
+            result["errors"].append(f"JAVA_HOME path does not exist: {java_home}")
+            result["is_valid"] = False
     else:
         # Try to detect Java
         detected_java = detect_java_home()
         if detected_java:
-            result['java_home'] = detected_java
-            result['warnings'].append("JAVA_HOME not set, but Java was auto-detected")
+            result["java_home"] = detected_java
+            result["warnings"].append("JAVA_HOME not set, but Java was auto-detected")
         else:
-            result['errors'].append("JAVA_HOME not set and Java not found")
-            result['is_valid'] = False
+            result["errors"].append("JAVA_HOME not set and Java not found")
+            result["is_valid"] = False
 
     # Check Hadoop home
-    hadoop_home = os.environ.get('HADOOP_HOME')
+    hadoop_home = os.environ.get("HADOOP_HOME")
     if hadoop_home:
-        result['hadoop_home'] = hadoop_home
+        result["hadoop_home"] = hadoop_home
         if not Path(hadoop_home).exists():
-            result['warnings'].append(f"HADOOP_HOME path does not exist: {hadoop_home}")
+            result["warnings"].append(f"HADOOP_HOME path does not exist: {hadoop_home}")
     else:
-        result['warnings'].append("HADOOP_HOME not set")
+        result["warnings"].append("HADOOP_HOME not set")
 
     # Check Spark home
-    spark_home = os.environ.get('SPARK_HOME')
+    spark_home = os.environ.get("SPARK_HOME")
     if spark_home:
-        result['spark_home'] = spark_home
+        result["spark_home"] = spark_home
         if not Path(spark_home).exists():
-            result['warnings'].append(f"SPARK_HOME path does not exist: {spark_home}")
+            result["warnings"].append(f"SPARK_HOME path does not exist: {spark_home}")
     else:
-        result['warnings'].append("SPARK_HOME not set")
+        result["warnings"].append("SPARK_HOME not set")
 
     return result
 
@@ -133,7 +126,7 @@ def validate_windows_environment() -> dict:
 def setup_hadoop_home() -> bool:
     """
     Setup Hadoop home directory for Windows compatibility.
-    
+
     Returns:
         True if setup successful, False otherwise
     """
@@ -210,6 +203,7 @@ def setup_windows_environment() -> bool:
                 logger.info("Downloading winutils.exe for Windows compatibility...")
                 try:
                     import urllib.request
+
                     winutils_url = "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.0/bin/winutils.exe"
                     hadoop_dir.mkdir(parents=True, exist_ok=True)
                     (hadoop_dir / "bin").mkdir(parents=True, exist_ok=True)
@@ -227,7 +221,10 @@ def setup_windows_environment() -> bool:
             # Try to download winutils.exe
             try:
                 import urllib.request
-                winutils_url = "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.0/bin/winutils.exe"
+
+                winutils_url = (
+                    "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.0/bin/winutils.exe"
+                )
                 winutils_path = hadoop_dir / "bin" / "winutils.exe"
                 urllib.request.urlretrieve(winutils_url, winutils_path)
                 logger.info(f"Downloaded winutils.exe to {winutils_path}")
@@ -275,47 +272,37 @@ def get_windows_spark_config(skip_delta: bool = True) -> dict[str, str]:
         "spark.master": "local[2]",  # Use only 2 cores to reduce resource pressure
         "spark.driver.memory": "2g",  # Reduced memory for Windows compatibility
         "spark.executor.memory": "2g",
-
         # Windows-specific optimizations
         "spark.sql.shuffle.partitions": "2",  # Minimal partitions for Windows
         "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
         "spark.sql.adaptive.enabled": "true",
         "spark.sql.adaptive.coalescePartitions.enabled": "true",
         "spark.sql.adaptive.localShuffleReader.enabled": "true",
-
         # Disable problematic features on Windows
         "spark.ui.enabled": "false",
         "spark.ui.showConsoleProgress": "false",
         "spark.sql.execution.arrow.pyspark.enabled": "false",
-
         # Hadoop configuration for Windows
         "spark.hadoop.fs.file.impl": "org.apache.hadoop.fs.LocalFileSystem",
         "spark.hadoop.fs.file.impl.disable.cache": "false",
-
         # Native library workarounds
         "spark.hadoop.io.nativeio.NativeIO$Windows.enabled": "false",
         "spark.sql.catalogImplementation": "in-memory",
-
         # File handling optimizations
         "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
         "spark.hadoop.parquet.enable.summary-metadata": "false",
         "spark.sql.parquet.mergeSchema": "false",
         "spark.sql.parquet.filterPushdown": "true",
-
         # Temporary directory configuration
         "spark.local.dir": str(temp_dir),
         "spark.sql.warehouse.dir": str(temp_dir / "spark-warehouse"),
         "spark.hadoop.hadoop.tmp.dir": str(temp_dir / "hadoop-tmp"),
-
         # Memory and GC tuning for Windows
         "spark.driver.maxResultSize": "1g",
         "spark.sql.adaptive.skewJoin.enabled": "false",  # Disable to reduce complexity
-        "spark.sql.adaptive.localShuffleReader.enabled": "false",
-
         # Reduce logging noise
         "spark.sql.adaptive.logLevel": "ERROR",
         "spark.sql.execution.arrow.maxRecordsPerBatch": "1000",
-
         # Checkpoint and recovery
         "spark.sql.recovery.checkpointInterval": "20",
         "spark.cleaner.referenceTracking.cleanCheckpoints": "true",
@@ -323,11 +310,15 @@ def get_windows_spark_config(skip_delta: bool = True) -> dict[str, str]:
 
     # Only add Delta Lake if explicitly requested (not recommended on Windows)
     if not skip_delta:
-        logger.warning("Adding Delta Lake configuration - may cause native library issues on Windows")
-        config.update({
-            "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
-            "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-        })
+        logger.warning(
+            "Adding Delta Lake configuration - may cause native library issues on Windows"
+        )
+        config.update(
+            {
+                "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+                "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+            }
+        )
 
     return config
 
@@ -367,10 +358,7 @@ def create_windows_spark_session(app_name: str = "WindowsRetailETL") -> SparkSes
 
         # Skip Delta Lake packages on Windows due to native library issues
         # Only add PostgreSQL and SQLite for database connectivity
-        packages = [
-            "org.postgresql:postgresql:42.7.3",
-            "org.xerial:sqlite-jdbc:3.45.3.0"
-        ]
+        packages = ["org.postgresql:postgresql:42.7.3", "org.xerial:sqlite-jdbc:3.45.3.0"]
         builder = builder.config("spark.jars.packages", ",".join(packages))
         logger.info("Skipping Delta Lake packages for Windows compatibility")
 
@@ -422,6 +410,7 @@ def test_spark_functionality(spark: SparkSession) -> bool:
 
         # Test 2: DataFrame operations (using DataFrame API instead of SQL)
         from pyspark.sql.functions import count, lit
+
         result = df.agg(count(lit(1)).alias("count")).collect()
         if result[0]["count"] != 2:
             logger.error("DataFrame aggregation failed")
@@ -441,6 +430,7 @@ def test_spark_functionality(spark: SparkSession) -> bool:
 
             # Clean up
             import shutil
+
             shutil.rmtree(temp_path, ignore_errors=True)
 
         except Exception as e:
@@ -483,15 +473,12 @@ def cleanup_spark_resources(spark: SparkSession) -> None:
             logger.info("Spark session stopped")
 
         # Clean up temporary directories
-        temp_dirs = [
-            Path.cwd() / "temp",
-            Path.cwd() / "spark-warehouse",
-            Path.cwd() / "derby.log"
-        ]
+        temp_dirs = [Path.cwd() / "temp", Path.cwd() / "spark-warehouse", Path.cwd() / "derby.log"]
 
         for temp_dir in temp_dirs:
             if temp_dir.exists():
                 import shutil
+
                 if temp_dir.is_dir():
                     shutil.rmtree(temp_dir, ignore_errors=True)
                 else:

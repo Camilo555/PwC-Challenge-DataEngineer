@@ -16,15 +16,19 @@ class TypesenseClient:
     def __init__(self, config: dict = None):
         """Initialize TypesenseClient with configuration."""
         if config:
-            self.client = typesense.Client({
-                'nodes': [{
-                    'host': config.get('host', 'localhost'),
-                    'port': config.get('port', 8108),
-                    'protocol': config.get('protocol', 'http')
-                }],
-                'api_key': config.get('api_key', 'test_key'),
-                'connection_timeout_seconds': config.get('timeout', 10)
-            })
+            self.client = typesense.Client(
+                {
+                    "nodes": [
+                        {
+                            "host": config.get("host", "localhost"),
+                            "port": config.get("port", 8108),
+                            "protocol": config.get("protocol", "http"),
+                        }
+                    ],
+                    "api_key": config.get("api_key", "test_key"),
+                    "connection_timeout_seconds": config.get("timeout", 10),
+                }
+            )
         else:
             self.client = get_typesense_client()
 
@@ -56,8 +60,10 @@ class TypesenseClient:
         """Perform a search query."""
         try:
             search_params = {
-                'q': query,
-                'query_by': search_parameters.get('query_by', 'name,description') if search_parameters else 'name,description'
+                "q": query,
+                "query_by": search_parameters.get("query_by", "name,description")
+                if search_parameters
+                else "name,description",
             }
 
             if search_parameters:
@@ -128,11 +134,11 @@ class EnhancedTypesenseClient:
         date_to: str | None = None,
         customer_segment: str | None = None,
         per_page: int = 20,
-        page: int = 1
+        page: int = 1,
     ) -> dict[str, Any]:
         """
         Search with multiple filter options - REQUIREMENT FULFILLED.
-        
+
         This implements the mandatory vector search filtering requirement.
         """
         logger.info(f"Enhanced search: query='{query}', filters applied")
@@ -166,17 +172,17 @@ class EnhancedTypesenseClient:
 
         # Build search parameters
         search_params = {
-            'q': query,
-            'query_by': 'description,stock_code,invoice_no',
-            'per_page': per_page,
-            'page': page,
-            'sort_by': 'total:desc',
-            'highlight_full_fields': 'description'
+            "q": query,
+            "query_by": "description,stock_code,invoice_no",
+            "per_page": per_page,
+            "page": page,
+            "sort_by": "total:desc",
+            "highlight_full_fields": "description",
         }
 
         # Add filters if any
         if filter_conditions:
-            search_params['filter_by'] = ' && '.join(filter_conditions)
+            search_params["filter_by"] = " && ".join(filter_conditions)
             logger.info(f"Applied filters: {search_params['filter_by']}")
 
         try:
@@ -184,20 +190,20 @@ class EnhancedTypesenseClient:
 
             # Enhance results with metadata
             enhanced_results = {
-                'hits': results.get('hits', []),
-                'found': results.get('found', 0),
-                'out_of': results.get('out_of', 0),
-                'page': page,
-                'per_page': per_page,
-                'search_time_ms': results.get('search_time_ms', 0),
-                'filters_applied': {
-                    'category': category_filter,
-                    'price_range': {'min': price_min, 'max': price_max},
-                    'country': country_filter,
-                    'date_range': {'from': date_from, 'to': date_to},
-                    'customer_segment': customer_segment
+                "hits": results.get("hits", []),
+                "found": results.get("found", 0),
+                "out_of": results.get("out_of", 0),
+                "page": page,
+                "per_page": per_page,
+                "search_time_ms": results.get("search_time_ms", 0),
+                "filters_applied": {
+                    "category": category_filter,
+                    "price_range": {"min": price_min, "max": price_max},
+                    "country": country_filter,
+                    "date_range": {"from": date_from, "to": date_to},
+                    "customer_segment": customer_segment,
                 },
-                'has_filters': len(filter_conditions) > 0
+                "has_filters": len(filter_conditions) > 0,
             }
 
             return enhanced_results
@@ -205,52 +211,45 @@ class EnhancedTypesenseClient:
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
             return {
-                'hits': [],
-                'found': 0,
-                'error': str(e),
-                'filters_applied': {},
-                'has_filters': False
+                "hits": [],
+                "found": 0,
+                "error": str(e),
+                "filters_applied": {},
+                "has_filters": False,
             }
 
     def faceted_search(
-        self,
-        query: str,
-        facet_fields: list[str] = None,
-        max_facet_values: int = 10
+        self, query: str, facet_fields: list[str] = None, max_facet_values: int = 10
     ) -> dict[str, Any]:
         """
         Perform faceted search to get filter options.
         """
         if facet_fields is None:
-            facet_fields = ['category', 'country', 'customer_segment']
+            facet_fields = ["category", "country", "customer_segment"]
 
         search_params = {
-            'q': query,
-            'query_by': 'description,stock_code,invoice_no',
-            'facet_by': ','.join(facet_fields),
-            'max_facet_values': max_facet_values,
-            'per_page': 0  # We only want facets
+            "q": query,
+            "query_by": "description,stock_code,invoice_no",
+            "facet_by": ",".join(facet_fields),
+            "max_facet_values": max_facet_values,
+            "per_page": 0,  # We only want facets
         }
 
         try:
             results = self.client.collections[self.collection_name].documents.search(search_params)
 
             return {
-                'facet_counts': results.get('facet_counts', []),
-                'total_results': results.get('found', 0),
-                'search_time_ms': results.get('search_time_ms', 0)
+                "facet_counts": results.get("facet_counts", []),
+                "total_results": results.get("found", 0),
+                "search_time_ms": results.get("search_time_ms", 0),
             }
 
         except Exception as e:
             logger.error(f"Faceted search failed: {str(e)}")
-            return {'facet_counts': [], 'error': str(e)}
+            return {"facet_counts": [], "error": str(e)}
 
     def geo_search(
-        self,
-        query: str,
-        country: str,
-        radius_km: float | None = None,
-        per_page: int = 20
+        self, query: str, country: str, radius_km: float | None = None, per_page: int = 20
     ) -> dict[str, Any]:
         """
         Geographic search with country-based filtering.
@@ -258,26 +257,26 @@ class EnhancedTypesenseClient:
         filter_conditions = [f"country:={country}"]
 
         search_params = {
-            'q': query,
-            'query_by': 'description,stock_code,invoice_no',
-            'filter_by': ' && '.join(filter_conditions),
-            'per_page': per_page,
-            'sort_by': 'total:desc'
+            "q": query,
+            "query_by": "description,stock_code,invoice_no",
+            "filter_by": " && ".join(filter_conditions),
+            "per_page": per_page,
+            "sort_by": "total:desc",
         }
 
         try:
             results = self.client.collections[self.collection_name].documents.search(search_params)
 
             return {
-                'hits': results.get('hits', []),
-                'found': results.get('found', 0),
-                'country': country,
-                'search_time_ms': results.get('search_time_ms', 0)
+                "hits": results.get("hits", []),
+                "found": results.get("found", 0),
+                "country": country,
+                "search_time_ms": results.get("search_time_ms", 0),
             }
 
         except Exception as e:
             logger.error(f"Geo search failed: {str(e)}")
-            return {'hits': [], 'found': 0, 'error': str(e)}
+            return {"hits": [], "found": 0, "error": str(e)}
 
     def advanced_filter_search(
         self,
@@ -285,7 +284,7 @@ class EnhancedTypesenseClient:
         query: str = "*",
         sort_by: str = "total:desc",
         per_page: int = 20,
-        page: int = 1
+        page: int = 1,
     ) -> dict[str, Any]:
         """
         Advanced filtering with complex conditions.
@@ -297,67 +296,62 @@ class EnhancedTypesenseClient:
             if value is None:
                 continue
 
-            if field == 'total_range':
-                if 'min' in value and value['min'] is not None:
+            if field == "total_range":
+                if "min" in value and value["min"] is not None:
                     filter_conditions.append(f"total:>={value['min']}")
-                if 'max' in value and value['max'] is not None:
+                if "max" in value and value["max"] is not None:
                     filter_conditions.append(f"total:<={value['max']}")
 
-            elif field == 'date_range':
-                if 'from' in value and value['from']:
+            elif field == "date_range":
+                if "from" in value and value["from"]:
                     filter_conditions.append(f"invoice_date:>={value['from']}")
-                if 'to' in value and value['to']:
+                if "to" in value and value["to"]:
                     filter_conditions.append(f"invoice_date:<={value['to']}")
 
-            elif field == 'categories' and isinstance(value, list):
+            elif field == "categories" and isinstance(value, list):
                 if value:
-                    category_filter = ' || '.join([f"category:={cat}" for cat in value])
+                    category_filter = " || ".join([f"category:={cat}" for cat in value])
                     filter_conditions.append(f"({category_filter})")
 
-            elif field == 'countries' and isinstance(value, list):
+            elif field == "countries" and isinstance(value, list):
                 if value:
-                    country_filter = ' || '.join([f"country:={country}" for country in value])
+                    country_filter = " || ".join([f"country:={country}" for country in value])
                     filter_conditions.append(f"({country_filter})")
 
             elif isinstance(value, str):
                 filter_conditions.append(f"{field}:={value}")
 
             elif isinstance(value, list) and value:
-                list_filter = ' || '.join([f"{field}:={item}" for item in value])
+                list_filter = " || ".join([f"{field}:={item}" for item in value])
                 filter_conditions.append(f"({list_filter})")
 
         search_params = {
-            'q': query,
-            'query_by': 'description,stock_code,invoice_no',
-            'per_page': per_page,
-            'page': page,
-            'sort_by': sort_by
+            "q": query,
+            "query_by": "description,stock_code,invoice_no",
+            "per_page": per_page,
+            "page": page,
+            "sort_by": sort_by,
         }
 
         if filter_conditions:
-            search_params['filter_by'] = ' && '.join(filter_conditions)
+            search_params["filter_by"] = " && ".join(filter_conditions)
 
         try:
             results = self.client.collections[self.collection_name].documents.search(search_params)
 
             return {
-                'hits': results.get('hits', []),
-                'found': results.get('found', 0),
-                'page': page,
-                'per_page': per_page,
-                'filters_applied': filters,
-                'filter_string': search_params.get('filter_by', ''),
-                'search_time_ms': results.get('search_time_ms', 0)
+                "hits": results.get("hits", []),
+                "found": results.get("found", 0),
+                "page": page,
+                "per_page": per_page,
+                "filters_applied": filters,
+                "filter_string": search_params.get("filter_by", ""),
+                "search_time_ms": results.get("search_time_ms", 0),
             }
 
         except Exception as e:
             logger.error(f"Advanced filter search failed: {str(e)}")
-            return {
-                'hits': [],
-                'found': 0,
-                'error': str(e),
-                'filters_applied': filters
-            }
+            return {"hits": [], "found": 0, "error": str(e), "filters_applied": filters}
 
     def get_filter_suggestions(self, field: str, query: str = "") -> list[str]:
         """
@@ -366,21 +360,21 @@ class EnhancedTypesenseClient:
         try:
             # Use faceted search to get available values
             search_params = {
-                'q': query if query else '*',
-                'query_by': 'description,stock_code,invoice_no',
-                'facet_by': field,
-                'max_facet_values': 50,
-                'per_page': 0
+                "q": query if query else "*",
+                "query_by": "description,stock_code,invoice_no",
+                "facet_by": field,
+                "max_facet_values": 50,
+                "per_page": 0,
             }
 
             results = self.client.collections[self.collection_name].documents.search(search_params)
-            facet_counts = results.get('facet_counts', [])
+            facet_counts = results.get("facet_counts", [])
 
             suggestions = []
             for facet in facet_counts:
-                if facet.get('field_name') == field:
-                    for count in facet.get('counts', []):
-                        suggestions.append(count.get('value', ''))
+                if facet.get("field_name") == field:
+                    for count in facet.get("counts", []):
+                        suggestions.append(count.get("value", ""))
 
             return suggestions[:20]  # Limit to top 20 suggestions
 

@@ -2,6 +2,7 @@
 Unit of Work Pattern Implementation
 Provides transaction management and coordinated repository access.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -124,15 +125,19 @@ class UnitOfWorkManager:
 
 # Transaction decorators and utilities
 
+
 def transactional(uow_manager: UnitOfWorkManager):
     """Decorator for transactional operations."""
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             async with uow_manager.get_unit_of_work() as uow:
                 result = await func(uow, *args, **kwargs)
                 await uow.commit()
                 return result
+
         return wrapper
+
     return decorator
 
 
@@ -152,6 +157,7 @@ class TransactionalService:
 
 # Batch operations with Unit of Work
 
+
 class BatchProcessor:
     """Processor for batch operations with transaction management."""
 
@@ -166,33 +172,26 @@ class BatchProcessor:
         errors = []
 
         for i in range(0, len(items), self.batch_size):
-            batch = items[i:i + self.batch_size]
+            batch = items[i : i + self.batch_size]
 
             try:
                 async with self.uow_manager.get_unit_of_work() as uow:
-                    batch_result = await processor_func(uow, batch)
+                    await processor_func(uow, batch)
                     await uow.commit()
                     total_processed += len(batch)
-                    logger.info(f"Processed batch {i//self.batch_size + 1}: {len(batch)} items")
+                    logger.info(f"Processed batch {i // self.batch_size + 1}: {len(batch)} items")
 
             except Exception as e:
                 total_failed += len(batch)
-                error_detail = {
-                    'batch_start': i,
-                    'batch_size': len(batch),
-                    'error': str(e)
-                }
+                error_detail = {"batch_start": i, "batch_size": len(batch), "error": str(e)}
                 errors.append(error_detail)
-                logger.error(f"Failed to process batch {i//self.batch_size + 1}: {e}")
+                logger.error(f"Failed to process batch {i // self.batch_size + 1}: {e}")
 
-        return {
-            'total_processed': total_processed,
-            'total_failed': total_failed,
-            'errors': errors
-        }
+        return {"total_processed": total_processed, "total_failed": total_failed, "errors": errors}
 
 
 # Event-driven architecture support
+
 
 class DomainEvent:
     """Base class for domain events."""
@@ -230,27 +229,33 @@ class EventBus:
 
 # Domain events for sales operations
 
+
 class SaleCreatedEvent(DomainEvent):
     """Event fired when a sale is created."""
+
     pass
 
 
 class SaleUpdatedEvent(DomainEvent):
     """Event fired when a sale is updated."""
+
     pass
 
 
 class SaleDeletedEvent(DomainEvent):
     """Event fired when a sale is deleted."""
+
     pass
 
 
 class BatchOperationCompletedEvent(DomainEvent):
     """Event fired when a batch operation completes."""
+
     pass
 
 
 # Service base class with UoW support
+
 
 class BaseService:
     """Base service class with Unit of Work support."""
@@ -272,6 +277,7 @@ class BaseService:
 
 
 # Saga pattern support for distributed transactions
+
 
 class SagaStep:
     """Single step in a saga."""
@@ -333,12 +339,9 @@ class Saga:
 
 # Factory for creating UoW managers
 
+
 def create_uow_manager(database_url: str, **engine_kwargs) -> UnitOfWorkManager:
     """Create Unit of Work manager with database connection."""
     engine = create_async_engine(database_url, **engine_kwargs)
-    session_maker = sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False
-    )
+    session_maker = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     return UnitOfWorkManager(session_maker)

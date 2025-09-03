@@ -2,6 +2,7 @@
 FastAPI Integration for Distributed Tracing
 Enhances the existing correlation middleware with OpenTelemetry tracing.
 """
+
 from __future__ import annotations
 
 import time
@@ -12,6 +13,7 @@ try:
     from fastapi import FastAPI, Request, Response
     from fastapi.middleware.base import BaseHTTPMiddleware
     from starlette.responses import Response as StarletteResponse
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -42,11 +44,11 @@ class TracingMiddleware(BaseHTTPMiddleware):
         exclude_paths: list[str] | None = None,
         include_request_body: bool = False,
         include_response_body: bool = False,
-        max_body_size: int = 1024 * 10
+        max_body_size: int = 1024 * 10,
     ):
         """
         Initialize tracing middleware.
-        
+
         Args:
             app: FastAPI application
             service_name: Service name for tracing
@@ -58,7 +60,12 @@ class TracingMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.service_name = service_name
         self.exclude_paths = exclude_paths or [
-            "/health", "/metrics", "/favicon.ico", "/docs", "/redoc", "/openapi.json"
+            "/health",
+            "/metrics",
+            "/favicon.ico",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
         ]
         self.include_request_body = include_request_body
         self.include_response_body = include_response_body
@@ -84,9 +91,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
 
         with correlation_ctx:
             async with self.tracer.async_span(
-                span_name,
-                kind="server",
-                attributes=self._get_request_attributes(request)
+                span_name, kind="server", attributes=self._get_request_attributes(request)
             ) as span:
                 try:
                     # Add correlation IDs to span
@@ -138,8 +143,8 @@ class TracingMiddleware(BaseHTTPMiddleware):
                         extra={
                             "correlation_id": correlation_ctx.correlation_id,
                             "request_id": correlation_ctx.request_id,
-                            "duration_ms": (time.time() - start_time) * 1000
-                        }
+                            "duration_ms": (time.time() - start_time) * 1000,
+                        },
                     )
                     raise
 
@@ -154,7 +159,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
             "http.user_agent": request.headers.get("user-agent", "unknown"),
             "http.flavor": "1.1",  # Assume HTTP/1.1
             "net.peer.ip": self._get_client_ip(request),
-            "service.name": self.service_name
+            "service.name": self.service_name,
         }
 
         # Add query parameters (sanitized)
@@ -208,7 +213,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
             if len(body) <= self.max_body_size:
                 # Try to decode as text
                 try:
-                    body_text = body.decode('utf-8')
+                    body_text = body.decode("utf-8")
                     span.set_attribute("http.request.body", body_text)
                 except UnicodeDecodeError:
                     span.set_attribute("http.request.body.size", len(body))
@@ -233,7 +238,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.debug(f"Failed to add response body to span: {e}")
 
-    def _add_correlation_headers(self, response: Response, correlation_ctx: CorrelationContext) -> None:
+    def _add_correlation_headers(
+        self, response: Response, correlation_ctx: CorrelationContext
+    ) -> None:
         """Add correlation headers to response."""
         correlation_headers = correlation_ctx.to_headers()
 
@@ -241,19 +248,15 @@ class TracingMiddleware(BaseHTTPMiddleware):
             response.headers[header] = value
 
 
-def setup_tracing_middleware(
-    app: FastAPI,
-    service_name: str = "retail-etl-api",
-    **kwargs
-) -> bool:
+def setup_tracing_middleware(app: FastAPI, service_name: str = "retail-etl-api", **kwargs) -> bool:
     """
     Set up tracing middleware for FastAPI application.
-    
+
     Args:
         app: FastAPI application
         service_name: Service name for tracing
         **kwargs: Additional middleware configuration
-        
+
     Returns:
         True if middleware was added successfully
     """
@@ -268,6 +271,7 @@ def setup_tracing_middleware(
         # Auto-instrument FastAPI if OpenTelemetry is available
         if is_tracing_enabled():
             from .instrumentation import instrument_fastapi
+
             instrument_fastapi(app)
 
         logger.info(f"Tracing middleware configured for {service_name}")
@@ -279,18 +283,16 @@ def setup_tracing_middleware(
 
 
 def create_traced_app(
-    app_name: str = "retail-etl-api",
-    service_name: str | None = None,
-    **middleware_kwargs
+    app_name: str = "retail-etl-api", service_name: str | None = None, **middleware_kwargs
 ) -> FastAPI | None:
     """
     Create a FastAPI app with tracing pre-configured.
-    
+
     Args:
         app_name: Application name
         service_name: Service name for tracing
         **middleware_kwargs: Additional middleware configuration
-        
+
     Returns:
         FastAPI app with tracing configured
     """

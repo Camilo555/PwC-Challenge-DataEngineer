@@ -40,7 +40,18 @@
       "Bash(del test_integration_lightweight.py)",
       "Bash(poetry env remove:*)",
       "Bash(poetry show:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(poetry check:*)",
+      "Bash(pytest:*)",
+      "Bash(.venv/Scripts/activate.bat)",
+      "Bash(coverage report:*)",
+      "Bash(tree:*)",
+      "Bash(dir:*)",
+      "Bash(coverage --version)",
+      "Bash(ruff check:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ruff:*)",
+      "Bash(sed:*)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -5,16 +5,14 @@ Comprehensive error handling, logging, and monitoring utilities for ML operation
 with proper integration into existing monitoring systems.
 """
 
-import logging
-import traceback
-import functools
 import asyncio
-from typing import Dict, List, Optional, Any, Callable, Union
-from datetime import datetime, timedelta
+import functools
+import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
-import json
-import sys
+from typing import Any
 
 from src.core.config import get_settings
 from src.core.logging import get_logger
@@ -28,6 +26,7 @@ settings = get_settings()
 
 class MLErrorType(Enum):
     """Types of ML errors."""
+
     DATA_ERROR = "data_error"
     MODEL_ERROR = "model_error"
     FEATURE_ERROR = "feature_error"
@@ -40,6 +39,7 @@ class MLErrorType(Enum):
 
 class MLErrorSeverity(Enum):
     """ML error severity levels."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -49,21 +49,21 @@ class MLErrorSeverity(Enum):
 @dataclass
 class MLError:
     """ML error information."""
-    
+
     error_id: str
     error_type: MLErrorType
     severity: MLErrorSeverity
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
     timestamp: datetime
     component: str
     operation: str
-    user_id: Optional[str] = None
-    model_id: Optional[str] = None
-    traceback: Optional[str] = None
-    context: Dict[str, Any] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    user_id: str | None = None
+    model_id: str | None = None
+    traceback: str | None = None
+    context: dict[str, Any] = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
         return {
             "error_id": self.error_id,
@@ -77,77 +77,85 @@ class MLError:
             "user_id": self.user_id,
             "model_id": self.model_id,
             "traceback": self.traceback,
-            "context": self.context or {}
+            "context": self.context or {},
         }
 
 
 class MLErrorHandler:
     """Central ML error handling system."""
-    
+
     def __init__(self):
         self.supabase = get_supabase_client()
         self.metrics_collector = MetricsCollector()
         self.alerting_system = create_intelligent_alerting_system()
-        self.error_counts: Dict[str, int] = {}
-        
+        self.error_counts: dict[str, int] = {}
+
     def handle_error(self, error: MLError) -> None:
         """Handle ML error with logging, storage, and alerting."""
         try:
             # Log error
             self._log_error(error)
-            
+
             # Store error
             self._store_error(error)
-            
+
             # Update metrics
             self._update_error_metrics(error)
-            
+
             # Send alerts if necessary
             asyncio.create_task(self._send_alert_if_needed(error))
-            
+
             # Track error patterns
             self._track_error_patterns(error)
-            
+
         except Exception as e:
             logger.critical(f"Error handling ML error: {str(e)}")
-    
+
     def _log_error(self, error: MLError) -> None:
         """Log error with appropriate level."""
         log_message = f"[{error.error_type.value}] {error.message}"
-        
+
         if error.severity == MLErrorSeverity.CRITICAL:
-            logger.critical(log_message, extra={
-                "error_id": error.error_id,
-                "component": error.component,
-                "operation": error.operation,
-                "details": error.details
-            })
+            logger.critical(
+                log_message,
+                extra={
+                    "error_id": error.error_id,
+                    "component": error.component,
+                    "operation": error.operation,
+                    "details": error.details,
+                },
+            )
         elif error.severity == MLErrorSeverity.HIGH:
-            logger.error(log_message, extra={
-                "error_id": error.error_id,
-                "component": error.component,
-                "operation": error.operation,
-                "details": error.details
-            })
+            logger.error(
+                log_message,
+                extra={
+                    "error_id": error.error_id,
+                    "component": error.component,
+                    "operation": error.operation,
+                    "details": error.details,
+                },
+            )
         elif error.severity == MLErrorSeverity.MEDIUM:
-            logger.warning(log_message, extra={
-                "error_id": error.error_id,
-                "component": error.component,
-                "operation": error.operation
-            })
+            logger.warning(
+                log_message,
+                extra={
+                    "error_id": error.error_id,
+                    "component": error.component,
+                    "operation": error.operation,
+                },
+            )
         else:
-            logger.info(log_message, extra={
-                "error_id": error.error_id,
-                "component": error.component
-            })
-    
+            logger.info(
+                log_message, extra={"error_id": error.error_id, "component": error.component}
+            )
+
     def _store_error(self, error: MLError) -> None:
         """Store error in database."""
         try:
-            self.supabase.table('ml_errors').insert(error.to_dict()).execute()
+            self.supabase.table("ml_errors").insert(error.to_dict()).execute()
         except Exception as e:
             logger.error(f"Failed to store ML error: {str(e)}")
-    
+
     def _update_error_metrics(self, error: MLError) -> None:
         """Update error metrics."""
         try:
@@ -158,20 +166,20 @@ class MLErrorHandler:
                     "error_type": error.error_type.value,
                     "severity": error.severity.value,
                     "component": error.component,
-                    "operation": error.operation
-                }
+                    "operation": error.operation,
+                },
             )
-            
+
             # Track error rate
             self.metrics_collector.record_gauge(
                 "ml_error_rate",
                 self._calculate_error_rate(error.component),
-                tags={"component": error.component}
+                tags={"component": error.component},
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to update error metrics: {str(e)}")
-    
+
     async def _send_alert_if_needed(self, error: MLError) -> None:
         """Send alert if error severity warrants it."""
         try:
@@ -185,26 +193,26 @@ class MLErrorHandler:
                         "error_id": error.error_id,
                         "component": error.component,
                         "operation": error.operation,
-                        "model_id": error.model_id
-                    }
+                        "model_id": error.model_id,
+                    },
                 )
         except Exception as e:
             logger.error(f"Failed to send error alert: {str(e)}")
-    
+
     def _track_error_patterns(self, error: MLError) -> None:
         """Track error patterns for analysis."""
         try:
             error_key = f"{error.component}:{error.error_type.value}"
             self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
-            
+
             # Check for error storms (too many errors in short time)
             if self.error_counts[error_key] > 10:  # Threshold
                 logger.warning(f"Potential error storm detected: {error_key}")
                 asyncio.create_task(self._handle_error_storm(error_key, error))
-                
+
         except Exception as e:
             logger.error(f"Failed to track error patterns: {str(e)}")
-    
+
     async def _handle_error_storm(self, error_key: str, error: MLError) -> None:
         """Handle error storm situation."""
         try:
@@ -216,16 +224,16 @@ class MLErrorHandler:
                 metadata={
                     "error_key": error_key,
                     "error_count": self.error_counts[error_key],
-                    "component": error.component
-                }
+                    "component": error.component,
+                },
             )
-            
+
             # Reset counter after alert
             self.error_counts[error_key] = 0
-            
+
         except Exception as e:
             logger.error(f"Failed to handle error storm: {str(e)}")
-    
+
     def _calculate_error_rate(self, component: str) -> float:
         """Calculate error rate for a component."""
         try:
@@ -234,44 +242,52 @@ class MLErrorHandler:
             return min(self.error_counts.get(error_key, 0) * 0.01, 1.0)
         except:
             return 0.0
-    
-    def get_error_statistics(self, time_range: timedelta = timedelta(hours=24)) -> Dict[str, Any]:
+
+    def get_error_statistics(self, time_range: timedelta = timedelta(hours=24)) -> dict[str, Any]:
         """Get error statistics."""
         try:
             end_time = datetime.utcnow()
             start_time = end_time - time_range
-            
+
             # Query error statistics from database
-            result = self.supabase.table('ml_errors').select('*').gte(
-                'timestamp', start_time.isoformat()
-            ).lte('timestamp', end_time.isoformat()).execute()
-            
+            result = (
+                self.supabase.table("ml_errors")
+                .select("*")
+                .gte("timestamp", start_time.isoformat())
+                .lte("timestamp", end_time.isoformat())
+                .execute()
+            )
+
             errors = result.data or []
-            
+
             # Calculate statistics
             stats = {
                 "total_errors": len(errors),
                 "error_by_type": {},
                 "error_by_severity": {},
                 "error_by_component": {},
-                "error_rate_trend": []
+                "error_rate_trend": [],
             }
-            
+
             for error in errors:
                 # By type
-                error_type = error.get('error_type', 'unknown')
+                error_type = error.get("error_type", "unknown")
                 stats["error_by_type"][error_type] = stats["error_by_type"].get(error_type, 0) + 1
-                
+
                 # By severity
-                severity = error.get('severity', 'unknown')
-                stats["error_by_severity"][severity] = stats["error_by_severity"].get(severity, 0) + 1
-                
+                severity = error.get("severity", "unknown")
+                stats["error_by_severity"][severity] = (
+                    stats["error_by_severity"].get(severity, 0) + 1
+                )
+
                 # By component
-                component = error.get('component', 'unknown')
-                stats["error_by_component"][component] = stats["error_by_component"].get(component, 0) + 1
-            
+                component = error.get("component", "unknown")
+                stats["error_by_component"][component] = (
+                    stats["error_by_component"].get(component, 0) + 1
+                )
+
             return stats
-            
+
         except Exception as e:
             logger.error(f"Failed to get error statistics: {str(e)}")
             return {"error": str(e)}
@@ -286,12 +302,13 @@ def ml_error_handler(
     operation: str,
     error_type: MLErrorType = MLErrorType.SYSTEM_ERROR,
     severity: MLErrorSeverity = MLErrorSeverity.MEDIUM,
-    capture_traceback: bool = True
+    capture_traceback: bool = True,
 ):
     """Decorator for ML error handling."""
-    
+
     def decorator(func: Callable) -> Callable:
         if asyncio.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
                 try:
@@ -307,14 +324,15 @@ def ml_error_handler(
                         component=component,
                         operation=operation,
                         traceback=traceback.format_exc() if capture_traceback else None,
-                        context={"function": func.__name__}
+                        context={"function": func.__name__},
                     )
-                    
+
                     _error_handler.handle_error(error)
                     raise
-            
+
             return async_wrapper
         else:
+
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 try:
@@ -330,44 +348,42 @@ def ml_error_handler(
                         component=component,
                         operation=operation,
                         traceback=traceback.format_exc() if capture_traceback else None,
-                        context={"function": func.__name__}
+                        context={"function": func.__name__},
                     )
-                    
+
                     _error_handler.handle_error(error)
                     raise
-            
+
             return sync_wrapper
-    
+
     return decorator
 
 
 def log_ml_operation(
-    component: str,
-    operation: str,
-    level: str = "info",
-    include_timing: bool = True
+    component: str, operation: str, level: str = "info", include_timing: bool = True
 ):
     """Decorator for ML operation logging."""
-    
+
     def decorator(func: Callable) -> Callable:
         if asyncio.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
                 start_time = datetime.utcnow()
-                
+
                 getattr(logger, level)(
                     f"Starting {component}.{operation}",
                     extra={
                         "component": component,
                         "operation": operation,
                         "function": func.__name__,
-                        "start_time": start_time.isoformat()
-                    }
+                        "start_time": start_time.isoformat(),
+                    },
                 )
-                
+
                 try:
                     result = await func(*args, **kwargs)
-                    
+
                     if include_timing:
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         getattr(logger, level)(
@@ -375,20 +391,17 @@ def log_ml_operation(
                             extra={
                                 "component": component,
                                 "operation": operation,
-                                "duration_seconds": duration
-                            }
+                                "duration_seconds": duration,
+                            },
                         )
                     else:
                         getattr(logger, level)(
                             f"Completed {component}.{operation}",
-                            extra={
-                                "component": component,
-                                "operation": operation
-                            }
+                            extra={"component": component, "operation": operation},
                         )
-                    
+
                     return result
-                    
+
                 except Exception as e:
                     duration = (datetime.utcnow() - start_time).total_seconds()
                     logger.error(
@@ -397,30 +410,31 @@ def log_ml_operation(
                             "component": component,
                             "operation": operation,
                             "duration_seconds": duration,
-                            "error": str(e)
-                        }
+                            "error": str(e),
+                        },
                     )
                     raise
-            
+
             return async_wrapper
         else:
+
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 start_time = datetime.utcnow()
-                
+
                 getattr(logger, level)(
                     f"Starting {component}.{operation}",
                     extra={
                         "component": component,
                         "operation": operation,
                         "function": func.__name__,
-                        "start_time": start_time.isoformat()
-                    }
+                        "start_time": start_time.isoformat(),
+                    },
                 )
-                
+
                 try:
                     result = func(*args, **kwargs)
-                    
+
                     if include_timing:
                         duration = (datetime.utcnow() - start_time).total_seconds()
                         getattr(logger, level)(
@@ -428,20 +442,17 @@ def log_ml_operation(
                             extra={
                                 "component": component,
                                 "operation": operation,
-                                "duration_seconds": duration
-                            }
+                                "duration_seconds": duration,
+                            },
                         )
                     else:
                         getattr(logger, level)(
                             f"Completed {component}.{operation}",
-                            extra={
-                                "component": component,
-                                "operation": operation
-                            }
+                            extra={"component": component, "operation": operation},
                         )
-                    
+
                     return result
-                    
+
                 except Exception as e:
                     duration = (datetime.utcnow() - start_time).total_seconds()
                     logger.error(
@@ -450,19 +461,19 @@ def log_ml_operation(
                             "component": component,
                             "operation": operation,
                             "duration_seconds": duration,
-                            "error": str(e)
-                        }
+                            "error": str(e),
+                        },
                     )
                     raise
-            
+
             return sync_wrapper
-    
+
     return decorator
 
 
-def validate_ml_input(validation_rules: Dict[str, Any]):
+def validate_ml_input(validation_rules: dict[str, Any]):
     """Decorator for ML input validation."""
-    
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -471,24 +482,38 @@ def validate_ml_input(validation_rules: Dict[str, Any]):
                 for param_name, rules in validation_rules.items():
                     if param_name in kwargs:
                         value = kwargs[param_name]
-                        
+
                         # Type validation
                         if "type" in rules and not isinstance(value, rules["type"]):
-                            raise ValueError(f"Parameter {param_name} must be of type {rules['type']}")
-                        
+                            raise ValueError(
+                                f"Parameter {param_name} must be of type {rules['type']}"
+                            )
+
                         # Required validation
                         if rules.get("required", False) and value is None:
                             raise ValueError(f"Parameter {param_name} is required")
-                        
+
                         # Range validation for numeric values
-                        if "min" in rules and hasattr(value, "__len__") and len(value) < rules["min"]:
-                            raise ValueError(f"Parameter {param_name} must have minimum length {rules['min']}")
-                        
-                        if "max" in rules and hasattr(value, "__len__") and len(value) > rules["max"]:
-                            raise ValueError(f"Parameter {param_name} must have maximum length {rules['max']}")
-                
+                        if (
+                            "min" in rules
+                            and hasattr(value, "__len__")
+                            and len(value) < rules["min"]
+                        ):
+                            raise ValueError(
+                                f"Parameter {param_name} must have minimum length {rules['min']}"
+                            )
+
+                        if (
+                            "max" in rules
+                            and hasattr(value, "__len__")
+                            and len(value) > rules["max"]
+                        ):
+                            raise ValueError(
+                                f"Parameter {param_name} must have maximum length {rules['max']}"
+                            )
+
                 return func(*args, **kwargs)
-                
+
             except Exception as e:
                 error = MLError(
                     error_id=f"validation_error_{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}",
@@ -499,26 +524,26 @@ def validate_ml_input(validation_rules: Dict[str, Any]):
                     timestamp=datetime.utcnow(),
                     component="validation",
                     operation="input_validation",
-                    context={"function": func.__name__}
+                    context={"function": func.__name__},
                 )
-                
+
                 _error_handler.handle_error(error)
                 raise
-        
+
         return wrapper
-    
+
     return decorator
 
 
 class MLContextLogger:
     """Context manager for ML operation logging."""
-    
-    def __init__(self, component: str, operation: str, model_id: Optional[str] = None):
+
+    def __init__(self, component: str, operation: str, model_id: str | None = None):
         self.component = component
         self.operation = operation
         self.model_id = model_id
         self.start_time = None
-        
+
     def __enter__(self):
         self.start_time = datetime.utcnow()
         logger.info(
@@ -527,14 +552,14 @@ class MLContextLogger:
                 "component": self.component,
                 "operation": self.operation,
                 "model_id": self.model_id,
-                "start_time": self.start_time.isoformat()
-            }
+                "start_time": self.start_time.isoformat(),
+            },
         )
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = (datetime.utcnow() - self.start_time).total_seconds()
-        
+
         if exc_type is None:
             logger.info(
                 f"Completed {self.component}.{self.operation} in {duration:.2f}s",
@@ -542,8 +567,8 @@ class MLContextLogger:
                     "component": self.component,
                     "operation": self.operation,
                     "model_id": self.model_id,
-                    "duration_seconds": duration
-                }
+                    "duration_seconds": duration,
+                },
             )
         else:
             logger.error(
@@ -553,10 +578,10 @@ class MLContextLogger:
                     "operation": self.operation,
                     "model_id": self.model_id,
                     "duration_seconds": duration,
-                    "error": str(exc_val)
-                }
+                    "error": str(exc_val),
+                },
             )
-            
+
             # Create ML error
             error = MLError(
                 error_id=f"context_error_{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}",
@@ -565,15 +590,15 @@ class MLContextLogger:
                 message=str(exc_val),
                 details={
                     "operation_duration": duration,
-                    "exception_type": str(exc_type.__name__) if exc_type else None
+                    "exception_type": str(exc_type.__name__) if exc_type else None,
                 },
                 timestamp=datetime.utcnow(),
                 component=self.component,
                 operation=self.operation,
                 model_id=self.model_id,
-                traceback=traceback.format_exc()
+                traceback=traceback.format_exc(),
             )
-            
+
             _error_handler.handle_error(error)
 
 
@@ -589,8 +614,8 @@ def report_ml_error(
     component: str,
     operation: str,
     severity: MLErrorSeverity = MLErrorSeverity.MEDIUM,
-    details: Optional[Dict[str, Any]] = None,
-    model_id: Optional[str] = None
+    details: dict[str, Any] | None = None,
+    model_id: str | None = None,
 ) -> None:
     """Manually report an ML error."""
     error = MLError(
@@ -602,12 +627,12 @@ def report_ml_error(
         timestamp=datetime.utcnow(),
         component=component,
         operation=operation,
-        model_id=model_id
+        model_id=model_id,
     )
-    
+
     _error_handler.handle_error(error)
 
 
-def get_ml_error_statistics(hours: int = 24) -> Dict[str, Any]:
+def get_ml_error_statistics(hours: int = 24) -> dict[str, Any]:
     """Get ML error statistics for the specified time range."""
     return _error_handler.get_error_statistics(timedelta(hours=hours))

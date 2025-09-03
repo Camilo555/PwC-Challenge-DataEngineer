@@ -11,6 +11,7 @@ Expected columns (case-insensitive, will normalize):
 Usage:
   poetry run python scripts/run_gold.py
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -80,7 +81,9 @@ def _read_silver_sales() -> DataFrame:
     return df
 
 
-def _upsert_dimension_keys(df: DataFrame) -> tuple[
+def _upsert_dimension_keys(
+    df: DataFrame,
+) -> tuple[
     dict[str, int], dict[str, int], dict[str | None, int | None], dict[str, int], dict[str, int]
 ]:
     """Insert dims if missing and return natural->surrogate mappings for
@@ -90,8 +93,11 @@ def _upsert_dimension_keys(df: DataFrame) -> tuple[
 
     # Collect distincts to driver (Gold build, expected manageable size)
     prod_rows = (
-        df.select(F.col("stock_code").alias("stock_code"), F.col("description").alias("description"))
-        .dropDuplicates(["stock_code"]).collect()
+        df.select(
+            F.col("stock_code").alias("stock_code"), F.col("description").alias("description")
+        )
+        .dropDuplicates(["stock_code"])
+        .collect()
     )
     country_rows = df.select("country").dropDuplicates(["country"]).collect()
     cust_rows = df.select("customer_id").dropDuplicates(["customer_id"]).collect()
@@ -147,7 +153,9 @@ def _upsert_dimension_keys(df: DataFrame) -> tuple[
             ino = r["invoice_no"]
             invoice_obj = s.exec(select(DimInvoice).where(DimInvoice.invoice_no == ino)).first()
             if not invoice_obj:
-                invoice_obj = DimInvoice(invoice_no=ino, invoice_status="Completed", invoice_type="Sale")
+                invoice_obj = DimInvoice(
+                    invoice_no=ino, invoice_status="Completed", invoice_type="Sale"
+                )
                 s.add(invoice_obj)
                 s.flush()
                 s.refresh(invoice_obj)
@@ -163,7 +171,12 @@ def _upsert_dimension_keys(df: DataFrame) -> tuple[
             date_obj = s.get(DimDate, dk)
             if not date_obj:
                 date_obj = DimDate(
-                    date_key=dk, date=d, year=d.year, quarter=((d.month - 1) // 3) + 1, month=d.month, day=d.day
+                    date_key=dk,
+                    date=d,
+                    year=d.year,
+                    quarter=((d.month - 1) // 3) + 1,
+                    month=d.month,
+                    day=d.day,
                 )
                 s.add(date_obj)
                 s.flush()
@@ -187,22 +200,32 @@ def build_and_load_gold() -> None:
     # Build mapping DataFrames from dicts for joins (handle empty maps with explicit schemas)
     prod_items = [(k, v) for k, v in prod_map.items()]
     prod_df = (
-        spark.createDataFrame(prod_items, ["stock_code", "product_key"]) if prod_items else spark.createDataFrame([], "stock_code string, product_key int")
+        spark.createDataFrame(prod_items, ["stock_code", "product_key"])
+        if prod_items
+        else spark.createDataFrame([], "stock_code string, product_key int")
     )
 
     country_items = [(k, v) for k, v in country_map.items()]
     country_df = (
-        spark.createDataFrame(country_items, ["country", "country_key"]) if country_items else spark.createDataFrame([], "country string, country_key int")
+        spark.createDataFrame(country_items, ["country", "country_key"])
+        if country_items
+        else spark.createDataFrame([], "country string, country_key int")
     )
 
     inv_items = [(k, v) for k, v in inv_map.items()]
     inv_df = (
-        spark.createDataFrame(inv_items, ["invoice_no", "invoice_key"]) if inv_items else spark.createDataFrame([], "invoice_no string, invoice_key int")
+        spark.createDataFrame(inv_items, ["invoice_no", "invoice_key"])
+        if inv_items
+        else spark.createDataFrame([], "invoice_no string, invoice_key int")
     )
 
     # customer_id may contain None
     cust_items = [(k, v) for k, v in cust_map.items() if k is not None]
-    cust_df = spark.createDataFrame(cust_items, ["customer_id", "customer_key"]) if cust_items else spark.createDataFrame([], "customer_id string, customer_key int")
+    cust_df = (
+        spark.createDataFrame(cust_items, ["customer_id", "customer_key"])
+        if cust_items
+        else spark.createDataFrame([], "customer_id string, customer_key int")
+    )
 
     date_items = [(k, v) for k, v in date_map.items()]
     date_df = (
@@ -212,8 +235,7 @@ def build_and_load_gold() -> None:
     )
 
     facts = (
-        df
-        .withColumn("dstr", F.to_date("invoice_timestamp").cast("string"))
+        df.withColumn("dstr", F.to_date("invoice_timestamp").cast("string"))
         .join(prod_df, on="stock_code", how="left")
         .join(country_df, on="country", how="left")
         .join(inv_df, on="invoice_no", how="left")
@@ -230,26 +252,42 @@ def build_and_load_gold() -> None:
             (F.col("quantity").cast("double") * F.col("unit_price").cast("double")).alias("total"),
             F.col("invoice_timestamp"),
         )
-        .na.drop(subset=["date_key", "product_key", "country_key", "invoice_key", "invoice_timestamp"])  # essential keys
+        .na.drop(
+            subset=["date_key", "product_key", "country_key", "invoice_key", "invoice_timestamp"]
+        )  # essential keys
     )
 
     # Idempotency: remove rows that already exist in fact_sale
     jdbc_url = settings.jdbc_url()
     props = settings.jdbc_properties()
     try:
-        existing = spark.read.format("jdbc").options(url=jdbc_url, dbtable="fact_sale", **props).load()
+        existing = (
+            spark.read.format("jdbc").options(url=jdbc_url, dbtable="fact_sale", **props).load()
+        )
     except Exception:
         # Table may not exist yet; use empty DF with needed columns
-        existing = spark.createDataFrame([], "invoice_key int, product_key int, invoice_timestamp timestamp")
-    existing_small = existing.select("invoice_key", "product_key", "invoice_timestamp").dropDuplicates(["invoice_key", "product_key", "invoice_timestamp"]) if existing.columns else existing
-    to_insert = facts.join(existing_small, on=["invoice_key", "product_key", "invoice_timestamp"], how="left_anti")
+        existing = spark.createDataFrame(
+            [], "invoice_key int, product_key int, invoice_timestamp timestamp"
+        )
+    existing_small = (
+        existing.select("invoice_key", "product_key", "invoice_timestamp").dropDuplicates(
+            ["invoice_key", "product_key", "invoice_timestamp"]
+        )
+        if existing.columns
+        else existing
+    )
+    to_insert = facts.join(
+        existing_small, on=["invoice_key", "product_key", "invoice_timestamp"], how="left_anti"
+    )
 
     count_new = to_insert.count()
     if count_new == 0:
         print("Gold load complete. Inserted 0 fact rows, skipped all as duplicates.")
         return
 
-    to_insert.write.format("jdbc").options(url=jdbc_url, dbtable="fact_sale", **props).mode("append").save()
+    to_insert.write.format("jdbc").options(url=jdbc_url, dbtable="fact_sale", **props).mode(
+        "append"
+    ).save()
     print(f"Gold load complete. Inserted {count_new} fact rows.")
 
 

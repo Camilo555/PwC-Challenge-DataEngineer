@@ -2,6 +2,7 @@
 Advanced Spark Session Management
 Provides centralized, optimized Spark session creation and management
 """
+
 from __future__ import annotations
 
 import atexit
@@ -33,7 +34,7 @@ class SparkSessionManager:
         return cls._instance
 
     def __init__(self):
-        if not hasattr(self, '_initialized'):
+        if not hasattr(self, "_initialized"):
             self._base_config = BaseConfig()
             self._spark_config = SparkConfig()
             self._initialized = True
@@ -43,17 +44,17 @@ class SparkSessionManager:
         app_name: str | None = None,
         config_overrides: dict[str, str] | None = None,
         enable_delta: bool = True,
-        enable_adaptive_query: bool = True
+        enable_adaptive_query: bool = True,
     ) -> SparkSession:
         """
         Get or create optimized Spark session.
-        
+
         Args:
             app_name: Custom application name
             config_overrides: Additional configuration overrides
             enable_delta: Enable Delta Lake support
             enable_adaptive_query: Enable adaptive query execution
-            
+
         Returns:
             Configured SparkSession instance
         """
@@ -62,7 +63,7 @@ class SparkSessionManager:
                 app_name=app_name,
                 config_overrides=config_overrides,
                 enable_delta=enable_delta,
-                enable_adaptive_query=enable_adaptive_query
+                enable_adaptive_query=enable_adaptive_query,
             )
 
         return self._spark_session
@@ -72,7 +73,7 @@ class SparkSessionManager:
         app_name: str | None = None,
         config_overrides: dict[str, str] | None = None,
         enable_delta: bool = True,
-        enable_adaptive_query: bool = True
+        enable_adaptive_query: bool = True,
     ) -> SparkSession:
         """Create a new Spark session with optimized configuration."""
 
@@ -93,7 +94,9 @@ class SparkSessionManager:
         # Environment-specific settings
         self._apply_environment_optimizations(spark_config_dict)
 
-        logger.info(f"Creating Spark session with {len(spark_config_dict)} configuration parameters")
+        logger.info(
+            f"Creating Spark session with {len(spark_config_dict)} configuration parameters"
+        )
         logger.debug(f"Spark config: {spark_config_dict}")
 
         # Create Spark configuration
@@ -119,7 +122,9 @@ class SparkSessionManager:
 
         logger.info(f"Spark session created successfully: {spark.sparkContext.applicationId}")
         logger.info(f"Spark version: {spark.version}")
-        logger.info(f"Spark UI: http://localhost:{spark.sparkContext.uiWebUrl.split(':')[-1] if spark.sparkContext.uiWebUrl else 'N/A'}")
+        logger.info(
+            f"Spark UI: http://localhost:{spark.sparkContext.uiWebUrl.split(':')[-1] if spark.sparkContext.uiWebUrl else 'N/A'}"
+        )
 
         return spark
 
@@ -129,31 +134,37 @@ class SparkSessionManager:
 
         if system == "Windows":
             # Windows-specific settings
-            config.update({
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-                "spark.sql.execution.arrow.pyspark.fallback.enabled": "true",
-                "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-                "spark.kryo.unsafe": "true",
-            })
+            config.update(
+                {
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                    "spark.sql.execution.arrow.pyspark.fallback.enabled": "true",
+                    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+                    "spark.kryo.unsafe": "true",
+                }
+            )
 
             # Try to auto-detect Java on Windows
             self._detect_java_home(config)
 
         elif system == "Linux":
             # Linux optimizations
-            config.update({
-                "spark.executor.extraJavaOptions": "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
-                "spark.driver.extraJavaOptions": "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            })
+            config.update(
+                {
+                    "spark.executor.extraJavaOptions": "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
+                    "spark.driver.extraJavaOptions": "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                }
+            )
 
         elif system == "Darwin":  # macOS
             # macOS optimizations
-            config.update({
-                "spark.executor.extraJavaOptions": "-XX:+UseG1GC",
-                "spark.driver.extraJavaOptions": "-XX:+UseG1GC",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            })
+            config.update(
+                {
+                    "spark.executor.extraJavaOptions": "-XX:+UseG1GC",
+                    "spark.driver.extraJavaOptions": "-XX:+UseG1GC",
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                }
+            )
 
     def _apply_environment_optimizations(self, config: dict[str, str]) -> None:
         """Apply environment-specific optimizations."""
@@ -161,28 +172,34 @@ class SparkSessionManager:
 
         if env == Environment.DEVELOPMENT:
             # Development optimizations - faster startup
-            config.update({
-                "spark.sql.adaptive.localShuffleReader.enabled": "true",
-                "spark.sql.adaptive.skewJoin.enabled": "false",  # Disable for small datasets
-                "spark.sql.adaptive.advisoryPartitionSizeInBytes": "64MB",
-            })
+            config.update(
+                {
+                    "spark.sql.adaptive.localShuffleReader.enabled": "true",
+                    "spark.sql.adaptive.skewJoin.enabled": "false",  # Disable for small datasets
+                    "spark.sql.adaptive.advisoryPartitionSizeInBytes": "64MB",
+                }
+            )
 
         elif env == Environment.PRODUCTION:
             # Production optimizations - performance and stability
-            config.update({
-                "spark.sql.adaptive.localShuffleReader.enabled": "true",
-                "spark.sql.adaptive.skewJoin.enabled": "true",
-                "spark.sql.adaptive.advisoryPartitionSizeInBytes": "128MB",
-                "spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold": "128MB",
-                "spark.sql.files.maxPartitionBytes": "134217728",  # 128MB
-                "spark.default.parallelism": str(self._base_config.max_workers * 2),
-            })
+            config.update(
+                {
+                    "spark.sql.adaptive.localShuffleReader.enabled": "true",
+                    "spark.sql.adaptive.skewJoin.enabled": "true",
+                    "spark.sql.adaptive.advisoryPartitionSizeInBytes": "128MB",
+                    "spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold": "128MB",
+                    "spark.sql.files.maxPartitionBytes": "134217728",  # 128MB
+                    "spark.default.parallelism": str(self._base_config.max_workers * 2),
+                }
+            )
 
             # Enable metrics in production
-            config.update({
-                "spark.metrics.conf.executor.source.jvm.class": "org.apache.spark.metrics.source.JvmSource",
-                "spark.metrics.conf.driver.source.jvm.class": "org.apache.spark.metrics.source.JvmSource",
-            })
+            config.update(
+                {
+                    "spark.metrics.conf.executor.source.jvm.class": "org.apache.spark.metrics.source.JvmSource",
+                    "spark.metrics.conf.driver.source.jvm.class": "org.apache.spark.metrics.source.JvmSource",
+                }
+            )
 
     def _detect_java_home(self, config: dict[str, str]) -> None:
         """Auto-detect Java installation on Windows."""
@@ -204,19 +221,21 @@ class SparkSessionManager:
                 logger.info(f"Auto-detected JAVA_HOME: {java_path}")
                 break
         else:
-            logger.warning("Could not auto-detect Java installation. Please set JAVA_HOME manually.")
+            logger.warning(
+                "Could not auto-detect Java installation. Please set JAVA_HOME manually."
+            )
 
     def _configure_delta_lake(self, builder: SparkSession.Builder) -> SparkSession.Builder:
         """Configure Delta Lake support."""
-        delta_packages = [
-            "io.delta:delta-core_2.12:2.4.0",
-            "org.apache.hadoop:hadoop-aws:3.3.4"
-        ]
+        delta_packages = ["io.delta:delta-core_2.12:2.4.0", "org.apache.hadoop:hadoop-aws:3.3.4"]
 
-        return (builder
-                .config("spark.jars.packages", ",".join(delta_packages))
-                .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-                .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"))
+        return (
+            builder.config("spark.jars.packages", ",".join(delta_packages))
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config(
+                "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+            )
+        )
 
     def _configure_session_settings(self, spark: SparkSession, enable_adaptive_query: bool) -> None:
         """Configure session-level settings."""
@@ -296,13 +315,11 @@ def get_spark_session(**kwargs) -> SparkSession:
 
 
 def create_optimized_session(
-    app_name: str,
-    processing_type: str = "batch",
-    data_size: str = "medium"
+    app_name: str, processing_type: str = "batch", data_size: str = "medium"
 ) -> SparkSession:
     """
     Create an optimized Spark session for specific use cases.
-    
+
     Args:
         app_name: Application name
         processing_type: 'batch', 'streaming', or 'ml'
@@ -312,37 +329,42 @@ def create_optimized_session(
 
     # Optimize based on processing type
     if processing_type == "streaming":
-        config_overrides.update({
-            "spark.sql.streaming.metricsEnabled": "true",
-            "spark.sql.streaming.ui.enabled": "true",
-            "spark.sql.adaptive.enabled": "false",  # Not compatible with streaming
-        })
+        config_overrides.update(
+            {
+                "spark.sql.streaming.metricsEnabled": "true",
+                "spark.sql.streaming.ui.enabled": "true",
+                "spark.sql.adaptive.enabled": "false",  # Not compatible with streaming
+            }
+        )
     elif processing_type == "ml":
-        config_overrides.update({
-            "spark.sql.execution.arrow.pyspark.enabled": "true",
-            "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-            "spark.kryo.registrationRequired": "false",
-        })
+        config_overrides.update(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+                "spark.kryo.registrationRequired": "false",
+            }
+        )
 
     # Optimize based on data size
     if data_size == "small":
-        config_overrides.update({
-            "spark.executor.instances": "1",
-            "spark.executor.memory": "1g",
-            "spark.sql.files.maxPartitionBytes": "32MB",
-        })
+        config_overrides.update(
+            {
+                "spark.executor.instances": "1",
+                "spark.executor.memory": "1g",
+                "spark.sql.files.maxPartitionBytes": "32MB",
+            }
+        )
     elif data_size == "large":
-        config_overrides.update({
-            "spark.executor.instances": "8",
-            "spark.executor.memory": "8g",
-            "spark.sql.files.maxPartitionBytes": "256MB",
-            "spark.sql.adaptive.advisoryPartitionSizeInBytes": "256MB",
-        })
+        config_overrides.update(
+            {
+                "spark.executor.instances": "8",
+                "spark.executor.memory": "8g",
+                "spark.sql.files.maxPartitionBytes": "256MB",
+                "spark.sql.adaptive.advisoryPartitionSizeInBytes": "256MB",
+            }
+        )
 
-    return spark_manager.get_session(
-        app_name=app_name,
-        config_overrides=config_overrides
-    )
+    return spark_manager.get_session(app_name=app_name, config_overrides=config_overrides)
 
 
 # Add alias method for backward compatibility
@@ -352,4 +374,6 @@ def get_or_create_session(app_name: str, **kwargs) -> SparkSession:
 
 
 # Add the method to the class as well
-SparkSessionManager.get_or_create_session = lambda self, app_name: self.get_session(app_name=app_name)
+SparkSessionManager.get_or_create_session = lambda self, app_name: self.get_session(
+    app_name=app_name
+)

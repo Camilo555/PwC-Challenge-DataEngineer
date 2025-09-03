@@ -1,4 +1,5 @@
 """Enhanced bronze layer with external API enrichment."""
+
 from __future__ import annotations
 
 import asyncio
@@ -72,9 +73,13 @@ class EnrichedBronzeProcessor:
         """Read raw data from various formats."""
         input_path = Path(input_path)
 
-        if input_path.suffix.lower() == '.csv':
-            return self.spark.read.option("header", "true").option("inferSchema", "true").csv(str(input_path))
-        elif input_path.suffix.lower() in ['.xlsx', '.xls']:
+        if input_path.suffix.lower() == ".csv":
+            return (
+                self.spark.read.option("header", "true")
+                .option("inferSchema", "true")
+                .csv(str(input_path))
+            )
+        elif input_path.suffix.lower() in [".xlsx", ".xls"]:
             # For Excel files, you'd need to convert to CSV first or use a different approach
             raise NotImplementedError("Excel files need to be converted to CSV first")
         else:
@@ -85,6 +90,7 @@ class EnrichedBronzeProcessor:
         """Apply basic bronze layer transformations."""
         # Add ingestion metadata using DataFrame API
         from pyspark.sql.functions import current_timestamp
+
         transformed_df = df.withColumn("ingestion_timestamp", current_timestamp())
 
         # Add source information
@@ -108,7 +114,9 @@ class EnrichedBronzeProcessor:
             transactions = [row.asDict() for row in df.collect()]
 
             if len(transactions) > 1000:
-                logger.warning(f"Large dataset ({len(transactions)} records) - enrichment may take time")
+                logger.warning(
+                    f"Large dataset ({len(transactions)} records) - enrichment may take time"
+                )
 
             # Enrich transactions in batches
             enriched_transactions = await self.enrichment_service.enrich_batch_transactions(
@@ -131,7 +139,9 @@ class EnrichedBronzeProcessor:
         except Exception as e:
             logger.error(f"External enrichment failed: {e}")
             # Return original DataFrame with error marker
-            return df.withColumn("enrichment_applied", lit(False)).withColumn("enrichment_error", lit(str(e)))
+            return df.withColumn("enrichment_applied", lit(False)).withColumn(
+                "enrichment_error", lit(str(e))
+            )
 
     def _convert_enriched_to_dataframe(self, enriched_data: list[dict]) -> DataFrame:
         """Convert enriched data back to Spark DataFrame."""
@@ -166,7 +176,9 @@ class EnrichedBronzeProcessor:
 
         if total_records > 0:
             enrichment_rate = enriched_records / total_records
-            logger.info(f"Enrichment summary: {enriched_records}/{total_records} records enriched ({enrichment_rate:.1%})")
+            logger.info(
+                f"Enrichment summary: {enriched_records}/{total_records} records enriched ({enrichment_rate:.1%})"
+            )
         else:
             logger.warning("No records processed")
 

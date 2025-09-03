@@ -2,6 +2,7 @@
 Repository Pattern Implementation
 Provides data access abstractions with clean separation of concerns.
 """
+
 from __future__ import annotations
 
 import builtins
@@ -14,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session, SQLModel, delete, select
 
 # Type variables for generic repository
-T = TypeVar('T', bound=SQLModel)
-CreateT = TypeVar('CreateT')
-UpdateT = TypeVar('UpdateT')
+T = TypeVar("T", bound=SQLModel)
+CreateT = TypeVar("CreateT")
+UpdateT = TypeVar("UpdateT")
 
 
 class ISpecification(ABC):
@@ -76,8 +77,9 @@ class IRepository(Generic[T], ABC):
         pass
 
     @abstractmethod
-    async def list(self, specification: ISpecification | None = None,
-                  skip: int = 0, limit: int = 100) -> list[T]:
+    async def list(
+        self, specification: ISpecification | None = None, skip: int = 0, limit: int = 100
+    ) -> list[T]:
         """List entities with optional filtering."""
         pass
 
@@ -125,8 +127,9 @@ class AsyncSQLModelRepository(IRepository[T]):
         result = await self.session.execute(stmt)
         return result.rowcount > 0
 
-    async def list(self, specification: ISpecification | None = None,
-                  skip: int = 0, limit: int = 100) -> list[T]:
+    async def list(
+        self, specification: ISpecification | None = None, skip: int = 0, limit: int = 100
+    ) -> list[T]:
         """List entities with filtering."""
         stmt = select(self.model_class)
 
@@ -160,8 +163,9 @@ class AsyncSQLModelRepository(IRepository[T]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_by_field(self, field_name: str, value: Any,
-                           skip: int = 0, limit: int = 100) -> builtins.list[T]:
+    async def list_by_field(
+        self, field_name: str, value: Any, skip: int = 0, limit: int = 100
+    ) -> builtins.list[T]:
         """List entities by specific field."""
         field = getattr(self.model_class, field_name)
         stmt = select(self.model_class).where(field == value).offset(skip).limit(limit)
@@ -198,9 +202,8 @@ class SyncSQLModelRepository(IRepository[T]):
     async def add(self, entity: T) -> T:
         """Add entity to database."""
         import asyncio
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self._sync_add, entity
-        )
+
+        return await asyncio.get_event_loop().run_in_executor(None, self._sync_add, entity)
 
     def _sync_add(self, entity: T) -> T:
         """Synchronous add operation."""
@@ -212,6 +215,7 @@ class SyncSQLModelRepository(IRepository[T]):
     async def get(self, id: UUID) -> T | None:
         """Get entity by primary key."""
         import asyncio
+
         return await asyncio.get_event_loop().run_in_executor(
             None, lambda: self.session.get(self.model_class, id)
         )
@@ -219,9 +223,8 @@ class SyncSQLModelRepository(IRepository[T]):
     async def update(self, entity: T) -> T:
         """Update entity."""
         import asyncio
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self._sync_update, entity
-        )
+
+        return await asyncio.get_event_loop().run_in_executor(None, self._sync_update, entity)
 
     def _sync_update(self, entity: T) -> T:
         """Synchronous update operation."""
@@ -232,9 +235,8 @@ class SyncSQLModelRepository(IRepository[T]):
     async def delete(self, id: UUID) -> bool:
         """Delete entity by ID."""
         import asyncio
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self._sync_delete, id
-        )
+
+        return await asyncio.get_event_loop().run_in_executor(None, self._sync_delete, id)
 
     def _sync_delete(self, id: UUID) -> bool:
         """Synchronous delete operation."""
@@ -245,16 +247,19 @@ class SyncSQLModelRepository(IRepository[T]):
             return True
         return False
 
-    async def list(self, specification: ISpecification | None = None,
-                  skip: int = 0, limit: int = 100) -> list[T]:
+    async def list(
+        self, specification: ISpecification | None = None, skip: int = 0, limit: int = 100
+    ) -> list[T]:
         """List entities with filtering."""
         import asyncio
+
         return await asyncio.get_event_loop().run_in_executor(
             None, self._sync_list, specification, skip, limit
         )
 
-    def _sync_list(self, specification: ISpecification | None = None,
-                  skip: int = 0, limit: int = 100) -> list[T]:
+    def _sync_list(
+        self, specification: ISpecification | None = None, skip: int = 0, limit: int = 100
+    ) -> list[T]:
         """Synchronous list operation."""
         stmt = select(self.model_class)
 
@@ -268,9 +273,8 @@ class SyncSQLModelRepository(IRepository[T]):
     async def count(self, specification: ISpecification | None = None) -> int:
         """Count entities."""
         import asyncio
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self._sync_count, specification
-        )
+
+        return await asyncio.get_event_loop().run_in_executor(None, self._sync_count, specification)
 
     def _sync_count(self, specification: ISpecification | None = None) -> int:
         """Synchronous count operation."""
@@ -285,6 +289,7 @@ class SyncSQLModelRepository(IRepository[T]):
     async def exists(self, id: UUID) -> bool:
         """Check if entity exists."""
         import asyncio
+
         return await asyncio.get_event_loop().run_in_executor(
             None, lambda: self.session.get(self.model_class, id) is not None
         )
@@ -306,6 +311,7 @@ class RepositoryFactory:
 
 
 # Specific repository interfaces and implementations
+
 
 class ISalesRepository(IRepository):
     """Sales-specific repository interface."""
@@ -331,27 +337,28 @@ class SalesRepository(AsyncSQLModelRepository):
 
     def __init__(self, session: AsyncSession):
         from data_access.models.star_schema import FactSale
+
         super().__init__(session, FactSale)
 
     async def get_by_customer(self, customer_id: str, skip: int = 0, limit: int = 100) -> list[Any]:
         """Get sales by customer ID."""
-        stmt = select(self.model_class).where(
-            self.model_class.customer_key == customer_id
-        ).offset(skip).limit(limit)
+        stmt = (
+            select(self.model_class)
+            .where(self.model_class.customer_key == customer_id)
+            .offset(skip)
+            .limit(limit)
+        )
 
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_by_date_range(self, start_date: str, end_date: str) -> list[Any]:
         """Get sales by date range."""
-        start_key = int(start_date.replace('-', ''))
-        end_key = int(end_date.replace('-', ''))
+        start_key = int(start_date.replace("-", ""))
+        end_key = int(end_date.replace("-", ""))
 
         stmt = select(self.model_class).where(
-            and_(
-                self.model_class.date_key >= start_key,
-                self.model_class.date_key <= end_key
-            )
+            and_(self.model_class.date_key >= start_key, self.model_class.date_key <= end_key)
         )
 
         result = await self.session.execute(stmt)
@@ -359,22 +366,23 @@ class SalesRepository(AsyncSQLModelRepository):
 
     async def get_top_products(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get top-selling products."""
-        stmt = select(
-            self.model_class.product_key,
-            func.sum(self.model_class.total_amount).label('total_sales'),
-            func.count(self.model_class.sale_id).label('sale_count')
-        ).group_by(
-            self.model_class.product_key
-        ).order_by(
-            func.sum(self.model_class.total_amount).desc()
-        ).limit(limit)
+        stmt = (
+            select(
+                self.model_class.product_key,
+                func.sum(self.model_class.total_amount).label("total_sales"),
+                func.count(self.model_class.sale_id).label("sale_count"),
+            )
+            .group_by(self.model_class.product_key)
+            .order_by(func.sum(self.model_class.total_amount).desc())
+            .limit(limit)
+        )
 
         result = await self.session.execute(stmt)
         return [
             {
-                'product_key': row.product_key,
-                'total_sales': float(row.total_sales),
-                'sale_count': row.sale_count
+                "product_key": row.product_key,
+                "total_sales": float(row.total_sales),
+                "sale_count": row.sale_count,
             }
             for row in result.all()
         ]
@@ -382,18 +390,18 @@ class SalesRepository(AsyncSQLModelRepository):
 
 # Common specifications for querying
 
+
 class DateRangeSpecification(BaseSpecification):
     """Specification for date range filtering."""
 
-    def __init__(self, model_class: type, start_date: str, end_date: str, date_field: str = 'date_key'):
-        start_key = int(start_date.replace('-', ''))
-        end_key = int(end_date.replace('-', ''))
+    def __init__(
+        self, model_class: type, start_date: str, end_date: str, date_field: str = "date_key"
+    ):
+        start_key = int(start_date.replace("-", ""))
+        end_key = int(end_date.replace("-", ""))
         date_field_attr = getattr(model_class, date_field)
 
-        conditions = [
-            date_field_attr >= start_key,
-            date_field_attr <= end_key
-        ]
+        conditions = [date_field_attr >= start_key, date_field_attr <= end_key]
         super().__init__(conditions)
 
 
@@ -425,6 +433,7 @@ class CountrySpecification(BaseSpecification):
 
 
 # Repository registry for dependency injection
+
 
 class RepositoryRegistry:
     """Registry for managing repository instances."""

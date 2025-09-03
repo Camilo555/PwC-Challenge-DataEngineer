@@ -28,17 +28,17 @@ with engine.connect() as conn:
 
     # Insert sample data
     conn.execute(text("""
-        INSERT INTO retail_invoices VALUES 
+        INSERT INTO retail_invoices VALUES
         ('INV001', 'PROD001', 'GIFT BASKET SET', 2, 25.50, 'CUST001', 'UK', '2023-01-15'),
         ('INV002', 'PROD002', 'VINTAGE BAG', 1, 45.00, 'CUST002', 'France', '2023-02-20')
     """))
 
     # Test transaction query (simplified)
     query = """
-        SELECT 
+        SELECT
             invoice_no,
             ('Customer ' || customer_id) as customer_name,
-            CASE 
+            CASE
                 WHEN UPPER(description) LIKE '%GIFT%' THEN 'Gifts'
                 WHEN UPPER(description) LIKE '%VINTAGE%' THEN 'Vintage'
                 ELSE 'General'

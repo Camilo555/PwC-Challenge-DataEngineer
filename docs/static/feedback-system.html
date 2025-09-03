@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation Feedback System</title>
+    <style>
+        .feedback-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        
+        .feedback-toggle {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 15px 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .feedback-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .feedback-icon {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+        
+        .feedback-panel {
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            width: 380px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            transform: translateY(20px) scale(0.95);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .feedback-panel.active {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .feedback-header {
+            padding: 20px 20px 15px 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .feedback-header h3 {
+            margin: 0 0 5px 0;
+            color: #1a202c;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .feedback-header p {
+            margin: 0;
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .feedback-content {
+            padding: 20px;
+        }
+        
+        .feedback-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .feedback-tab {
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .feedback-tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feedback-form {
+            display: none;
+        }
+        
+        .feedback-form.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .form-input,
+        .form-textarea,
+        .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        .form-input:focus,
+        .form-textarea:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .rating-group {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        
+        .rating-star {
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            color: #d1d5db;
+            transition: color 0.2s ease;
+        }
+        
+        .rating-star:hover,
+        .rating-star.active {
+            color: #fbbf24;
+        }
+        
+        .feedback-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn-secondary {
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+        
+        .success-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #059669;
+        }
+        
+        .success-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            color: #10b981;
+        }
+        
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .quick-action {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .quick-action:hover {
+            background: #e2e8f0;
+            border-color: #667eea;
+        }
+        
+        .quick-action.selected {
+            background: #ede9fe;
+            border-color: #667eea;
+            color: #667eea;
+        }
+        
+        @media (max-width: 480px) {
+            .feedback-panel {
+                width: calc(100vw - 40px);
+                right: -10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="feedback-widget" id="feedbackWidget">
+        <button class="feedback-toggle" id="feedbackToggle">
+            <svg class="feedback-icon" viewBox="0 0 24 24">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 13.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1-4.5h-2V6h2v5z"/>
+            </svg>
+            Feedback
+        </button>
+        
+        <div class="feedback-panel" id="feedbackPanel">
+            <div class="feedback-header">
+                <h3>Help us improve</h3>
+                <p>Your feedback helps us make better documentation</p>
+            </div>
+            
+            <div class="feedback-content">
+                <div class="feedback-tabs">
+                    <button class="feedback-tab active" onclick="showFeedbackForm('rating')">Rate</button>
+                    <button class="feedback-tab" onclick="showFeedbackForm('suggestion')">Suggest</button>
+                    <button class="feedback-tab" onclick="showFeedbackForm('report')">Report Issue</button>
+                </div>
+                
+                <!-- Rating Form -->
+                <form class="feedback-form active" id="ratingForm">
+                    <div class="form-group">
+                        <label class="form-label">How would you rate this documentation?</label>
+                        <div class="rating-group" id="ratingStars">
+                            <svg class="rating-star" viewBox="0 0 24 24" data-rating="1">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                            <svg class="rating-star" viewBox="0 0 24 24" data-rating="2">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                            <svg class="rating-star" viewBox="0 0 24 24" data-rating="3">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                            <svg class="rating-star" viewBox="0 0 24 24" data-rating="4">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                            <svg class="rating-star" viewBox="0 0 24 24" data-rating="5">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-actions">
+                        <div class="quick-action" data-feedback="clear">Very Clear</div>
+                        <div class="quick-action" data-feedback="helpful">Very Helpful</div>
+                        <div class="quick-action" data-feedback="outdated">Needs Update</div>
+                        <div class="quick-action" data-feedback="confusing">Confusing</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Additional comments (optional)</label>
+                        <textarea class="form-textarea" name="comments" placeholder="What can we improve?"></textarea>
+                    </div>
+                </form>
+                
+                <!-- Suggestion Form -->
+                <form class="feedback-form" id="suggestionForm">
+                    <div class="form-group">
+                        <label class="form-label">What would you like to see improved?</label>
+                        <select class="form-select" name="suggestion_type">
+                            <option value="">Select category</option>
+                            <option value="content">Content & Examples</option>
+                            <option value="navigation">Navigation & Structure</option>
+                            <option value="search">Search & Discoverability</option>
+                            <option value="api">API Documentation</option>
+                            <option value="tutorials">Tutorials & Guides</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Your suggestion</label>
+                        <textarea class="form-textarea" name="suggestion_text" placeholder="Describe your suggestion in detail..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select" name="priority">
+                            <option value="low">Low - Nice to have</option>
+                            <option value="medium" selected>Medium - Would help</option>
+                            <option value="high">High - Critical improvement</option>
+                        </select>
+                    </div>
+                </form>
+                
+                <!-- Report Issue Form -->
+                <form class="feedback-form" id="reportForm">
+                    <div class="form-group">
+                        <label class="form-label">What type of issue did you find?</label>
+                        <select class="form-select" name="issue_type" required>
+                            <option value="">Select issue type</option>
+                            <option value="broken_link">Broken Link</option>
+                            <option value="outdated_info">Outdated Information</option>
+                            <option value="typo">Typo / Grammar</option>
+                            <option value="missing_info">Missing Information</option>
+                            <option value="technical_error">Technical Error</option>
+                            <option value="accessibility">Accessibility Issue</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Describe the issue</label>
+                        <textarea class="form-textarea" name="issue_description" placeholder="Please describe the issue you encountered..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Expected behavior (optional)</label>
+                        <textarea class="form-textarea" name="expected_behavior" placeholder="What did you expect to happen?"></textarea>
+                    </div>
+                </form>
+                
+                <!-- Success Message -->
+                <div class="success-message" id="successMessage" style="display: none;">
+                    <svg class="success-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12S6.5 22 12 22 22 17.5 22 12 17.5 2 12 2M12 20C7.59 20 4 16.41 4 12S7.59 4 12 4 20 7.59 20 12 16.41 20 12 20M16.59 7.58L10 14.17L7.41 11.59L6 13L10 17L18 9L16.59 7.58Z"/>
+                    </svg>
+                    <h3>Thank you for your feedback!</h3>
+                    <p>We appreciate your input and will use it to improve our documentation.</p>
+                </div>
+                
+                <div class="feedback-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeFeedback()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitFeedback()">Submit Feedback</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DocumentationFeedback {
+            constructor() {
+                this.currentRating = 0;
+                this.selectedQuickActions = new Set();
+                this.currentForm = 'rating';
+                this.init();
+            }
+            
+            init() {
+                this.bindEvents();
+                this.collectPageInfo();
+            }
+            
+            bindEvents() {
+                // Toggle panel
+                document.getElementById('feedbackToggle').addEventListener('click', () => {
+                    this.togglePanel();
+                });
+                
+                // Close panel when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!document.getElementById('feedbackWidget').contains(e.target)) {
+                        this.closePanel();
+                    }
+                });
+                
+                // Rating stars
+                document.querySelectorAll('.rating-star').forEach((star, index) => {
+                    star.addEventListener('click', () => {
+                        this.setRating(index + 1);
+                    });
+                    
+                    star.addEventListener('mouseenter', () => {
+                        this.highlightStars(index + 1);
+                    });
+                });
+                
+                document.getElementById('ratingStars').addEventListener('mouseleave', () => {
+                    this.highlightStars(this.currentRating);
+                });
+                
+                // Quick actions
+                document.querySelectorAll('.quick-action').forEach(action => {
+                    action.addEventListener('click', () => {
+                        this.toggleQuickAction(action);
+                    });
+                });
+            }
+            
+            collectPageInfo() {
+                this.pageInfo = {
+                    url: window.location.href,
+                    title: document.title,
+                    path: window.location.pathname,
+                    userAgent: navigator.userAgent,
+                    timestamp: new Date().toISOString(),
+                    referrer: document.referrer
+                };
+            }
+            
+            togglePanel() {
+                const panel = document.getElementById('feedbackPanel');
+                panel.classList.toggle('active');
+            }
+            
+            closePanel() {
+                const panel = document.getElementById('feedbackPanel');
+                panel.classList.remove('active');
+            }
+            
+            setRating(rating) {
+                this.currentRating = rating;
+                this.highlightStars(rating);
+            }
+            
+            highlightStars(count) {
+                const stars = document.querySelectorAll('.rating-star');
+                stars.forEach((star, index) => {
+                    if (index < count) {
+                        star.classList.add('active');
+                    } else {
+                        star.classList.remove('active');
+                    }
+                });
+            }
+            
+            toggleQuickAction(element) {
+                const feedback = element.dataset.feedback;
+                
+                if (element.classList.contains('selected')) {
+                    element.classList.remove('selected');
+                    this.selectedQuickActions.delete(feedback);
+                } else {
+                    element.classList.add('selected');
+                    this.selectedQuickActions.add(feedback);
+                }
+            }
+            
+            showForm(formType) {
+                // Hide all forms
+                document.querySelectorAll('.feedback-form').forEach(form => {
+                    form.classList.remove('active');
+                });
+                
+                // Show selected form
+                document.getElementById(formType + 'Form').classList.add('active');
+                
+                // Update tabs
+                document.querySelectorAll('.feedback-tab').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                event.target.classList.add('active');
+                
+                this.currentForm = formType;
+            }
+            
+            async submitFeedback() {
+                const formData = this.collectFormData();
+                
+                try {
+                    // Simulate API call - replace with actual endpoint
+                    const response = await fetch('/api/v1/feedback', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    if (response.ok) {
+                        this.showSuccess();
+                        
+                        // Track analytics if available
+                        if (typeof gtag !== 'undefined') {
+                            gtag('event', 'feedback_submitted', {
+                                'feedback_type': this.currentForm,
+                                'rating': this.currentRating,
+                                'page_path': this.pageInfo.path
+                            });
+                        }
+                    } else {
+                        throw new Error('Failed to submit feedback');
+                    }
+                } catch (error) {
+                    console.error('Feedback submission failed:', error);
+                    
+                    // Fallback: store in localStorage for later sync
+                    this.storeFeedbackLocally(formData);
+                    this.showSuccess(); // Still show success to user
+                }
+            }
+            
+            collectFormData() {
+                const baseData = {
+                    type: this.currentForm,
+                    page: this.pageInfo,
+                    timestamp: new Date().toISOString()
+                };
+                
+                switch (this.currentForm) {
+                    case 'rating':
+                        return {
+                            ...baseData,
+                            rating: this.currentRating,
+                            quick_actions: Array.from(this.selectedQuickActions),
+                            comments: document.querySelector('#ratingForm [name="comments"]').value
+                        };
+                    
+                    case 'suggestion':
+                        return {
+                            ...baseData,
+                            suggestion_type: document.querySelector('#suggestionForm [name="suggestion_type"]').value,
+                            suggestion_text: document.querySelector('#suggestionForm [name="suggestion_text"]').value,
+                            priority: document.querySelector('#suggestionForm [name="priority"]').value
+                        };
+                    
+                    case 'report':
+                        return {
+                            ...baseData,
+                            issue_type: document.querySelector('#reportForm [name="issue_type"]').value,
+                            issue_description: document.querySelector('#reportForm [name="issue_description"]').value,
+                            expected_behavior: document.querySelector('#reportForm [name="expected_behavior"]').value
+                        };
+                }
+            }
+            
+            storeFeedbackLocally(formData) {
+                const stored = JSON.parse(localStorage.getItem('documentation_feedback') || '[]');
+                stored.push(formData);
+                localStorage.setItem('documentation_feedback', JSON.stringify(stored));
+            }
+            
+            showSuccess() {
+                // Hide form content
+                document.querySelector('.feedback-tabs').style.display = 'none';
+                document.querySelectorAll('.feedback-form').forEach(form => {
+                    form.style.display = 'none';
+                });
+                document.querySelector('.feedback-buttons').style.display = 'none';
+                
+                // Show success message
+                document.getElementById('successMessage').style.display = 'block';
+                
+                // Auto-close after 3 seconds
+                setTimeout(() => {
+                    this.closePanel();
+                    this.resetForm();
+                }, 3000);
+            }
+            
+            resetForm() {
+                // Reset form visibility
+                document.querySelector('.feedback-tabs').style.display = 'flex';
+                document.querySelectorAll('.feedback-form').forEach(form => {
+                    form.style.display = 'none';
+                });
+                document.getElementById('ratingForm').classList.add('active');
+                document.querySelector('.feedback-buttons').style.display = 'flex';
+                document.getElementById('successMessage').style.display = 'none';
+                
+                // Reset form data
+                this.currentRating = 0;
+                this.selectedQuickActions.clear();
+                this.currentForm = 'rating';
+                this.highlightStars(0);
+                
+                // Reset form inputs
+                document.querySelectorAll('input, textarea, select').forEach(input => {
+                    if (input.type === 'checkbox' || input.type === 'radio') {
+                        input.checked = false;
+                    } else {
+                        input.value = '';
+                    }
+                });
+                
+                // Reset quick actions
+                document.querySelectorAll('.quick-action').forEach(action => {
+                    action.classList.remove('selected');
+                });
+                
+                // Reset tabs
+                document.querySelectorAll('.feedback-tab').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                document.querySelector('.feedback-tab').classList.add('active');
+            }
+        }
+        
+        // Global functions for HTML onclick handlers
+        function showFeedbackForm(formType) {
+            window.feedbackSystem.showForm(formType);
+        }
+        
+        function submitFeedback() {
+            window.feedbackSystem.submitFeedback();
+        }
+        
+        function closeFeedback() {
+            window.feedbackSystem.closePanel();
+        }
+        
+        // Initialize feedback system
+        document.addEventListener('DOMContentLoaded', () => {
+            window.feedbackSystem = new DocumentationFeedback();
+        });
+    </script>
+</body>
+</html>

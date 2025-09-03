@@ -2,6 +2,7 @@
 Async Tasks Router
 Implements the Async Request-Reply pattern for long-running operations.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -19,12 +20,14 @@ logger = get_logger(__name__)
 
 class TaskSubmissionRequest(BaseModel):
     """Request model for task submission."""
+
     task_name: str
     parameters: dict[str, Any]
 
 
 class TaskSubmissionResponse(BaseModel):
     """Response model for task submission."""
+
     task_id: str
     status: str
     submitted_at: str
@@ -34,6 +37,7 @@ class TaskSubmissionResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     """Response model for task status."""
+
     task_id: str
     task_name: str
     status: str
@@ -46,6 +50,7 @@ class TaskStatusResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     """Response model for listing tasks."""
+
     tasks: list[TaskStatusResponse]
     total_count: int
 
@@ -53,11 +58,11 @@ class TaskListResponse(BaseModel):
 @router.post("/submit", response_model=TaskSubmissionResponse)
 async def submit_async_task(
     request: TaskSubmissionRequest,
-    user_id: str | None = Query(None, description="User ID for task tracking")
+    user_id: str | None = Query(None, description="User ID for task tracking"),
 ) -> TaskSubmissionResponse:
     """
     Submit a long-running task for async processing.
-    
+
     Supported task types:
     - generate_comprehensive_report: Generate detailed business reports
     - process_large_dataset: Process large datasets with ETL operations
@@ -70,20 +75,18 @@ async def submit_async_task(
         valid_tasks = [
             "generate_comprehensive_report",
             "process_large_dataset",
-            "run_advanced_analytics"
+            "run_advanced_analytics",
         ]
 
         if request.task_name not in valid_tasks:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid task name. Supported tasks: {', '.join(valid_tasks)}"
+                detail=f"Invalid task name. Supported tasks: {', '.join(valid_tasks)}",
             )
 
         # Submit task
         result = await service.submit_task(
-            task_name=request.task_name,
-            task_args=request.parameters,
-            user_id=user_id
+            task_name=request.task_name, task_args=request.parameters, user_id=user_id
         )
 
         return TaskSubmissionResponse(**result)
@@ -93,8 +96,7 @@ async def submit_async_task(
     except Exception as e:
         logger.error(f"Error submitting task: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit task"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit task"
         )
 
 
@@ -108,8 +110,7 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
 
         if not task_data:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task {task_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Task {task_id} not found"
             )
 
         # Extract progress from Celery meta if available
@@ -126,7 +127,7 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
             updated_at=task_data.get("updated_at"),
             progress=progress,
             result=task_data.get("result"),
-            error=task_data.get("error")
+            error=task_data.get("error"),
         )
 
     except HTTPException:
@@ -135,7 +136,7 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
         logger.error(f"Error getting task status: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve task status"
+            detail="Failed to retrieve task status",
         )
 
 
@@ -150,7 +151,7 @@ async def cancel_task(task_id: str):
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task {task_id} not found or cannot be cancelled"
+                detail=f"Task {task_id} not found or cannot be cancelled",
             )
 
         logger.info(f"Task {task_id} cancelled successfully")
@@ -160,8 +161,7 @@ async def cancel_task(task_id: str):
     except Exception as e:
         logger.error(f"Error cancelling task: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to cancel task"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to cancel task"
         )
 
 
@@ -169,7 +169,7 @@ async def cancel_task(task_id: str):
 async def list_user_tasks(
     user_id: str,
     status_filter: str | None = Query(None, description="Filter by task status"),
-    limit: int = Query(50, ge=1, le=100)
+    limit: int = Query(50, ge=1, le=100),
 ) -> TaskListResponse:
     """List all tasks for a specific user."""
     service = AsyncTaskService()
@@ -188,21 +188,18 @@ async def list_user_tasks(
                 submitted_at=task["submitted_at"],
                 updated_at=task.get("updated_at"),
                 result=task.get("result"),
-                error=task.get("error")
+                error=task.get("error"),
             )
             for task in limited_tasks
         ]
 
-        return TaskListResponse(
-            tasks=task_responses,
-            total_count=len(tasks)
-        )
+        return TaskListResponse(tasks=task_responses, total_count=len(tasks))
 
     except Exception as e:
         logger.error(f"Error listing user tasks: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve user tasks"
+            detail="Failed to retrieve user tasks",
         )
 
 
@@ -221,6 +218,7 @@ async def get_task_statistics() -> dict[str, Any]:
             task_data = service.redis_client.get(key)
             if task_data:
                 import json
+
                 task_metadata = json.loads(task_data)
                 all_tasks.append(task_metadata)
 
@@ -245,18 +243,19 @@ async def get_task_statistics() -> dict[str, Any]:
             "status_distribution": status_counts,
             "task_type_distribution": task_type_counts,
             "success_rate_percentage": round(success_rate, 2),
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Error getting task statistics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve task statistics"
+            detail="Failed to retrieve task statistics",
         )
 
 
 # Task-specific endpoints
+
 
 @router.post("/reports/generate", response_model=TaskSubmissionResponse)
 async def generate_report(
@@ -265,7 +264,7 @@ async def generate_report(
     date_to: str | None = Query(None),
     country: str | None = Query(None),
     category: str | None = Query(None),
-    user_id: str | None = Query(None)
+    user_id: str | None = Query(None),
 ) -> TaskSubmissionResponse:
     """Generate a comprehensive business report asynchronously."""
     service = AsyncTaskService()
@@ -276,14 +275,12 @@ async def generate_report(
             "date_from": date_from,
             "date_to": date_to,
             "country": country,
-            "category": category
-        }
+            "category": category,
+        },
     }
 
     result = await service.submit_task(
-        task_name="generate_comprehensive_report",
-        task_args=parameters,
-        user_id=user_id
+        task_name="generate_comprehensive_report", task_args=parameters, user_id=user_id
     )
 
     return TaskSubmissionResponse(**result)
@@ -295,7 +292,7 @@ async def process_dataset(
     engine: str = Query("pandas", description="Processing engine (pandas/spark)"),
     enable_quality_checks: bool = Query(True),
     enable_enrichment: bool = Query(False),
-    user_id: str | None = Query(None)
+    user_id: str | None = Query(None),
 ) -> TaskSubmissionResponse:
     """Process a large dataset asynchronously."""
     service = AsyncTaskService()
@@ -305,14 +302,12 @@ async def process_dataset(
         "processing_options": {
             "engine": engine,
             "enable_quality_checks": enable_quality_checks,
-            "enable_enrichment": enable_enrichment
-        }
+            "enable_enrichment": enable_enrichment,
+        },
     }
 
     result = await service.submit_task(
-        task_name="process_large_dataset",
-        task_args=parameters,
-        user_id=user_id
+        task_name="process_large_dataset", task_args=parameters, user_id=user_id
     )
 
     return TaskSubmissionResponse(**result)
@@ -323,23 +318,18 @@ async def run_analytics(
     analysis_type: str = Query(..., description="Type of analysis (rfm/segmentation/forecasting)"),
     include_ml: bool = Query(False, description="Include machine learning models"),
     confidence_level: float = Query(0.95, ge=0.1, le=0.99),
-    user_id: str | None = Query(None)
+    user_id: str | None = Query(None),
 ) -> TaskSubmissionResponse:
     """Run advanced analytics and ML models asynchronously."""
     service = AsyncTaskService()
 
     parameters = {
         "analysis_type": analysis_type,
-        "parameters": {
-            "include_ml": include_ml,
-            "confidence_level": confidence_level
-        }
+        "parameters": {"include_ml": include_ml, "confidence_level": confidence_level},
     }
 
     result = await service.submit_task(
-        task_name="run_advanced_analytics",
-        task_args=parameters,
-        user_id=user_id
+        task_name="run_advanced_analytics", task_args=parameters, user_id=user_id
     )
 
     return TaskSubmissionResponse(**result)

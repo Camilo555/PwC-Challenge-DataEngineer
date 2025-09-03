@@ -1,0 +1,342 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "data-platform.fullname" . }}-api
+  namespace: {{ .Values.global.namespace | default "pwc-data-platform" }}
+  labels:
+    {{- include "data-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: data-platform
+    version: {{ .Values.api.image.tag | default .Chart.AppVersion }}
+  annotations:
+    deployment.kubernetes.io/revision: {{ .Release.Revision | quote }}
+    configmap.reloader.stakater.com/reload: "{{ include "data-platform.fullname" . }}-config"
+    secret.reloader.stakater.com/reload: "{{ include "data-platform.fullname" . }}-secrets"
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  
+  selector:
+    matchLabels:
+      {{- include "data-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  
+  template:
+    metadata:
+      labels:
+        {{- include "data-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        version: {{ .Values.api.image.tag | default .Chart.AppVersion }}
+        {{- if .Values.serviceMesh.istio.enabled }}
+        sidecar.istio.io/inject: "true"
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- if .Values.monitoring.datadog.enabled }}
+        ad.datadoghq.com/api.check_names: '["http_check"]'
+        ad.datadoghq.com/api.init_configs: '[{}]'
+        ad.datadoghq.com/api.instances: '[{"name": "pwc-api-health", "url": "http://%%host%%:8000/health", "timeout": 5}]'
+        ad.datadoghq.com/api.logs: '[{"source": "fastapi", "service": "pwc-api"}]'
+        {{- end }}
+        
+    spec:
+      {{- with .Values.api.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      serviceAccountName: {{ include "data-platform.serviceAccountName" . }}
+      
+      securityContext:
+        {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Init containers for dependency checks
+      initContainers:
+        - name: wait-for-database
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              until nc -z {{ .Values.database.primary.host }} {{ .Values.database.primary.port }}; do
+                echo "Waiting for database..."
+                sleep 2
+              done
+              echo "Database is ready!"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+        
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command: ['redis-cli']
+          args:
+            - '-h'
+            - '{{ include "data-platform.fullname" . }}-redis-master'
+            - '-p'
+            - '6379'
+            - 'ping'
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
+      
+      containers:
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          
+          securityContext:
+            {{- toYaml .Values.api.securityContext | nindent 12 }}
+          
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 8001
+              protocol: TCP
+          
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.global.environment }}
+            - name: CLOUD_PROVIDER
+              value: {{ .Values.global.cloudProvider }}
+            - name: PYTHONPATH
+              value: "/app/src"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            
+            # Database configuration
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-platform.fullname" . }}-secrets
+                  key: database-url
+            
+            # Redis configuration
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-platform.fullname" . }}-secrets
+                  key: redis-url
+            {{- end }}
+            
+            # Security configuration
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-platform.fullname" . }}-secrets
+                  key: secret-key
+            
+            # Monitoring configuration
+            {{- if .Values.monitoring.datadog.enabled }}
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_ENV
+              value: {{ .Values.global.environment }}
+            - name: DD_SERVICE
+              value: "pwc-api"
+            - name: DD_VERSION
+              value: {{ .Values.api.image.tag | default .Chart.AppVersion }}
+            - name: DD_TRACE_ENABLED
+              value: "true"
+            {{- end }}
+            
+            # Resource limits for application
+            - name: MAX_WORKERS
+              value: {{ .Values.api.workers | default "4" | quote }}
+            - name: WORKER_CLASS
+              value: "uvicorn.workers.UvicornWorker"
+            
+          envFrom:
+            - configMapRef:
+                name: {{ include "data-platform.fullname" . }}-config
+          
+          {{- if .Values.api.health.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.api.health.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.api.health.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.health.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.health.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.health.livenessProbe.failureThreshold }}
+          {{- end }}
+          
+          {{- if .Values.api.health.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.api.health.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.api.health.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.health.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.health.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.health.readinessProbe.failureThreshold }}
+          {{- end }}
+          
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          
+          volumeMounts:
+            - name: temp-volume
+              mountPath: /tmp
+            - name: app-logs
+              mountPath: /app/logs
+            - name: config-volume
+              mountPath: /app/config
+              readOnly: true
+            {{- if .Values.persistence.enabled }}
+            - name: data-storage
+              mountPath: /app/data
+            {{- end }}
+        
+        # Sidecar container for log processing
+        {{- if .Values.monitoring.enabled }}
+        - name: log-processor
+          image: fluent/fluent-bit:2.2
+          imagePullPolicy: IfNotPresent
+          
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          volumeMounts:
+            - name: app-logs
+              mountPath: /app/logs
+              readOnly: true
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc/fluent-bit.conf
+              subPath: fluent-bit.conf
+              readOnly: true
+          
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+        {{- end }}
+      
+      volumes:
+        - name: temp-volume
+          emptyDir: {}
+        - name: app-logs
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: {{ include "data-platform.fullname" . }}-config
+        
+        {{- if .Values.monitoring.enabled }}
+        - name: fluent-bit-config
+          configMap:
+            name: {{ include "data-platform.fullname" . }}-fluent-bit-config
+        {{- end }}
+        
+        {{- if .Values.persistence.enabled }}
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: {{ include "data-platform.fullname" . }}-data-pvc
+        {{- end }}
+      
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.costOptimization.enabled }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values: ["amd64"]
+            - weight: 30
+              preference:
+                matchExpressions:
+                - key: node.kubernetes.io/instance-type
+                  operator: In
+                  values: ["t3.medium", "t3.large"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/component
+                      operator: In
+                      values: ["api"]
+                topologyKey: kubernetes.io/hostname
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      # Enable spot instance toleration for cost optimization
+      {{- if and .Values.costOptimization.enabled .Values.costOptimization.spotInstances.enabled }}
+      tolerations:
+        - key: "node.kubernetes.io/spot"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+        - key: "kubernetes.azure.com/scalesetpriority"
+          operator: "Equal"
+          value: "spot"
+          effect: "NoSchedule"
+        - key: "cloud.google.com/gke-preemptible"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      {{- end }}
+      
+      terminationGracePeriodSeconds: 30
+      
+      # DNS configuration for service discovery
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+          - name: edns0

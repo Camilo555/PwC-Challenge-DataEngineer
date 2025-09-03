@@ -2,6 +2,7 @@
 Sales Domain Service
 Business logic for sales operations following domain-driven design principles.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,18 +22,14 @@ class SalesService(ISalesService):
     Orchestrates business logic and repository operations.
     """
 
-    def __init__(
-        self,
-        sales_repository: ISalesRepository,
-        unit_of_work: IUnitOfWork
-    ):
+    def __init__(self, sales_repository: ISalesRepository, unit_of_work: IUnitOfWork):
         self._sales_repository = sales_repository
         self._unit_of_work = unit_of_work
 
     async def get_sales(self, criteria: SalesSearchCriteria) -> tuple[list[Sale], int]:
         """
         Get sales with business rules applied.
-        
+
         Business Rules:
         - Apply default sorting if none provided
         - Validate date ranges
@@ -55,7 +52,7 @@ class SalesService(ISalesService):
             country=criteria.country,
             page=criteria.page,
             size=criteria.size,
-            sort=criteria.sort
+            sort=criteria.sort,
         )
 
         # Apply business logic to results

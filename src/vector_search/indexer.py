@@ -30,7 +30,7 @@ def ensure_collection() -> None:
             {"name": "is_weekend", "type": "bool", "optional": True},
             {"name": "is_high_value", "type": "bool", "optional": True},
             {"name": "region", "type": "string", "facet": True, "optional": True},
-            {"name": "product_brand", "type": "string", "facet": True, "optional": True}
+            {"name": "product_brand", "type": "string", "facet": True, "optional": True},
         ],
         "default_sorting_field": "total",
     }
@@ -69,11 +69,7 @@ def index_sales(page_size: int = 1000, max_pages: int = 10) -> dict[str, Any]:
                     "total": float(it.total),
                 }
             )
-        client.collections[COLLECTION].documents.import_(
-            docs, {
-                "action": "upsert"
-            }
-        )
+        client.collections[COLLECTION].documents.import_(docs, {"action": "upsert"})
         total_indexed += len(docs)
         if page * page_size >= total:
             break

@@ -2,6 +2,7 @@
 Alerting System
 Provides comprehensive alerting capabilities for monitoring events.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,6 +25,7 @@ logger = get_logger(__name__)
 
 class AlertSeverity(Enum):
     """Alert severity levels."""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -32,6 +34,7 @@ class AlertSeverity(Enum):
 
 class AlertStatus(Enum):
     """Alert lifecycle status."""
+
     ACTIVE = "active"
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
@@ -41,6 +44,7 @@ class AlertStatus(Enum):
 @dataclass
 class Alert:
     """Alert data structure."""
+
     id: str
     title: str
     description: str
@@ -68,13 +72,14 @@ class Alert:
             "annotations": self.annotations,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
-            "acknowledged_by": self.acknowledged_by
+            "acknowledged_by": self.acknowledged_by,
         }
 
 
 @dataclass
 class AlertRule:
     """Alert rule configuration."""
+
     id: str
     name: str
     condition: Callable[[dict[str, Any]], bool]
@@ -108,7 +113,7 @@ class BaseAlertChannel:
             AlertSeverity.INFO: "ℹ️",
             AlertSeverity.WARNING: "⚠️",
             AlertSeverity.ERROR: "❌",
-            AlertSeverity.CRITICAL: "🚨"
+            AlertSeverity.CRITICAL: "🚨",
         }
 
         emoji = severity_emoji.get(alert.severity, "📢")
@@ -127,9 +132,17 @@ class BaseAlertChannel:
 class EmailAlertChannel(BaseAlertChannel):
     """Email notification channel."""
 
-    def __init__(self, name: str, smtp_host: str, smtp_port: int,
-                 username: str, password: str, from_email: str,
-                 to_emails: list[str], use_tls: bool = True):
+    def __init__(
+        self,
+        name: str,
+        smtp_host: str,
+        smtp_port: int,
+        username: str,
+        password: str,
+        from_email: str,
+        to_emails: list[str],
+        use_tls: bool = True,
+    ):
         super().__init__(name)
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
@@ -143,16 +156,16 @@ class EmailAlertChannel(BaseAlertChannel):
         """Send alert via email."""
         try:
             msg = MIMEMultipart()
-            msg['From'] = self.from_email
-            msg['To'] = ', '.join(self.to_emails)
-            msg['Subject'] = f"[{alert.severity.value.upper()}] {alert.title}"
+            msg["From"] = self.from_email
+            msg["To"] = ", ".join(self.to_emails)
+            msg["Subject"] = f"[{alert.severity.value.upper()}] {alert.title}"
 
             # Create HTML and text versions
             text_body = self.format_alert_message(alert)
             html_body = self._format_html_alert(alert)
 
-            msg.attach(MIMEText(text_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
+            msg.attach(MIMEText(text_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
 
             # Send email
             server = smtplib.SMTP(self.smtp_host, self.smtp_port)
@@ -177,7 +190,7 @@ class EmailAlertChannel(BaseAlertChannel):
             AlertSeverity.INFO: "#2196F3",
             AlertSeverity.WARNING: "#FF9800",
             AlertSeverity.ERROR: "#F44336",
-            AlertSeverity.CRITICAL: "#9C27B0"
+            AlertSeverity.CRITICAL: "#9C27B0",
         }
 
         color = severity_colors.get(alert.severity, "#757575")
@@ -202,7 +215,7 @@ class EmailAlertChannel(BaseAlertChannel):
                 <p><strong>Description:</strong> {alert.description}</p>
                 <div class="alert-meta">
                     <p><strong>Source:</strong> {alert.source}</p>
-                    <p><strong>Timestamp:</strong> {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+                    <p><strong>Timestamp:</strong> {alert.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")}</p>
                     <p><strong>Alert ID:</strong> {alert.id}</p>
                 </div>
         """
@@ -211,7 +224,7 @@ class EmailAlertChannel(BaseAlertChannel):
             html += '<div class="labels"><strong>Labels:</strong><br>'
             for key, value in alert.labels.items():
                 html += f'<span class="label">{key}={value}</span>'
-            html += '</div>'
+            html += "</div>"
 
         html += """
             </div>
@@ -225,8 +238,13 @@ class EmailAlertChannel(BaseAlertChannel):
 class WebhookAlertChannel(BaseAlertChannel):
     """Webhook notification channel."""
 
-    def __init__(self, name: str, webhook_url: str, headers: dict[str, str] | None = None,
-                 timeout: float = 10.0):
+    def __init__(
+        self,
+        name: str,
+        webhook_url: str,
+        headers: dict[str, str] | None = None,
+        timeout: float = 10.0,
+    ):
         super().__init__(name)
         self.webhook_url = webhook_url
         self.headers = headers or {"Content-Type": "application/json"}
@@ -238,18 +256,22 @@ class WebhookAlertChannel(BaseAlertChannel):
             payload = {
                 "alert": alert.to_dict(),
                 "message": self.format_alert_message(alert),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             }
 
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
-                async with session.post(self.webhook_url,
-                                      json=payload,
-                                      headers=self.headers) as response:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as session:
+                async with session.post(
+                    self.webhook_url, json=payload, headers=self.headers
+                ) as response:
                     if response.status < 300:
                         logger.info(f"Alert sent via webhook: {alert.id}")
                         return True
                     else:
-                        logger.error(f"Webhook returned status {response.status} for alert {alert.id}")
+                        logger.error(
+                            f"Webhook returned status {response.status} for alert {alert.id}"
+                        )
                         return False
 
         except Exception as e:
@@ -269,14 +291,18 @@ class SlackAlertChannel(WebhookAlertChannel):
             AlertSeverity.INFO: "#36a64f",
             AlertSeverity.WARNING: "#ff9900",
             AlertSeverity.ERROR: "#ff0000",
-            AlertSeverity.CRITICAL: "#8b0000"
+            AlertSeverity.CRITICAL: "#8b0000",
         }
 
         color = severity_colors.get(alert.severity, "#000000")
 
         fields = [
             {"title": "Source", "value": alert.source, "short": True},
-            {"title": "Timestamp", "value": alert.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC'), "short": True}
+            {
+                "title": "Timestamp",
+                "value": alert.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "short": True,
+            },
         ]
 
         if alert.labels:
@@ -291,7 +317,7 @@ class SlackAlertChannel(WebhookAlertChannel):
                     "text": alert.description,
                     "fields": fields,
                     "footer": f"Alert ID: {alert.id}",
-                    "ts": int(alert.timestamp.timestamp())
+                    "ts": int(alert.timestamp.timestamp()),
                 }
             ]
         }
@@ -301,13 +327,17 @@ class SlackAlertChannel(WebhookAlertChannel):
         try:
             payload = self.format_alert_message(alert)
 
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as session:
                 async with session.post(self.webhook_url, json=payload) as response:
                     if response.status < 300:
                         logger.info(f"Alert sent to Slack: {alert.id}")
                         return True
                     else:
-                        logger.error(f"Slack webhook returned status {response.status} for alert {alert.id}")
+                        logger.error(
+                            f"Slack webhook returned status {response.status} for alert {alert.id}"
+                        )
                         return False
 
         except Exception as e:
@@ -356,7 +386,7 @@ class AlertManager:
             AlertSeverity.INFO: [],
             AlertSeverity.WARNING: [],
             AlertSeverity.ERROR: [],
-            AlertSeverity.CRITICAL: []
+            AlertSeverity.CRITICAL: [],
         }
         self.global_suppression: bool = False
         self.suppressed_rules: set[str] = set()
@@ -413,8 +443,7 @@ class AlertManager:
 
             try:
                 # Check cooldown period
-                if (rule.last_fired and
-                    current_time - rule.last_fired < rule.cooldown):
+                if rule.last_fired and current_time - rule.last_fired < rule.cooldown:
                     continue
 
                 # Evaluate condition
@@ -428,7 +457,7 @@ class AlertManager:
                         source=rule_id,
                         timestamp=current_time,
                         labels=rule.labels.copy(),
-                        annotations=rule.annotations.copy()
+                        annotations=rule.annotations.copy(),
                     )
 
                     rule.last_fired = current_time
@@ -508,8 +537,7 @@ class AlertManager:
     async def _resolve_alerts_for_rule(self, rule_id: str):
         """Resolve all active alerts for a specific rule."""
         alerts_to_resolve = [
-            alert for alert in self.active_alerts.values()
-            if alert.source == rule_id
+            alert for alert in self.active_alerts.values() if alert.source == rule_id
         ]
 
         for alert in alerts_to_resolve:
@@ -525,8 +553,7 @@ class AlertManager:
 
     def get_alerts_by_severity(self, severity: AlertSeverity) -> list[Alert]:
         """Get active alerts by severity."""
-        return [alert for alert in self.active_alerts.values()
-                if alert.severity == severity]
+        return [alert for alert in self.active_alerts.values() if alert.severity == severity]
 
     def get_alert_summary(self) -> dict[str, Any]:
         """Get summary of alert system status."""
@@ -544,24 +571,28 @@ class AlertManager:
             "total_channels": len(self.channels),
             "enabled_channels": len([c for c in self.channels.values() if c.enabled]),
             "global_suppression": self.global_suppression,
-            "total_history": len(self.alert_history)
+            "total_history": len(self.alert_history),
         }
 
 
 # Pre-defined alert rules for common scenarios
 
-def create_health_check_rule(component_name: str, severity: AlertSeverity = AlertSeverity.ERROR) -> AlertRule:
+
+def create_health_check_rule(
+    component_name: str, severity: AlertSeverity = AlertSeverity.ERROR
+) -> AlertRule:
     """Create alert rule for health check failures."""
     return AlertRule(
         id=f"health_check_{component_name}",
         name=f"{component_name} Health Check Failed",
         condition=lambda ctx: (
-            ctx.get("health_checks", {}).get(component_name, {}).get("status") == HealthStatus.UNHEALTHY.value
+            ctx.get("health_checks", {}).get(component_name, {}).get("status")
+            == HealthStatus.UNHEALTHY.value
         ),
         severity=severity,
         description=f"Health check for {component_name} is failing",
         labels={"component": component_name, "type": "health_check"},
-        cooldown=timedelta(minutes=5)
+        cooldown=timedelta(minutes=5),
     )
 
 
@@ -571,17 +602,19 @@ def create_etl_failure_rule(job_name: str, failure_threshold: float = 0.1) -> Al
         id=f"etl_failure_{job_name}",
         name=f"ETL Job {job_name} High Failure Rate",
         condition=lambda ctx: (
-            ctx.get("etl_jobs", {}).get(job_name, {}).get("success_rate", 1.0) < (1.0 - failure_threshold)
+            ctx.get("etl_jobs", {}).get(job_name, {}).get("success_rate", 1.0)
+            < (1.0 - failure_threshold)
         ),
         severity=AlertSeverity.WARNING,
-        description=f"ETL job {job_name} has high failure rate (>{failure_threshold*100}%)",
+        description=f"ETL job {job_name} has high failure rate (>{failure_threshold * 100}%)",
         labels={"job": job_name, "type": "etl_failure"},
-        cooldown=timedelta(minutes=10)
+        cooldown=timedelta(minutes=10),
     )
 
 
-def create_system_resource_rule(resource_type: str, threshold: float,
-                              severity: AlertSeverity = AlertSeverity.WARNING) -> AlertRule:
+def create_system_resource_rule(
+    resource_type: str, threshold: float, severity: AlertSeverity = AlertSeverity.WARNING
+) -> AlertRule:
     """Create alert rule for system resource usage."""
     return AlertRule(
         id=f"system_{resource_type}_high",
@@ -592,7 +625,7 @@ def create_system_resource_rule(resource_type: str, threshold: float,
         severity=severity,
         description=f"System {resource_type} usage is above {threshold}%",
         labels={"resource": resource_type, "type": "system_resource"},
-        cooldown=timedelta(minutes=5)
+        cooldown=timedelta(minutes=5),
     )
 
 

@@ -2,6 +2,7 @@
 Base Service for API Layer
 Provides abstract base class for service layer implementation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,12 +14,12 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlmodel import Session
 
-from core.logging import get_logger
 from core.caching.redis_cache import get_default_cache
+from core.logging import get_logger
 
-T = TypeVar('T', bound=BaseModel)
-CreateT = TypeVar('CreateT', bound=BaseModel)
-UpdateT = TypeVar('UpdateT', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+CreateT = TypeVar("CreateT", bound=BaseModel)
+UpdateT = TypeVar("UpdateT", bound=BaseModel)
 
 logger = get_logger(__name__)
 
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     """
     Abstract base service class implementing common CRUD operations.
-    
+
     Provides standardized service layer patterns for all domain entities.
     """
 
@@ -37,10 +38,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def create(self, item: CreateT) -> T:
         """
         Create a new entity.
-        
+
         Args:
             item: Entity creation data
-            
+
         Returns:
             Created entity
         """
@@ -50,10 +51,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def read(self, id: UUID) -> T | None:
         """
         Read an entity by ID.
-        
+
         Args:
             id: Entity ID
-            
+
         Returns:
             Entity if found, None otherwise
         """
@@ -63,11 +64,11 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def update(self, id: UUID, item: UpdateT) -> T | None:
         """
         Update an entity.
-        
+
         Args:
             id: Entity ID
             item: Entity update data
-            
+
         Returns:
             Updated entity if found, None otherwise
         """
@@ -77,10 +78,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def delete(self, id: UUID) -> bool:
         """
         Delete an entity.
-        
+
         Args:
             id: Entity ID
-            
+
         Returns:
             True if deleted, False if not found
         """
@@ -88,19 +89,16 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
 
     @abstractmethod
     async def list(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        filters: dict[str, Any] | None = None
+        self, skip: int = 0, limit: int = 100, filters: dict[str, Any] | None = None
     ) -> list[T]:
         """
         List entities with pagination and filtering.
-        
+
         Args:
             skip: Number of entities to skip
             limit: Maximum number of entities to return
             filters: Optional filters to apply
-            
+
         Returns:
             List of entities
         """
@@ -110,10 +108,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def count(self, filters: dict[str, Any] | None = None) -> int:
         """
         Count entities with optional filtering.
-        
+
         Args:
             filters: Optional filters to apply
-            
+
         Returns:
             Count of entities
         """
@@ -123,10 +121,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def batch_create(self, items: builtins.list[CreateT]) -> builtins.list[T]:
         """
         Create multiple entities in batch.
-        
+
         Args:
             items: List of entities to create
-            
+
         Returns:
             List of created entities
         """
@@ -139,16 +137,16 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def batch_update(self, updates: builtins.list[dict[str, Any]]) -> builtins.list[T | None]:
         """
         Update multiple entities in batch.
-        
+
         Args:
             updates: List of update dictionaries with 'id' and update fields
-            
+
         Returns:
             List of updated entities
         """
         results = []
         for update_data in updates:
-            entity_id = update_data.pop('id')
+            entity_id = update_data.pop("id")
             updated = await self.update(entity_id, update_data)
             results.append(updated)
         return results
@@ -156,10 +154,10 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     async def batch_delete(self, ids: builtins.list[UUID]) -> builtins.list[bool]:
         """
         Delete multiple entities in batch.
-        
+
         Args:
             ids: List of entity IDs to delete
-            
+
         Returns:
             List of deletion results
         """
@@ -174,11 +172,11 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     def _apply_filters(self, query, filters: dict[str, Any] | None):
         """
         Apply filters to a query.
-        
+
         Args:
             query: SQLModel query
             filters: Dictionary of filters to apply
-            
+
         Returns:
             Filtered query
         """
@@ -187,15 +185,17 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
 
         # This is a basic implementation - should be overridden in concrete services
         for field, value in filters.items():
-            if hasattr(query.column_descriptions[0]['type'], field):
-                query = query.filter(getattr(query.column_descriptions[0]['type'], field) == value)
+            if hasattr(query.column_descriptions[0]["type"], field):
+                query = query.filter(getattr(query.column_descriptions[0]["type"], field) == value)
 
         return query
 
-    def _log_operation(self, operation: str, entity_id: UUID | None = None, details: str | None = None):
+    def _log_operation(
+        self, operation: str, entity_id: UUID | None = None, details: str | None = None
+    ):
         """
         Log service operations for auditing.
-        
+
         Args:
             operation: Operation name
             entity_id: Optional entity ID
@@ -212,11 +212,11 @@ class BaseService(ABC, Generic[T, CreateT, UpdateT]):
     def _validate_pagination(self, skip: int, limit: int) -> tuple[int, int]:
         """
         Validate and normalize pagination parameters.
-        
+
         Args:
             skip: Skip parameter
             limit: Limit parameter
-            
+
         Returns:
             Validated (skip, limit) tuple
         """
@@ -234,10 +234,10 @@ class BusinessLogicMixin:
     def validate_business_rules(self, entity: Any) -> None:
         """
         Validate business rules for an entity.
-        
+
         Args:
             entity: Entity to validate
-            
+
         Raises:
             ValueError: If business rules are violated
         """
@@ -247,10 +247,10 @@ class BusinessLogicMixin:
     def calculate_derived_fields(self, entity: Any) -> Any:
         """
         Calculate derived fields for an entity.
-        
+
         Args:
             entity: Entity to process
-            
+
         Returns:
             Entity with calculated derived fields
         """
@@ -260,7 +260,7 @@ class BusinessLogicMixin:
     def audit_operation(self, operation: str, entity: Any, user_id: str | None = None) -> None:
         """
         Audit an operation for compliance and tracking.
-        
+
         Args:
             operation: Operation performed
             entity: Entity affected
@@ -282,11 +282,11 @@ class CachingMixin:
     def _get_cache_key(self, operation: str, **kwargs) -> str:
         """
         Generate cache key for an operation.
-        
+
         Args:
             operation: Operation name
             **kwargs: Additional parameters for key generation
-            
+
         Returns:
             Cache key string
         """
@@ -298,10 +298,10 @@ class CachingMixin:
     async def _get_from_cache(self, key: str) -> Any | None:
         """
         Get value from distributed messaging cache.
-        
+
         Args:
             key: Cache key
-            
+
         Returns:
             Cached value or None
         """
@@ -314,7 +314,7 @@ class CachingMixin:
     async def _set_cache(self, key: str, value: Any, ttl: int = 300) -> None:
         """
         Set value in distributed messaging cache.
-        
+
         Args:
             key: Cache key
             value: Value to cache
@@ -328,7 +328,7 @@ class CachingMixin:
     async def _invalidate_cache(self, pattern: str) -> None:
         """
         Invalidate cache entries matching a pattern.
-        
+
         Args:
             pattern: Cache key pattern to invalidate
         """
@@ -340,14 +340,14 @@ class CachingMixin:
     async def _cache_aside(self, key: str, func, ttl: int = 300, *args, **kwargs) -> Any:
         """
         Implement cache-aside pattern for expensive operations.
-        
+
         Args:
             key: Cache key
             func: Function to call on cache miss
             ttl: Time to live in seconds
             *args: Function arguments
             **kwargs: Function keyword arguments
-            
+
         Returns:
             Result from cache or function
         """
@@ -367,10 +367,12 @@ class MetricsMixin:
     Mixin providing metrics collection capabilities.
     """
 
-    def _record_operation_metric(self, operation: str, duration_ms: float, success: bool = True) -> None:
+    def _record_operation_metric(
+        self, operation: str, duration_ms: float, success: bool = True
+    ) -> None:
         """
         Record operation metrics.
-        
+
         Args:
             operation: Operation name
             duration_ms: Operation duration in milliseconds
@@ -382,7 +384,7 @@ class MetricsMixin:
     def _increment_counter(self, metric_name: str, labels: dict[str, str] | None = None) -> None:
         """
         Increment a counter metric.
-        
+
         Args:
             metric_name: Name of the metric
             labels: Optional labels for the metric
@@ -390,10 +392,12 @@ class MetricsMixin:
         # In a real implementation, this would send to monitoring system
         pass
 
-    def _record_histogram(self, metric_name: str, value: float, labels: dict[str, str] | None = None) -> None:
+    def _record_histogram(
+        self, metric_name: str, value: float, labels: dict[str, str] | None = None
+    ) -> None:
         """
         Record a histogram metric.
-        
+
         Args:
             metric_name: Name of the metric
             value: Value to record
@@ -403,7 +407,9 @@ class MetricsMixin:
         pass
 
 
-class EnhancedBaseService(BaseService[T, CreateT, UpdateT], BusinessLogicMixin, CachingMixin, MetricsMixin):
+class EnhancedBaseService(
+    BaseService[T, CreateT, UpdateT], BusinessLogicMixin, CachingMixin, MetricsMixin
+):
     """
     Enhanced base service with business logic, caching, and metrics capabilities.
     """

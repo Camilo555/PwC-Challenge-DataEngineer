@@ -18,7 +18,7 @@ from airflow.utils.dates import days_ago
 from airflow.utils.trigger_rule import TriggerRule
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from core.logging import get_logger
 from etl.bronze.spark_bronze import SparkBronzeProcessor
@@ -32,25 +32,25 @@ logger = get_logger(__name__)
 
 # DAG Configuration
 DEFAULT_ARGS = {
-    'owner': 'data-engineering-team',
-    'depends_on_past': False,
-    'start_date': days_ago(1),
-    'email_on_failure': True,
-    'email_on_retry': False,
-    'retries': 2,
-    'retry_delay': timedelta(minutes=5),
-    'max_active_runs': 1,
-    'catchup': False,
-    'email': ['data-team@company.com'],
+    "owner": "data-engineering-team",
+    "depends_on_past": False,
+    "start_date": days_ago(1),
+    "email_on_failure": True,
+    "email_on_retry": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+    "max_active_runs": 1,
+    "catchup": False,
+    "email": ["data-team@company.com"],
 }
 
 # DAG Definition
 dag = DAG(
-    'enhanced_retail_etl_pipeline',
+    "enhanced_retail_etl_pipeline",
     default_args=DEFAULT_ARGS,
-    description='Enhanced retail data ETL pipeline with Spark and comprehensive monitoring',
-    schedule_interval='@daily',
-    tags=['etl', 'retail', 'spark', 'production'],
+    description="Enhanced retail data ETL pipeline with Spark and comprehensive monitoring",
+    schedule_interval="@daily",
+    tags=["etl", "retail", "spark", "production"],
     doc_md=__doc__,
 )
 
@@ -58,10 +58,11 @@ dag = DAG(
 # UTILITY FUNCTIONS
 # ================================
 
+
 def send_pipeline_notification(context: dict[str, Any], status: str = "success"):
     """Send pipeline status notification"""
-    task_instance = context['task_instance']
-    dag_run = context['dag_run']
+    task_instance = context["task_instance"]
+    dag_run = context["dag_run"]
 
     metrics_collector = get_metrics_collector()
 
@@ -71,7 +72,7 @@ def send_pipeline_notification(context: dict[str, Any], status: str = "success")
             description=f"Task {task_instance.task_id} failed at {datetime.now()}",
             severity=AlertSeverity.HIGH,
             source="airflow",
-            tags={"dag_id": dag_run.dag_id, "task_id": task_instance.task_id}
+            tags={"dag_id": dag_run.dag_id, "task_id": task_instance.task_id},
         )
 
     # Record metrics
@@ -81,8 +82,9 @@ def send_pipeline_notification(context: dict[str, Any], status: str = "success")
         records_processed=0,
         records_failed=0 if status == "success" else 1,
         processing_time=0,
-        data_quality_score=100 if status == "success" else 0
+        data_quality_score=100 if status == "success" else 0,
     )
+
 
 def check_data_availability(**context) -> bool:
     """Check if source data is available for processing"""
@@ -101,21 +103,22 @@ def check_data_availability(**context) -> bool:
             title="Missing Source Data Files",
             description=f"Files not found: {', '.join(missing_files)}",
             severity=AlertSeverity.MEDIUM,
-            source="airflow"
+            source="airflow",
         )
         return False
 
     logger.info("All required data files are available")
     return True
 
+
 def validate_database_connection(**context) -> bool:
     """Validate database connectivity"""
     try:
-        postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
+        postgres_hook = PostgresHook(postgres_conn_id="postgres_default")
         connection = postgres_hook.get_conn()
         cursor = connection.cursor()
         cursor.execute("SELECT 1")
-        result = cursor.fetchone()
+        cursor.fetchone()
         cursor.close()
         connection.close()
 
@@ -127,9 +130,10 @@ def validate_database_connection(**context) -> bool:
             title="Database Connection Failed",
             description=f"Unable to connect to database: {str(e)}",
             severity=AlertSeverity.CRITICAL,
-            source="airflow"
+            source="airflow",
         )
         return False
+
 
 def monitor_system_resources(**context) -> dict[str, Any]:
     """Monitor system resources and alert if thresholds exceeded"""
@@ -155,18 +159,20 @@ def monitor_system_resources(**context) -> dict[str, Any]:
             title="System Resource Alert",
             description="; ".join(alerts),
             severity=AlertSeverity.MEDIUM,
-            source="airflow"
+            source="airflow",
         )
 
     return {
-        'cpu_percent': system_metrics.cpu_usage_percent,
-        'memory_percent': system_metrics.memory_usage_percent,
-        'disk_percent': system_metrics.disk_usage_percent
+        "cpu_percent": system_metrics.cpu_usage_percent,
+        "memory_percent": system_metrics.memory_usage_percent,
+        "disk_percent": system_metrics.disk_usage_percent,
     }
+
 
 # ================================
 # ETL PROCESSING FUNCTIONS
 # ================================
+
 
 def process_bronze_layer(**context) -> dict[str, Any]:
     """Process bronze layer with Spark"""
@@ -192,11 +198,11 @@ def process_bronze_layer(**context) -> dict[str, Any]:
         metrics_collector.record_etl_metrics(
             pipeline_name="enhanced_retail_etl_pipeline",
             stage="bronze",
-            records_processed=result.get('total_records', 0),
-            records_failed=result.get('failed_records', 0),
+            records_processed=result.get("total_records", 0),
+            records_failed=result.get("failed_records", 0),
             processing_time=processing_time,
-            data_quality_score=result.get('data_quality_score', 0),
-            error_count=result.get('error_count', 0)
+            data_quality_score=result.get("data_quality_score", 0),
+            error_count=result.get("error_count", 0),
         )
 
         logger.info(f"Bronze layer processing completed: {result}")
@@ -208,11 +214,12 @@ def process_bronze_layer(**context) -> dict[str, Any]:
             title="Bronze Layer Processing Failed",
             description=f"Error in bronze layer: {str(e)}",
             severity=AlertSeverity.HIGH,
-            source="airflow"
+            source="airflow",
         )
         raise
     finally:
         spark_manager.stop_session()
+
 
 def process_silver_layer(**context) -> dict[str, Any]:
     """Process silver layer with Spark and data quality validation"""
@@ -238,21 +245,21 @@ def process_silver_layer(**context) -> dict[str, Any]:
         metrics_collector.record_etl_metrics(
             pipeline_name="enhanced_retail_etl_pipeline",
             stage="silver",
-            records_processed=result.get('total_records', 0),
-            records_failed=result.get('failed_records', 0),
+            records_processed=result.get("total_records", 0),
+            records_failed=result.get("failed_records", 0),
             processing_time=processing_time,
-            data_quality_score=result.get('data_quality_score', 0),
-            error_count=result.get('error_count', 0)
+            data_quality_score=result.get("data_quality_score", 0),
+            error_count=result.get("error_count", 0),
         )
 
         # Check data quality threshold
         quality_threshold = float(Variable.get("data_quality_threshold", default_var="0.95"))
-        if result.get('data_quality_score', 0) < quality_threshold:
+        if result.get("data_quality_score", 0) < quality_threshold:
             trigger_custom_alert(
                 title="Data Quality Below Threshold",
                 description=f"Silver layer quality score: {result.get('data_quality_score', 0):.2f}, threshold: {quality_threshold}",
                 severity=AlertSeverity.MEDIUM,
-                source="airflow"
+                source="airflow",
             )
 
         logger.info(f"Silver layer processing completed: {result}")
@@ -264,11 +271,12 @@ def process_silver_layer(**context) -> dict[str, Any]:
             title="Silver Layer Processing Failed",
             description=f"Error in silver layer: {str(e)}",
             severity=AlertSeverity.HIGH,
-            source="airflow"
+            source="airflow",
         )
         raise
     finally:
         spark_manager.stop_session()
+
 
 def enrich_with_external_apis(**context) -> dict[str, Any]:
     """Enrich data with external APIs"""
@@ -284,7 +292,7 @@ def enrich_with_external_apis(**context) -> dict[str, Any]:
         enrichment_service = EnrichmentService()
         result = enrichment_service.enrich_all_data()
 
-        processing_time = (datetime.now() - start_time).total_seconds()
+        (datetime.now() - start_time).total_seconds()
 
         logger.info(f"External API enrichment completed: {result}")
         return result
@@ -295,10 +303,11 @@ def enrich_with_external_apis(**context) -> dict[str, Any]:
             title="External API Enrichment Failed",
             description=f"Error in external enrichment: {str(e)}",
             severity=AlertSeverity.MEDIUM,
-            source="airflow"
+            source="airflow",
         )
         # Don't fail the pipeline for enrichment issues
         return {"status": "failed", "error": str(e)}
+
 
 def process_gold_layer(**context) -> dict[str, Any]:
     """Process gold layer with advanced analytics"""
@@ -324,11 +333,11 @@ def process_gold_layer(**context) -> dict[str, Any]:
         metrics_collector.record_etl_metrics(
             pipeline_name="enhanced_retail_etl_pipeline",
             stage="gold",
-            records_processed=result.get('total_records', 0),
-            records_failed=result.get('failed_records', 0),
+            records_processed=result.get("total_records", 0),
+            records_failed=result.get("failed_records", 0),
             processing_time=processing_time,
-            data_quality_score=result.get('data_quality_score', 0),
-            error_count=result.get('error_count', 0)
+            data_quality_score=result.get("data_quality_score", 0),
+            error_count=result.get("error_count", 0),
         )
 
         logger.info(f"Gold layer processing completed: {result}")
@@ -340,11 +349,12 @@ def process_gold_layer(**context) -> dict[str, Any]:
             title="Gold Layer Processing Failed",
             description=f"Error in gold layer: {str(e)}",
             severity=AlertSeverity.HIGH,
-            source="airflow"
+            source="airflow",
         )
         raise
     finally:
         spark_manager.stop_session()
+
 
 def update_vector_search_index(**context) -> dict[str, Any]:
     """Update vector search index with new data"""
@@ -365,9 +375,10 @@ def update_vector_search_index(**context) -> dict[str, Any]:
             title="Vector Search Indexing Failed",
             description=f"Error updating vector search index: {str(e)}",
             severity=AlertSeverity.MEDIUM,
-            source="airflow"
+            source="airflow",
         )
         return {"status": "failed", "error": str(e)}
+
 
 def generate_data_quality_report(**context) -> dict[str, Any]:
     """Generate comprehensive data quality report"""
@@ -375,26 +386,30 @@ def generate_data_quality_report(**context) -> dict[str, Any]:
 
     try:
         # Get metrics from previous tasks
-        bronze_result = context['task_instance'].xcom_pull(task_ids='process_bronze_layer')
-        silver_result = context['task_instance'].xcom_pull(task_ids='process_silver_layer')
-        gold_result = context['task_instance'].xcom_pull(task_ids='process_gold_layer')
+        bronze_result = context["task_instance"].xcom_pull(task_ids="process_bronze_layer")
+        silver_result = context["task_instance"].xcom_pull(task_ids="process_silver_layer")
+        gold_result = context["task_instance"].xcom_pull(task_ids="process_gold_layer")
 
         report = {
-            'timestamp': datetime.now().isoformat(),
-            'pipeline_id': context['dag_run'].run_id,
-            'bronze_quality': bronze_result.get('data_quality_score', 0) if bronze_result else 0,
-            'silver_quality': silver_result.get('data_quality_score', 0) if silver_result else 0,
-            'gold_quality': gold_result.get('data_quality_score', 0) if gold_result else 0,
-            'total_records_processed': sum([
-                bronze_result.get('total_records', 0) if bronze_result else 0,
-                silver_result.get('total_records', 0) if silver_result else 0,
-                gold_result.get('total_records', 0) if gold_result else 0
-            ]),
-            'total_errors': sum([
-                bronze_result.get('error_count', 0) if bronze_result else 0,
-                silver_result.get('error_count', 0) if silver_result else 0,
-                gold_result.get('error_count', 0) if gold_result else 0
-            ])
+            "timestamp": datetime.now().isoformat(),
+            "pipeline_id": context["dag_run"].run_id,
+            "bronze_quality": bronze_result.get("data_quality_score", 0) if bronze_result else 0,
+            "silver_quality": silver_result.get("data_quality_score", 0) if silver_result else 0,
+            "gold_quality": gold_result.get("data_quality_score", 0) if gold_result else 0,
+            "total_records_processed": sum(
+                [
+                    bronze_result.get("total_records", 0) if bronze_result else 0,
+                    silver_result.get("total_records", 0) if silver_result else 0,
+                    gold_result.get("total_records", 0) if gold_result else 0,
+                ]
+            ),
+            "total_errors": sum(
+                [
+                    bronze_result.get("error_count", 0) if bronze_result else 0,
+                    silver_result.get("error_count", 0) if silver_result else 0,
+                    gold_result.get("error_count", 0) if gold_result else 0,
+                ]
+            ),
         }
 
         # Save report
@@ -402,7 +417,8 @@ def generate_data_quality_report(**context) -> dict[str, Any]:
         os.makedirs(os.path.dirname(report_path), exist_ok=True)
 
         import json
-        with open(report_path, 'w') as f:
+
+        with open(report_path, "w") as f:
             json.dump(report, f, indent=2)
 
         logger.info(f"Data quality report generated: {report_path}")
@@ -412,71 +428,72 @@ def generate_data_quality_report(**context) -> dict[str, Any]:
         logger.error(f"Data quality report generation failed: {e}")
         return {"status": "failed", "error": str(e)}
 
+
 # ================================
 # DAG TASK DEFINITIONS
 # ================================
 
 # Start task
 start_pipeline = DummyOperator(
-    task_id='start_pipeline',
+    task_id="start_pipeline",
     dag=dag,
 )
 
 # Pre-flight checks
 check_data_files = PythonOperator(
-    task_id='check_data_availability',
+    task_id="check_data_availability",
     python_callable=check_data_availability,
     dag=dag,
 )
 
 validate_db_connection = PythonOperator(
-    task_id='validate_database_connection',
+    task_id="validate_database_connection",
     python_callable=validate_database_connection,
     dag=dag,
 )
 
 monitor_resources = PythonOperator(
-    task_id='monitor_system_resources',
+    task_id="monitor_system_resources",
     python_callable=monitor_system_resources,
     dag=dag,
 )
 
 # ETL Processing tasks
 bronze_processing = PythonOperator(
-    task_id='process_bronze_layer',
+    task_id="process_bronze_layer",
     python_callable=process_bronze_layer,
     dag=dag,
 )
 
 silver_processing = PythonOperator(
-    task_id='process_silver_layer',
+    task_id="process_silver_layer",
     python_callable=process_silver_layer,
     dag=dag,
 )
 
 external_enrichment = PythonOperator(
-    task_id='enrich_with_external_apis',
+    task_id="enrich_with_external_apis",
     python_callable=enrich_with_external_apis,
     dag=dag,
     trigger_rule=TriggerRule.NONE_FAILED,  # Continue even if previous tasks have warnings
 )
 
 gold_processing = PythonOperator(
-    task_id='process_gold_layer',
+    task_id="process_gold_layer",
     python_callable=process_gold_layer,
     dag=dag,
 )
 
 # Post-processing tasks
 update_vector_index = PythonOperator(
-    task_id='update_vector_search_index',
+    task_id="update_vector_search_index",
     python_callable=update_vector_search_index,
     dag=dag,
     trigger_rule=TriggerRule.NONE_FAILED,
 )
 
 generate_quality_report = PythonOperator(
-    task_id='generate_data_quality_report',
+    task_id="generate_data_quality_report",
     python_callable=generate_data_quality_report,
     dag=dag,
     trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
@@ -484,9 +501,9 @@ generate_quality_report = PythonOperator(
 
 # Health check
 api_health_check = HttpSensor(
-    task_id='check_api_health',
-    http_conn_id='api_default',
-    endpoint='/api/v1/health',
+    task_id="check_api_health",
+    http_conn_id="api_default",
+    endpoint="/api/v1/health",
     timeout=30,
     poke_interval=10,
     dag=dag,
@@ -494,25 +511,25 @@ api_health_check = HttpSensor(
 
 # Success notification
 success_notification = PythonOperator(
-    task_id='send_success_notification',
+    task_id="send_success_notification",
     python_callable=send_pipeline_notification,
-    op_kwargs={'status': 'success'},
+    op_kwargs={"status": "success"},
     dag=dag,
     trigger_rule=TriggerRule.ALL_SUCCESS,
 )
 
 # Failure notification
 failure_notification = PythonOperator(
-    task_id='send_failure_notification',
+    task_id="send_failure_notification",
     python_callable=send_pipeline_notification,
-    op_kwargs={'status': 'failure'},
+    op_kwargs={"status": "failure"},
     dag=dag,
     trigger_rule=TriggerRule.ONE_FAILED,
 )
 
 # End task
 end_pipeline = DummyOperator(
-    task_id='end_pipeline',
+    task_id="end_pipeline",
     dag=dag,
     trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
 )

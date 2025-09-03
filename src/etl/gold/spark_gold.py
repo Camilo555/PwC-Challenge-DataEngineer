@@ -2,6 +2,7 @@
 Spark-based Gold Layer Implementation
 Provides advanced analytics and aggregations using PySpark
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,7 @@ logger = get_logger(__name__)
 def _create_spark_session() -> SparkSession:
     """Create Spark session for Gold layer processing."""
     return (
-        SparkSession.builder
-        .appName("RetailETL-GoldLayer")
+        SparkSession.builder.appName("RetailETL-GoldLayer")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config("spark.sql.warehouse.dir", str(settings.gold_path))
@@ -57,7 +57,7 @@ def _create_sales_summary(df: DataFrame) -> DataFrame:
             F.avg("total_amount").alias("avg_transaction_value"),
             F.sum("quantity").alias("total_quantity_sold"),
             F.countDistinct("customer_id").alias("unique_customers"),
-            F.countDistinct("stock_code").alias("unique_products")
+            F.countDistinct("stock_code").alias("unique_products"),
         )
         .withColumn("revenue_per_customer", F.col("total_revenue") / F.col("unique_customers"))
     )
@@ -76,7 +76,7 @@ def _create_product_analysis(df: DataFrame) -> DataFrame:
             F.sum("quantity").alias("total_quantity_sold"),
             F.count("invoice_no").alias("transaction_count"),
             F.avg("unit_price").alias("avg_unit_price"),
-            F.countDistinct("customer_id").alias("unique_customers")
+            F.countDistinct("customer_id").alias("unique_customers"),
         )
         .withColumn("revenue_per_transaction", F.col("total_revenue") / F.col("transaction_count"))
     )
@@ -104,10 +104,11 @@ def _create_customer_segmentation(df: DataFrame) -> DataFrame:
             F.countDistinct("stock_code").alias("unique_products_bought"),
             F.min("invoice_timestamp").alias("first_purchase"),
             F.max("invoice_timestamp").alias("last_purchase"),
-            F.sum("quantity").alias("total_quantity_purchased")
+            F.sum("quantity").alias("total_quantity_purchased"),
         )
-        .withColumn("customer_lifetime_days",
-                   F.datediff(F.col("last_purchase"), F.col("first_purchase")))
+        .withColumn(
+            "customer_lifetime_days", F.datediff(F.col("last_purchase"), F.col("first_purchase"))
+        )
     )
 
     # Customer segmentation based on RFM analysis
@@ -116,22 +117,25 @@ def _create_customer_segmentation(df: DataFrame) -> DataFrame:
     monetary_window = Window.orderBy(F.desc("total_spent"))
 
     customer_segmentation = (
-        customer_metrics
-        .withColumn("recency_score", F.ntile(5).over(recency_window))
+        customer_metrics.withColumn("recency_score", F.ntile(5).over(recency_window))
         .withColumn("frequency_score", F.ntile(5).over(frequency_window))
         .withColumn("monetary_score", F.ntile(5).over(monetary_window))
-        .withColumn("rfm_score",
-                   F.concat(F.col("recency_score"), F.col("frequency_score"), F.col("monetary_score")))
-        .withColumn("customer_segment",
-                   F.when(F.col("rfm_score").rlike("^[4-5][4-5][4-5]$"), "Champions")
-                   .when(F.col("rfm_score").rlike("^[3-5][1-3][4-5]$"), "Loyal Customers")
-                   .when(F.col("rfm_score").rlike("^[4-5][1-2][1-3]$"), "Big Spenders")
-                   .when(F.col("rfm_score").rlike("^[4-5][3-5][1-3]$"), "New Customers")
-                   .when(F.col("rfm_score").rlike("^[3-4][1-3][1-3]$"), "Potential Loyalists")
-                   .when(F.col("rfm_score").rlike("^[2-3][2-3][2-3]$"), "Need Attention")
-                   .when(F.col("rfm_score").rlike("^[1-2][4-5][1-2]$"), "Cannot Lose Them")
-                   .when(F.col("rfm_score").rlike("^[1-2][1-2][4-5]$"), "At Risk")
-                   .otherwise("Others"))
+        .withColumn(
+            "rfm_score",
+            F.concat(F.col("recency_score"), F.col("frequency_score"), F.col("monetary_score")),
+        )
+        .withColumn(
+            "customer_segment",
+            F.when(F.col("rfm_score").rlike("^[4-5][4-5][4-5]$"), "Champions")
+            .when(F.col("rfm_score").rlike("^[3-5][1-3][4-5]$"), "Loyal Customers")
+            .when(F.col("rfm_score").rlike("^[4-5][1-2][1-3]$"), "Big Spenders")
+            .when(F.col("rfm_score").rlike("^[4-5][3-5][1-3]$"), "New Customers")
+            .when(F.col("rfm_score").rlike("^[3-4][1-3][1-3]$"), "Potential Loyalists")
+            .when(F.col("rfm_score").rlike("^[2-3][2-3][2-3]$"), "Need Attention")
+            .when(F.col("rfm_score").rlike("^[1-2][4-5][1-2]$"), "Cannot Lose Them")
+            .when(F.col("rfm_score").rlike("^[1-2][1-2][4-5]$"), "At Risk")
+            .otherwise("Others"),
+        )
     )
 
     return customer_segmentation
@@ -141,26 +145,25 @@ def _create_time_series_analysis(df: DataFrame) -> DataFrame:
     """Create time series analysis."""
     logger.info("Creating time series analysis...")
 
-    daily_metrics = (
-        df.groupBy("invoice_date", "country")
-        .agg(
-            F.sum("total_amount").alias("daily_revenue"),
-            F.count("invoice_no").alias("daily_transactions"),
-            F.avg("total_amount").alias("avg_transaction_value"),
-            F.countDistinct("customer_id").alias("unique_customers"),
-            F.sum("quantity").alias("total_quantity")
-        )
+    daily_metrics = df.groupBy("invoice_date", "country").agg(
+        F.sum("total_amount").alias("daily_revenue"),
+        F.count("invoice_no").alias("daily_transactions"),
+        F.avg("total_amount").alias("avg_transaction_value"),
+        F.countDistinct("customer_id").alias("unique_customers"),
+        F.sum("quantity").alias("total_quantity"),
     )
 
     # Add moving averages using window functions
     days_window = Window.partitionBy("country").orderBy("invoice_date").rowsBetween(-6, 0)
 
     time_series = (
-        daily_metrics
-        .withColumn("revenue_7day_avg", F.avg("daily_revenue").over(days_window))
+        daily_metrics.withColumn("revenue_7day_avg", F.avg("daily_revenue").over(days_window))
         .withColumn("transactions_7day_avg", F.avg("daily_transactions").over(days_window))
         .withColumn("day_of_week", F.date_format("invoice_date", "EEEE"))
-        .withColumn("is_weekend", F.when(F.date_format("invoice_date", "u").isin("6", "7"), True).otherwise(False))
+        .withColumn(
+            "is_weekend",
+            F.when(F.date_format("invoice_date", "u").isin("6", "7"), True).otherwise(False),
+        )
     )
 
     return time_series
@@ -183,15 +186,16 @@ def _create_cohort_analysis(df: DataFrame) -> DataFrame:
 
     # Calculate period number (months since first purchase)
     cohort_analysis = (
-        df_with_cohorts
-        .withColumn("invoice_month", F.date_format("invoice_timestamp", "yyyy-MM"))
-        .withColumn("period_number",
-                   F.months_between(F.col("invoice_timestamp"), F.col("first_purchase_date")))
+        df_with_cohorts.withColumn("invoice_month", F.date_format("invoice_timestamp", "yyyy-MM"))
+        .withColumn(
+            "period_number",
+            F.months_between(F.col("invoice_timestamp"), F.col("first_purchase_date")),
+        )
         .groupBy("cohort_month", "period_number")
         .agg(
             F.countDistinct("customer_id").alias("customers"),
             F.sum("total_amount").alias("revenue"),
-            F.count("invoice_no").alias("orders")
+            F.count("invoice_no").alias("orders"),
         )
     )
 
@@ -226,7 +230,7 @@ def _generate_gold_metrics(tables: dict[str, DataFrame]) -> dict[str, Any]:
     metrics = {
         "processing_timestamp": F.current_timestamp(),
         "tables_created": list(tables.keys()),
-        "table_counts": {}
+        "table_counts": {},
     }
 
     for table_name, df in tables.items():
@@ -255,7 +259,7 @@ def process_gold_layer() -> bool:
             "product_analysis": _create_product_analysis(df),
             "customer_segmentation": _create_customer_segmentation(df),
             "time_series_analysis": _create_time_series_analysis(df),
-            "cohort_analysis": _create_cohort_analysis(df)
+            "cohort_analysis": _create_cohort_analysis(df),
         }
 
         # Save all tables
@@ -264,7 +268,7 @@ def process_gold_layer() -> bool:
         # Generate and save metrics
         metrics = _generate_gold_metrics(tables)
         metrics_file = settings.gold_path / "processing_metrics.json"
-        with open(metrics_file, 'w') as f:
+        with open(metrics_file, "w") as f:
             json.dump(metrics, f, indent=2, default=str)
 
         logger.info("Gold layer processing completed successfully")

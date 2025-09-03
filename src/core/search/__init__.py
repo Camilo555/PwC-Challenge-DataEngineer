@@ -19,5 +19,5 @@ __all__ = [
     "get_elasticsearch_client",
     "test_elasticsearch_connection",
     "ElasticsearchIndexingService",
-    "get_indexing_service"
+    "get_indexing_service",
 ]

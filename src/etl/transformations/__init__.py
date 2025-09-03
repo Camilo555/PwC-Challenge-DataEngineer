@@ -15,5 +15,5 @@ __all__ = [
     "auto_clean_data",
     "ExternalDataEnricher",
     "enrich_data_external",
-    "SyntheticDataGenerator"
+    "SyntheticDataGenerator",
 ]

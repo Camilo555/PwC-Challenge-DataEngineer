@@ -2,6 +2,7 @@
 RabbitMQ Message Queue Manager
 Replaces Redis with RabbitMQ for task queuing and message passing
 """
+
 import json
 import os
 import time
@@ -21,6 +22,7 @@ from core.logging import get_logger
 
 class MessagePriority(Enum):
     """Message priority levels"""
+
     LOW = 1
     NORMAL = 5
     HIGH = 8
@@ -29,6 +31,7 @@ class MessagePriority(Enum):
 
 class QueueType(Enum):
     """Queue type definitions"""
+
     TASK_QUEUE = "task_queue"
     RESULT_QUEUE = "result_queue"
     EVENT_QUEUE = "event_queue"
@@ -42,6 +45,7 @@ class QueueType(Enum):
 @dataclass
 class TaskMessage:
     """Task message structure"""
+
     task_id: str
     task_name: str
     payload: dict[str, Any]
@@ -63,6 +67,7 @@ class TaskMessage:
 @dataclass
 class ResultMessage:
     """Result message structure"""
+
     task_id: str
     correlation_id: str
     status: str  # success, error, timeout
@@ -79,6 +84,7 @@ class ResultMessage:
 @dataclass
 class CacheMessage:
     """Cache operation message structure"""
+
     operation_id: str
     operation: str  # get, set, delete, exists, invalidate
     key: str
@@ -98,6 +104,7 @@ class CacheMessage:
 @dataclass
 class StateMessage:
     """State management message structure"""
+
     state_id: str
     component: str
     key: str
@@ -142,7 +149,7 @@ class RabbitMQManager:
         # Task tracking
         self.active_tasks: dict[str, TaskMessage] = {}
         self.task_results: dict[str, ResultMessage] = {}
-        
+
         # Cache and state management
         self.cache_operations: dict[str, CacheMessage] = {}
         self.state_storage: dict[str, StateMessage] = {}
@@ -160,7 +167,7 @@ class RabbitMQManager:
             heartbeat=600,
             blocked_connection_timeout=300,
             connection_attempts=3,
-            retry_delay=2.0
+            retry_delay=2.0,
         )
 
     def connect(self) -> bool:
@@ -190,7 +197,7 @@ class RabbitMQManager:
 
             self.async_connection = await aio_pika.connect_robust(
                 f"amqp://{self.username}:{self.password}@{self.host}:{self.port}{self.virtual_host}",
-                heartbeat=600
+                heartbeat=600,
             )
 
             self.logger.info("Connected to RabbitMQ (async) successfully")
@@ -205,67 +212,60 @@ class RabbitMQManager:
 
         # Dead letter exchange and queue
         self.channel.exchange_declare(
-            exchange='dead_letter_exchange',
-            exchange_type='direct',
-            durable=True
+            exchange="dead_letter_exchange", exchange_type="direct", durable=True
         )
 
         self.channel.queue_declare(
-            queue='dead_letter_queue',
+            queue="dead_letter_queue",
             durable=True,
-            arguments={'x-message-ttl': 86400000}  # 24 hours
+            arguments={"x-message-ttl": 86400000},  # 24 hours
         )
 
         self.channel.queue_bind(
-            exchange='dead_letter_exchange',
-            queue='dead_letter_queue',
-            routing_key='dead_letter'
+            exchange="dead_letter_exchange", queue="dead_letter_queue", routing_key="dead_letter"
         )
 
         # Standard queues with dead letter routing
         queue_configs = {
             QueueType.TASK_QUEUE.value: {
-                'durable': True,
-                'arguments': {
-                    'x-max-priority': 10,
-                    'x-dead-letter-exchange': 'dead_letter_exchange',
-                    'x-dead-letter-routing-key': 'dead_letter'
-                }
+                "durable": True,
+                "arguments": {
+                    "x-max-priority": 10,
+                    "x-dead-letter-exchange": "dead_letter_exchange",
+                    "x-dead-letter-routing-key": "dead_letter",
+                },
             },
             QueueType.RESULT_QUEUE.value: {
-                'durable': True,
-                'arguments': {'x-message-ttl': 3600000}  # 1 hour
+                "durable": True,
+                "arguments": {"x-message-ttl": 3600000},  # 1 hour
             },
-            QueueType.EVENT_QUEUE.value: {
-                'durable': True,
-                'arguments': {'x-max-priority': 10}
-            },
+            QueueType.EVENT_QUEUE.value: {"durable": True, "arguments": {"x-max-priority": 10}},
             QueueType.ETL_QUEUE.value: {
-                'durable': True,
-                'arguments': {
-                    'x-max-priority': 10,
-                    'x-dead-letter-exchange': 'dead_letter_exchange',
-                    'x-dead-letter-routing-key': 'dead_letter'
-                }
+                "durable": True,
+                "arguments": {
+                    "x-max-priority": 10,
+                    "x-dead-letter-exchange": "dead_letter_exchange",
+                    "x-dead-letter-routing-key": "dead_letter",
+                },
             },
             QueueType.NOTIFICATION_QUEUE.value: {
-                'durable': True,
-                'arguments': {'x-max-priority': 10}
+                "durable": True,
+                "arguments": {"x-max-priority": 10},
             },
             QueueType.CACHE_QUEUE.value: {
-                'durable': True,
-                'arguments': {
-                    'x-max-priority': 10,
-                    'x-message-ttl': 3600000  # 1 hour for cache operations
-                }
+                "durable": True,
+                "arguments": {
+                    "x-max-priority": 10,
+                    "x-message-ttl": 3600000,  # 1 hour for cache operations
+                },
             },
             QueueType.STATE_QUEUE.value: {
-                'durable': True,
-                'arguments': {
-                    'x-max-priority': 5,
-                    'x-message-ttl': 7200000  # 2 hours for state data
-                }
-            }
+                "durable": True,
+                "arguments": {
+                    "x-max-priority": 5,
+                    "x-message-ttl": 7200000,  # 2 hours for state data
+                },
+            },
         }
 
         for queue_name, config in queue_configs.items():
@@ -281,11 +281,11 @@ class RabbitMQManager:
         queue: QueueType = QueueType.TASK_QUEUE,
         priority: MessagePriority = MessagePriority.NORMAL,
         expires_in_seconds: int | None = None,
-        correlation_id: str | None = None
+        correlation_id: str | None = None,
     ) -> str:
         """
         Publish a task message to the specified queue
-        
+
         Args:
             task_name: Name of the task
             payload: Task payload data
@@ -293,7 +293,7 @@ class RabbitMQManager:
             priority: Message priority
             expires_in_seconds: Message expiration time
             correlation_id: Optional correlation ID
-            
+
         Returns:
             Task ID for tracking
         """
@@ -313,7 +313,7 @@ class RabbitMQManager:
                 payload=payload,
                 priority=priority,
                 expires_at=expires_at,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
             # Convert to JSON
@@ -326,15 +326,12 @@ class RabbitMQManager:
                 correlation_id=task_message.correlation_id,
                 timestamp=int(task_message.created_at.timestamp()),
                 delivery_mode=2,  # Persistent
-                expiration=str(expires_in_seconds * 1000) if expires_in_seconds else None
+                expiration=str(expires_in_seconds * 1000) if expires_in_seconds else None,
             )
 
             # Publish message
             self.channel.basic_publish(
-                exchange='',
-                routing_key=queue.value,
-                body=message_body,
-                properties=properties
+                exchange="", routing_key=queue.value, body=message_body, properties=properties
             )
 
             # Track task
@@ -352,11 +349,11 @@ class RabbitMQManager:
         queue: QueueType,
         callback: Callable[[TaskMessage], ResultMessage],
         auto_ack: bool = False,
-        max_workers: int = 1
+        max_workers: int = 1,
     ):
         """
         Consume tasks from specified queue with callback processing
-        
+
         Args:
             queue: Queue to consume from
             callback: Task processing callback function
@@ -385,7 +382,7 @@ class RabbitMQManager:
                             correlation_id=task_message.correlation_id,
                             status="success",
                             result=result if isinstance(result, dict) else {"data": result},
-                            processing_time_ms=processing_time
+                            processing_time_ms=processing_time,
                         )
 
                     # Publish result if reply_to is specified
@@ -405,12 +402,12 @@ class RabbitMQManager:
                     self.logger.error(f"Task processing failed: {str(e)}")
 
                     # Create error result
-                    if 'task_message' in locals():
+                    if "task_message" in locals():
                         error_result = ResultMessage(
                             task_id=task_message.task_id,
                             correlation_id=task_message.correlation_id,
                             status="error",
-                            error=str(e)
+                            error=str(e),
                         )
                         self.task_results[task_message.task_id] = error_result
 
@@ -421,9 +418,7 @@ class RabbitMQManager:
             # Setup consumer
             self.channel.basic_qos(prefetch_count=max_workers)
             self.channel.basic_consume(
-                queue=queue.value,
-                on_message_callback=process_message,
-                auto_ack=auto_ack
+                queue=queue.value, on_message_callback=process_message, auto_ack=auto_ack
             )
 
             self.logger.info(f"Started consuming from {queue.value} with {max_workers} workers")
@@ -443,14 +438,11 @@ class RabbitMQManager:
             properties = pika.BasicProperties(
                 correlation_id=result.correlation_id,
                 timestamp=int(result.completed_at.timestamp()),
-                delivery_mode=2
+                delivery_mode=2,
             )
 
             self.channel.basic_publish(
-                exchange='',
-                routing_key=queue_name,
-                body=message_body,
-                properties=properties
+                exchange="", routing_key=queue_name, body=message_body, properties=properties
             )
 
             self.logger.debug(f"Published result for task {result.task_id}")
@@ -461,11 +453,11 @@ class RabbitMQManager:
     def get_task_result(self, task_id: str, timeout: int = 30) -> ResultMessage | None:
         """
         Get task result with timeout
-        
+
         Args:
             task_id: Task ID to get result for
             timeout: Timeout in seconds
-            
+
         Returns:
             ResultMessage if found, None if timeout
         """
@@ -478,8 +470,7 @@ class RabbitMQManager:
             # Poll result queue
             try:
                 method_frame, header_frame, body = self.channel.basic_get(
-                    queue=QueueType.RESULT_QUEUE.value,
-                    auto_ack=True
+                    queue=QueueType.RESULT_QUEUE.value, auto_ack=True
                 )
 
                 if body:
@@ -500,7 +491,7 @@ class RabbitMQManager:
         self,
         event_type: str,
         event_data: dict[str, Any],
-        priority: MessagePriority = MessagePriority.NORMAL
+        priority: MessagePriority = MessagePriority.NORMAL,
     ):
         """Publish system event"""
         event_message = {
@@ -508,14 +499,14 @@ class RabbitMQManager:
             "event_type": event_type,
             "event_data": event_data,
             "timestamp": datetime.now().isoformat(),
-            "source": "rabbitmq_manager"
+            "source": "rabbitmq_manager",
         }
 
         self.publish_task(
             task_name="system_event",
             payload=event_message,
             queue=QueueType.EVENT_QUEUE,
-            priority=priority
+            priority=priority,
         )
 
     def publish_notification(
@@ -524,7 +515,7 @@ class RabbitMQManager:
         subject: str,
         message: str,
         notification_type: str = "info",
-        priority: MessagePriority = MessagePriority.NORMAL
+        priority: MessagePriority = MessagePriority.NORMAL,
     ):
         """Publish notification message"""
         notification = {
@@ -533,148 +524,146 @@ class RabbitMQManager:
             "subject": subject,
             "message": message,
             "type": notification_type,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         self.publish_task(
             task_name="send_notification",
             payload=notification,
             queue=QueueType.NOTIFICATION_QUEUE,
-            priority=priority
+            priority=priority,
         )
-        
+
     def publish_cache_operation(
         self,
         operation: str,
         key: str,
         value: str | None = None,
         ttl: int | None = None,
-        pattern: str | None = None
+        pattern: str | None = None,
     ) -> str:
         """
         Publish cache operation message
-        
+
         Args:
             operation: Cache operation type (get, set, delete, exists, invalidate)
             key: Cache key
             value: Cache value (for set operations)
             ttl: Time to live in seconds
             pattern: Pattern for invalidate operations
-            
+
         Returns:
             Operation ID for tracking
         """
         try:
             if not self.connect():
                 raise ConnectionError("Failed to connect to RabbitMQ")
-                
+
             operation_id = str(uuid.uuid4())
-            
+
             cache_message = CacheMessage(
                 operation_id=operation_id,
                 operation=operation,
                 key=key,
                 value=value,
                 ttl=ttl,
-                pattern=pattern
+                pattern=pattern,
             )
-            
+
             message_body = json.dumps(asdict(cache_message), default=str)
-            
+
             properties = pika.BasicProperties(
                 priority=MessagePriority.HIGH.value,
                 message_id=operation_id,
                 correlation_id=cache_message.correlation_id,
                 timestamp=int(cache_message.created_at.timestamp()),
-                delivery_mode=2
+                delivery_mode=2,
             )
-            
+
             self.channel.basic_publish(
-                exchange='',
+                exchange="",
                 routing_key=QueueType.CACHE_QUEUE.value,
                 body=message_body,
-                properties=properties
+                properties=properties,
             )
-            
+
             self.cache_operations[operation_id] = cache_message
             self.logger.info(f"Published cache operation {operation} with ID {operation_id}")
-            
+
             return operation_id
-            
+
         except Exception as e:
             self.logger.error(f"Failed to publish cache operation {operation}: {str(e)}")
             raise
-    
+
     def publish_state_update(
         self,
         component: str,
         key: str,
         value: dict[str, Any],
         ttl: int | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Publish state update message for distributed state management
-        
+
         Args:
             component: Component name (e.g., 'rate_limiter', 'session_manager')
             key: State key
             value: State value
             ttl: Time to live in seconds
             metadata: Additional metadata
-            
+
         Returns:
             State ID for tracking
         """
         try:
             if not self.connect():
                 raise ConnectionError("Failed to connect to RabbitMQ")
-                
+
             state_id = str(uuid.uuid4())
-            
+
             state_message = StateMessage(
                 state_id=state_id,
                 component=component,
                 key=key,
                 value=value,
                 ttl=ttl,
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
-            
+
             message_body = json.dumps(asdict(state_message), default=str)
-            
+
             properties = pika.BasicProperties(
                 priority=MessagePriority.NORMAL.value,
                 message_id=state_id,
                 timestamp=int(state_message.created_at.timestamp()),
                 delivery_mode=2,
-                expiration=str(ttl * 1000) if ttl else None
+                expiration=str(ttl * 1000) if ttl else None,
             )
-            
+
             self.channel.basic_publish(
-                exchange='',
+                exchange="",
                 routing_key=QueueType.STATE_QUEUE.value,
                 body=message_body,
-                properties=properties
+                properties=properties,
             )
-            
+
             self.state_storage[state_id] = state_message
             self.logger.info(f"Published state update for {component}:{key} with ID {state_id}")
-            
+
             return state_id
-            
+
         except Exception as e:
             self.logger.error(f"Failed to publish state update: {str(e)}")
             raise
-    
+
     def consume_cache_operations(
-        self,
-        callback: Callable[[CacheMessage], dict[str, Any]],
-        auto_ack: bool = False
+        self, callback: Callable[[CacheMessage], dict[str, Any]], auto_ack: bool = False
     ):
         """
         Consume cache operations from the cache queue
-        
+
         Args:
             callback: Function to handle cache operations
             auto_ack: Whether to auto-acknowledge messages
@@ -682,17 +671,17 @@ class RabbitMQManager:
         try:
             if not self.connect():
                 raise ConnectionError("Failed to connect to RabbitMQ")
-                
+
             def process_cache_message(ch, method, properties, body):
                 try:
                     cache_data = json.loads(body.decode())
                     cache_message = CacheMessage(**cache_data)
-                    
+
                     # Process cache operation
                     start_time = time.time()
                     result = callback(cache_message)
                     processing_time = (time.time() - start_time) * 1000
-                    
+
                     # Create result for cache operation
                     operation_result = {
                         "operation_id": cache_message.operation_id,
@@ -700,60 +689,60 @@ class RabbitMQManager:
                         "key": cache_message.key,
                         "result": result,
                         "processing_time_ms": processing_time,
-                        "status": "success"
+                        "status": "success",
                     }
-                    
+
                     # Store result
                     self.task_results[cache_message.operation_id] = ResultMessage(
                         task_id=cache_message.operation_id,
                         correlation_id=cache_message.correlation_id,
                         status="success",
                         result=operation_result,
-                        processing_time_ms=processing_time
+                        processing_time_ms=processing_time,
                     )
-                    
+
                     if not auto_ack:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
-                        
-                    self.logger.info(f"Processed cache operation {cache_message.operation} successfully")
-                    
+
+                    self.logger.info(
+                        f"Processed cache operation {cache_message.operation} successfully"
+                    )
+
                 except Exception as e:
                     self.logger.error(f"Cache operation processing failed: {str(e)}")
-                    
-                    if 'cache_message' in locals():
+
+                    if "cache_message" in locals():
                         error_result = ResultMessage(
                             task_id=cache_message.operation_id,
                             correlation_id=cache_message.correlation_id,
                             status="error",
-                            error=str(e)
+                            error=str(e),
                         )
                         self.task_results[cache_message.operation_id] = error_result
-                    
+
                     if not auto_ack:
                         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            
+
             self.channel.basic_qos(prefetch_count=10)
             self.channel.basic_consume(
                 queue=QueueType.CACHE_QUEUE.value,
                 on_message_callback=process_cache_message,
-                auto_ack=auto_ack
+                auto_ack=auto_ack,
             )
-            
+
             self.logger.info("Started consuming cache operations")
             self.channel.start_consuming()
-            
+
         except Exception as e:
             self.logger.error(f"Cache consumer setup failed: {str(e)}")
             raise
-    
+
     def consume_state_updates(
-        self,
-        callback: Callable[[StateMessage], None],
-        auto_ack: bool = False
+        self, callback: Callable[[StateMessage], None], auto_ack: bool = False
     ):
         """
         Consume state updates from the state queue
-        
+
         Args:
             callback: Function to handle state updates
             auto_ack: Whether to auto-acknowledge messages
@@ -761,36 +750,38 @@ class RabbitMQManager:
         try:
             if not self.connect():
                 raise ConnectionError("Failed to connect to RabbitMQ")
-                
+
             def process_state_message(ch, method, properties, body):
                 try:
                     state_data = json.loads(body.decode())
                     state_message = StateMessage(**state_data)
-                    
+
                     # Process state update
                     callback(state_message)
-                    
+
                     if not auto_ack:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
-                        
-                    self.logger.info(f"Processed state update for {state_message.component}:{state_message.key}")
-                    
+
+                    self.logger.info(
+                        f"Processed state update for {state_message.component}:{state_message.key}"
+                    )
+
                 except Exception as e:
                     self.logger.error(f"State update processing failed: {str(e)}")
-                    
+
                     if not auto_ack:
                         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-            
+
             self.channel.basic_qos(prefetch_count=10)
             self.channel.basic_consume(
                 queue=QueueType.STATE_QUEUE.value,
                 on_message_callback=process_state_message,
-                auto_ack=auto_ack
+                auto_ack=auto_ack,
             )
-            
+
             self.logger.info("Started consuming state updates")
             self.channel.start_consuming()
-            
+
         except Exception as e:
             self.logger.error(f"State consumer setup failed: {str(e)}")
             raise
@@ -809,7 +800,7 @@ class RabbitMQManager:
                 "queue_name": queue.value,
                 "message_count": message_count,
                 "consumer_count": consumer_count,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -867,7 +858,9 @@ class RabbitMQAsyncManager:
             if self.connection and not self.connection.is_closed:
                 return True
 
-            connection_url = f"amqp://{self.username}:{self.password}@{self.host}:{self.port}{self.virtual_host}"
+            connection_url = (
+                f"amqp://{self.username}:{self.password}@{self.host}:{self.port}{self.virtual_host}"
+            )
             self.connection = await aio_pika.connect_robust(connection_url)
             self.channel = await self.connection.channel()
 
@@ -885,7 +878,7 @@ class RabbitMQAsyncManager:
         task_name: str,
         payload: dict[str, Any],
         queue_name: str = "task_queue",
-        priority: int = 5
+        priority: int = 5,
     ) -> str:
         """Async task publishing"""
         if not await self.connect():
@@ -896,7 +889,7 @@ class RabbitMQAsyncManager:
             "task_id": task_id,
             "task_name": task_name,
             "payload": payload,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
         queue = await self.channel.declare_queue(queue_name, durable=True)
@@ -905,7 +898,7 @@ class RabbitMQAsyncManager:
             json.dumps(task_message, default=str).encode(),
             priority=priority,
             message_id=task_id,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
 
         await queue.publish(message)
@@ -913,12 +906,7 @@ class RabbitMQAsyncManager:
         self.logger.info(f"Published async task {task_name} with ID {task_id}")
         return task_id
 
-    async def consume_tasks_async(
-        self,
-        queue_name: str,
-        callback: Callable,
-        max_workers: int = 10
-    ):
+    async def consume_tasks_async(self, queue_name: str, callback: Callable, max_workers: int = 10):
         """Async task consumption"""
         if not await self.connect():
             raise ConnectionError("Failed to connect to RabbitMQ")
@@ -929,7 +917,7 @@ class RabbitMQAsyncManager:
             async with message.process():
                 try:
                     task_data = json.loads(message.body.decode())
-                    result = await callback(task_data)
+                    await callback(task_data)
                     self.logger.info("Processed async task successfully")
                 except Exception as e:
                     self.logger.error(f"Async task processing failed: {str(e)}")
@@ -966,7 +954,6 @@ class ETLTaskProcessor:
         """Process ETL task"""
         try:
             task_name = task_message.task_name
-            payload = task_message.payload
 
             self.logger.info(f"Processing ETL task: {task_name}")
 
@@ -984,7 +971,7 @@ class ETLTaskProcessor:
                 task_id=task_message.task_id,
                 correlation_id=task_message.correlation_id,
                 status="success",
-                result=result
+                result=result,
             )
 
         except Exception as e:
@@ -992,15 +979,13 @@ class ETLTaskProcessor:
                 task_id=task_message.task_id,
                 correlation_id=task_message.correlation_id,
                 status="error",
-                error=str(e)
+                error=str(e),
             )
 
     def start_consumer(self):
         """Start ETL task consumer"""
         self.rabbitmq.consume_tasks(
-            queue=QueueType.ETL_QUEUE,
-            callback=self.process_etl_task,
-            max_workers=3
+            queue=QueueType.ETL_QUEUE, callback=self.process_etl_task, max_workers=3
         )
 
 
@@ -1028,7 +1013,7 @@ if __name__ == "__main__":
         task_id = manager.publish_task(
             task_name="test_task",
             payload={"data": "test_data", "number": 42},
-            priority=MessagePriority.HIGH
+            priority=MessagePriority.HIGH,
         )
         print(f"✅ Task published with ID: {task_id}")
 
@@ -1039,7 +1024,7 @@ if __name__ == "__main__":
         # Test event publishing
         manager.publish_event(
             event_type="system_test",
-            event_data={"test": True, "timestamp": datetime.now().isoformat()}
+            event_data={"test": True, "timestamp": datetime.now().isoformat()},
         )
         print("✅ Event published")
 
@@ -1047,7 +1032,7 @@ if __name__ == "__main__":
         manager.publish_notification(
             recipient="admin@example.com",
             subject="Test Notification",
-            message="RabbitMQ is working correctly"
+            message="RabbitMQ is working correctly",
         )
         print("✅ Notification published")
 
@@ -1057,4 +1042,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Testing failed: {str(e)}")
         import traceback
+
         traceback.print_exc()

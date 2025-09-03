@@ -50,8 +50,8 @@ npm = "^0.1.1"
 # Orchestration
 dagster = "^1.8.13"
 dagster-webserver = "^1.8.13"
-# Alternative: Apache Airflow (install separately due to dependency conflicts)
-# apache-airflow = {version = "^2.10.4", optional = true}
+# Alternative: Apache Airflow (optional due to dependency conflicts with some packages)
+apache-airflow = {version = "^2.10.4", optional = true}
 # dbt
 dbt-postgres = "^1.7.4"
 dbt-spark = {extras = ["PyHive"], version = "^1.7.4"}
@@ -71,7 +71,7 @@ kafka-python = "^2.0.2"
 # OpenTelemetry/Distributed Tracing
 opentelemetry-api = "^1.27.0"
 opentelemetry-sdk = "^1.27.0"
-# opentelemetry-exporter-jaeger-thrift = "^1.27.0"  # Temporarily disabled due to dependency conflicts
+opentelemetry-exporter-jaeger-thrift = "^1.27.0"
 opentelemetry-exporter-otlp = "^1.27.0"
 opentelemetry-instrumentation-fastapi = "^0.48b0"
 opentelemetry-instrumentation-sqlalchemy = "^0.48b0"
@@ -98,6 +98,18 @@ jupyter = "^1.1.1"
 notebook = "^7.3.2"
 memory-profiler = "^0.61.0"
 pytest-benchmark = "^5.1.0"
+# Additional testing dependencies for comprehensive coverage
+pytest-html = "^3.2.0"
+pytest-json-report = "^1.5.0"
+pytest-timeout = "^2.2.0"
+pytest-xdist = "^3.4.0"
+pytest-mock = "^3.12.0"
+hypothesis = "^6.90.0"
+locust = "^2.17.0"
+testcontainers = "^4.0.0"
+# great-expectations = "^0.18.16"  # Conflicts with numpy
+coverage = {extras = ["toml"], version = "^7.3.0"}
+orjson = "^3.11.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -147,18 +159,7 @@ strict_equality = true
 mypy_path = "src"
 namespace_packages = true
 
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra -q --strict-markers --strict-config --cov=src"
-testpaths = ["tests"]
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-markers = [
-    "performance: marks tests as performance benchmarks (slow tests)",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests"
-]
+# Pytest configuration moved to pytest.ini to avoid conflicts
 
 [tool.coverage.run]
 source = ["src"]

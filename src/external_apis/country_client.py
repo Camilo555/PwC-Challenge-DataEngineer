@@ -1,4 +1,5 @@
 """Country information API client for geographic data enrichment."""
+
 from __future__ import annotations
 
 from core.logging import get_logger
@@ -71,11 +72,17 @@ class CountryAPIClient(BaseAPIClient):
                     "country_code_3": country_data.get("cca3", ""),
                     "region": country_data.get("region", ""),
                     "subregion": country_data.get("subregion", ""),
-                    "continent": country_data.get("continents", [""])[0] if country_data.get("continents") else "",
-                    "capital": country_data.get("capital", [""])[0] if country_data.get("capital") else "",
+                    "continent": country_data.get("continents", [""])[0]
+                    if country_data.get("continents")
+                    else "",
+                    "capital": country_data.get("capital", [""])[0]
+                    if country_data.get("capital")
+                    else "",
                     "population": country_data.get("population", 0),
                     "area": country_data.get("area", 0),
-                    "timezone": country_data.get("timezones", [""])[0] if country_data.get("timezones") else "",
+                    "timezone": country_data.get("timezones", [""])[0]
+                    if country_data.get("timezones")
+                    else "",
                     "currency_codes": list(country_data.get("currencies", {}).keys()),
                     "languages": list(country_data.get("languages", {}).values()),
                     "flag_emoji": country_data.get("flag", ""),
@@ -120,10 +127,7 @@ class CountryAPIClient(BaseAPIClient):
             logger.error(f"Failed to fetch countries for region '{region}': {e}")
             return []
 
-    async def enrich_transaction_with_country_info(
-        self,
-        transaction_data: dict
-    ) -> dict:
+    async def enrich_transaction_with_country_info(self, transaction_data: dict) -> dict:
         """
         Enrich transaction data with detailed country information.
 
@@ -145,25 +149,26 @@ class CountryAPIClient(BaseAPIClient):
 
         if country_info:
             # Add country information with prefixes to avoid conflicts
-            enriched_data.update({
-                f"country_{key}": value
-                for key, value in country_info.items()
-            })
+            enriched_data.update({f"country_{key}": value for key, value in country_info.items()})
 
             # Add derived fields
-            enriched_data.update({
-                "country_enriched": True,
-                "is_european": country_info.get("region") == "Europe",
-                "is_landlocked": country_info.get("landlocked", False),
-                "country_size_category": self._categorize_country_size(
-                    country_info.get("population", 0)
-                ),
-            })
+            enriched_data.update(
+                {
+                    "country_enriched": True,
+                    "is_european": country_info.get("region") == "Europe",
+                    "is_landlocked": country_info.get("landlocked", False),
+                    "country_size_category": self._categorize_country_size(
+                        country_info.get("population", 0)
+                    ),
+                }
+            )
         else:
-            enriched_data.update({
-                "country_enriched": False,
-                "country_enrichment_error": f"Country info not found: {country_name}",
-            })
+            enriched_data.update(
+                {
+                    "country_enriched": False,
+                    "country_enrichment_error": f"Country info not found: {country_name}",
+                }
+            )
 
         return enriched_data
 

@@ -1,4 +1,5 @@
 """Repository interfaces for domain layer."""
+
 from __future__ import annotations
 
 import builtins
@@ -34,10 +35,7 @@ class IRepository(ABC, Generic[T]):
 
     @abstractmethod
     async def list(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        filters: dict[str, Any] | None = None
+        self, skip: int = 0, limit: int = 100, filters: dict[str, Any] | None = None
     ) -> list[T]:
         """List entities with pagination and filters."""
         pass
@@ -78,28 +76,19 @@ class ITransactionRepository(IRepository):
 
     @abstractmethod
     async def get_by_customer(
-        self,
-        customer_id: str,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None
+        self, customer_id: str, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> list[Any]:
         """Get transactions by customer."""
         pass
 
     @abstractmethod
-    async def get_by_date_range(
-        self,
-        start_date: datetime,
-        end_date: datetime
-    ) -> list[Any]:
+    async def get_by_date_range(self, start_date: datetime, end_date: datetime) -> list[Any]:
         """Get transactions within date range."""
         pass
 
     @abstractmethod
     async def get_cancelled(
-        self,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None
+        self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> list[Any]:
         """Get cancelled transactions."""
         pass
@@ -124,20 +113,13 @@ class IProductRepository(IRepository):
         pass
 
     @abstractmethod
-    async def search(
-        self,
-        query: str,
-        limit: int = 100
-    ) -> list[Any]:
+    async def search(self, query: str, limit: int = 100) -> list[Any]:
         """Search products by text."""
         pass
 
     @abstractmethod
     async def get_top_selling(
-        self,
-        limit: int = 10,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None
+        self, limit: int = 10, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> list[Any]:
         """Get top selling products."""
         pass
@@ -167,11 +149,7 @@ class ICustomerRepository(IRepository):
         pass
 
     @abstractmethod
-    async def update_metrics(
-        self,
-        customer_id: str,
-        metrics: dict[str, Any]
-    ) -> bool:
+    async def update_metrics(self, customer_id: str, metrics: dict[str, Any]) -> bool:
         """Update customer metrics."""
         pass
 
@@ -200,10 +178,6 @@ class IInvoiceRepository(IRepository):
         pass
 
     @abstractmethod
-    async def cancel(
-        self,
-        invoice_no: str,
-        reason: str | None = None
-    ) -> bool:
+    async def cancel(self, invoice_no: str, reason: str | None = None) -> bool:
         """Cancel an invoice."""
         pass

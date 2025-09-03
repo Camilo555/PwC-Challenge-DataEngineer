@@ -2,6 +2,7 @@
 Monitoring and Observability Configuration
 Provides comprehensive monitoring settings for production deployment
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -89,10 +90,7 @@ class MonitoringConfig(BaseSettings):
     business_metrics_enabled: bool = Field(default=True)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     def get_environment_overrides(self, environment: Environment) -> dict[str, Any]:
@@ -129,7 +127,7 @@ class MonitoringConfig(BaseSettings):
                 "logstash_enabled": True,
                 "alerting_enabled": True,
                 "tracing_enabled": True,
-            }
+            },
         }
 
         return overrides.get(environment, {})
@@ -179,7 +177,7 @@ alerting:
                     {"title": "ETL Processing Time", "type": "graph"},
                     {"title": "Data Quality Score", "type": "singlestat"},
                     {"title": "Active Connections", "type": "singlestat"},
-                ]
+                ],
             },
             "spark_cluster": {
                 "title": "Spark Cluster Metrics",
@@ -188,7 +186,7 @@ alerting:
                     {"title": "Cluster Memory Usage", "type": "graph"},
                     {"title": "Running Jobs", "type": "singlestat"},
                     {"title": "Failed Tasks", "type": "singlestat"},
-                ]
+                ],
             },
             "data_pipeline": {
                 "title": "Data Pipeline Health",
@@ -197,8 +195,8 @@ alerting:
                     {"title": "Error Rate", "type": "graph"},
                     {"title": "Pipeline Status", "type": "table"},
                     {"title": "Data Freshness", "type": "singlestat"},
-                ]
-            }
+                ],
+            },
         }
 
     def get_alert_rules(self) -> list[dict]:
@@ -211,8 +209,8 @@ alerting:
                 "labels": {"severity": "warning"},
                 "annotations": {
                     "summary": "High error rate detected",
-                    "description": "Error rate is {{ $value }} errors per second"
-                }
+                    "description": "Error rate is {{ $value }} errors per second",
+                },
             },
             {
                 "alert": "APIResponseTimeTooHigh",
@@ -221,8 +219,8 @@ alerting:
                 "labels": {"severity": "warning"},
                 "annotations": {
                     "summary": "API response time too high",
-                    "description": "95th percentile response time is {{ $value }}s"
-                }
+                    "description": "95th percentile response time is {{ $value }}s",
+                },
             },
             {
                 "alert": "DataQualityScoreLow",
@@ -231,8 +229,8 @@ alerting:
                 "labels": {"severity": "critical"},
                 "annotations": {
                     "summary": "Data quality score below threshold",
-                    "description": "Data quality score is {{ $value }}"
-                }
+                    "description": "Data quality score is {{ $value }}",
+                },
             },
             {
                 "alert": "ETLProcessingFailed",
@@ -241,8 +239,8 @@ alerting:
                 "labels": {"severity": "critical"},
                 "annotations": {
                     "summary": "ETL processing failed",
-                    "description": "ETL job {{ $labels.job_name }} has failed"
-                }
+                    "description": "ETL job {{ $labels.job_name }} has failed",
+                },
             },
             {
                 "alert": "HighMemoryUsage",
@@ -251,7 +249,7 @@ alerting:
                 "labels": {"severity": "warning"},
                 "annotations": {
                     "summary": "High memory usage detected",
-                    "description": "Memory usage is {{ $value }}GB"
-                }
-            }
+                    "description": "Memory usage is {{ $value }}GB",
+                },
+            },
         ]

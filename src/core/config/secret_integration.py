@@ -2,6 +2,7 @@
 Secret Management Integration for Configuration
 Integrates secret manager with application configuration system.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,7 @@ class SecretConfigMixin:
     def from_secrets(cls, secret_overrides: dict[str, str] | None = None):
         """
         Create configuration instance using secrets from secret manager.
-        
+
         Args:
             secret_overrides: Optional dictionary to override specific secrets
         """
@@ -69,23 +70,23 @@ async def _load_secrets_async(secret_overrides: dict[str, str] | None = None) ->
 
     # Common secret keys that configuration classes might need
     secret_keys = [
-        'SECRET_KEY',
-        'JWT_SECRET_KEY',
-        'DATABASE_URL',
-        'BASIC_AUTH_PASSWORD',
-        'BASIC_AUTH_USERNAME',
-        'ADMIN_USERNAME',
-        'TYPESENSE_API_KEY',
-        'SPARK_AUTH_SECRET',
-        'REDIS_PASSWORD',
-        'GRAFANA_ADMIN_PASSWORD',
-        'SMTP_PASSWORD',
-        'AWS_ACCESS_KEY_ID',
-        'AWS_SECRET_ACCESS_KEY',
-        'VAULT_TOKEN',
-        'VAULT_URL',
-        'OAUTH2_CLIENT_ID',
-        'OAUTH2_CLIENT_SECRET'
+        "SECRET_KEY",
+        "JWT_SECRET_KEY",
+        "DATABASE_URL",
+        "BASIC_AUTH_PASSWORD",
+        "BASIC_AUTH_USERNAME",
+        "ADMIN_USERNAME",
+        "TYPESENSE_API_KEY",
+        "SPARK_AUTH_SECRET",
+        "REDIS_PASSWORD",
+        "GRAFANA_ADMIN_PASSWORD",
+        "SMTP_PASSWORD",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "VAULT_TOKEN",
+        "VAULT_URL",
+        "OAUTH2_CLIENT_ID",
+        "OAUTH2_CLIENT_SECRET",
     ]
 
     # Apply overrides if provided
@@ -116,7 +117,7 @@ def get_database_url_from_secrets() -> str | None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         secret_manager = get_secret_manager()
-        database_url = loop.run_until_complete(secret_manager.get_secret('DATABASE_URL'))
+        database_url = loop.run_until_complete(secret_manager.get_secret("DATABASE_URL"))
         loop.close()
         return database_url
     except Exception as e:
@@ -131,7 +132,7 @@ def get_jwt_secret_from_secrets() -> str | None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         secret_manager = get_secret_manager()
-        jwt_secret = loop.run_until_complete(secret_manager.get_secret('JWT_SECRET_KEY'))
+        jwt_secret = loop.run_until_complete(secret_manager.get_secret("JWT_SECRET_KEY"))
         loop.close()
         return jwt_secret
     except Exception as e:
@@ -150,11 +151,11 @@ def ensure_secrets_initialized():
         initializer = get_secret_initializer()
         health_check = loop.run_until_complete(initializer.health_check())
 
-        if health_check['status'] == 'unhealthy':
+        if health_check["status"] == "unhealthy":
             logger.warning("Required secrets are missing, initializing...")
             loop.run_until_complete(initializer.initialize_secrets())
             logger.info("✅ Secrets initialized successfully")
-        elif health_check['status'] == 'degraded':
+        elif health_check["status"] == "degraded":
             logger.info("⚠️ Some optional secrets are missing but system is functional")
         else:
             logger.info("✅ All secrets are properly configured")
@@ -172,10 +173,10 @@ def initialize_secrets_on_startup():
     import os
 
     # Only initialize secrets in production or when explicitly requested
-    environment = os.getenv('ENVIRONMENT', 'development').lower()
-    force_init = os.getenv('FORCE_SECRET_INIT', '').lower() in ('true', '1', 'yes')
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    force_init = os.getenv("FORCE_SECRET_INIT", "").lower() in ("true", "1", "yes")
 
-    if environment == 'production' or force_init:
+    if environment == "production" or force_init:
         logger.info("Initializing secret management for production environment...")
         ensure_secrets_initialized()
     else:
@@ -184,9 +185,9 @@ def initialize_secrets_on_startup():
 
 # Export convenience functions
 __all__ = [
-    'SecretConfigMixin',
-    'get_database_url_from_secrets',
-    'get_jwt_secret_from_secrets',
-    'ensure_secrets_initialized',
-    'initialize_secrets_on_startup'
+    "SecretConfigMixin",
+    "get_database_url_from_secrets",
+    "get_jwt_secret_from_secrets",
+    "ensure_secrets_initialized",
+    "initialize_secrets_on_startup",
 ]

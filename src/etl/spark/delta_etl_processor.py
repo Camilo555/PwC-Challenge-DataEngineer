@@ -2,6 +2,7 @@
 Spark Delta Lake ETL Processor
 Comprehensive ETL pipeline using Spark DataFrames and Delta Lake for all layers
 """
+
 import json
 import os
 from datetime import datetime
@@ -71,16 +72,16 @@ class DeltaETLProcessor:
         self,
         input_file: str | None = None,
         enable_optimizations: bool = True,
-        enable_data_quality: bool = True
+        enable_data_quality: bool = True,
     ) -> dict[str, Any]:
         """
         Execute complete Bronze -> Silver -> Gold pipeline
-        
+
         Args:
             input_file: Optional input file path
             enable_optimizations: Whether to apply optimizations
             enable_data_quality: Whether to run data quality checks
-            
+
         Returns:
             Dictionary with pipeline execution results
         """
@@ -91,7 +92,7 @@ class DeltaETLProcessor:
             results = {
                 "pipeline_id": f"delta_etl_{int(pipeline_start.timestamp())}",
                 "start_time": pipeline_start.isoformat(),
-                "layers_processed": []
+                "layers_processed": [],
             }
 
             # 1. Bronze Layer Processing
@@ -113,14 +114,18 @@ class DeltaETLProcessor:
             pipeline_end = datetime.now()
             total_time = (pipeline_end - pipeline_start).total_seconds()
 
-            results.update({
-                "end_time": pipeline_end.isoformat(),
-                "total_processing_time_seconds": total_time,
-                "status": "success",
-                "total_records_processed": sum(layer.get("record_count", 0) for layer in results["layers_processed"]),
-                "optimizations_enabled": enable_optimizations,
-                "data_quality_enabled": enable_data_quality
-            })
+            results.update(
+                {
+                    "end_time": pipeline_end.isoformat(),
+                    "total_processing_time_seconds": total_time,
+                    "status": "success",
+                    "total_records_processed": sum(
+                        layer.get("record_count", 0) for layer in results["layers_processed"]
+                    ),
+                    "optimizations_enabled": enable_optimizations,
+                    "data_quality_enabled": enable_data_quality,
+                }
+            )
 
             self.logger.info(f"Complete pipeline finished in {total_time:.2f} seconds")
             return results
@@ -130,17 +135,15 @@ class DeltaETLProcessor:
             raise
 
     def process_bronze_layer(
-        self,
-        input_file: str | None = None,
-        enable_data_quality: bool = True
+        self, input_file: str | None = None, enable_data_quality: bool = True
     ) -> dict[str, Any]:
         """
         Process Bronze layer with raw data ingestion and basic validation
-        
+
         Args:
             input_file: Input CSV file path
             enable_data_quality: Whether to run data quality assessment
-            
+
         Returns:
             Dictionary with Bronze processing results
         """
@@ -171,7 +174,7 @@ class DeltaETLProcessor:
                 bronze_df,
                 "retail_transactions",
                 partition_cols=["__bronze_ingestion_date"],
-                mode="overwrite"
+                mode="overwrite",
             )
 
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -183,7 +186,7 @@ class DeltaETLProcessor:
                 "record_count": write_result["record_count"],
                 "processing_time_seconds": processing_time,
                 "quality_metrics": quality_metrics,
-                "table_path": write_result["table_path"]
+                "table_path": write_result["table_path"],
             }
 
             self.logger.info(f"Bronze layer processed: {write_result['record_count']:,} records")
@@ -196,10 +199,10 @@ class DeltaETLProcessor:
     def process_silver_layer(self, enable_data_quality: bool = True) -> dict[str, Any]:
         """
         Process Silver layer with business rules and data quality validation
-        
+
         Args:
             enable_data_quality: Whether to run data quality assessment
-            
+
         Returns:
             Dictionary with Silver processing results
         """
@@ -226,7 +229,7 @@ class DeltaETLProcessor:
                 "retail_transactions_clean",
                 business_key="transaction_id",
                 partition_cols=["country", "year_month"],
-                enable_scd2=True
+                enable_scd2=True,
             )
 
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -238,7 +241,7 @@ class DeltaETLProcessor:
                 "processing_time_seconds": processing_time,
                 "quality_metrics": quality_metrics,
                 "scd2_enabled": True,
-                "business_rules_applied": True
+                "business_rules_applied": True,
             }
 
             self.logger.info(f"Silver layer processed: {write_result['record_count']:,} records")
@@ -251,10 +254,10 @@ class DeltaETLProcessor:
     def process_gold_layer(self, enable_optimizations: bool = True) -> dict[str, Any]:
         """
         Process Gold layer with star schema and advanced analytics
-        
+
         Args:
             enable_optimizations: Whether to apply table optimizations
-            
+
         Returns:
             Dictionary with Gold processing results
         """
@@ -276,9 +279,9 @@ class DeltaETLProcessor:
             processing_time = (datetime.now() - start_time).total_seconds()
 
             total_records = (
-                dim_results.get("total_dim_records", 0) +
-                fact_result.get("record_count", 0) +
-                analytics_results.get("total_analytics_records", 0)
+                dim_results.get("total_dim_records", 0)
+                + fact_result.get("record_count", 0)
+                + analytics_results.get("total_analytics_records", 0)
             )
 
             result = {
@@ -289,7 +292,7 @@ class DeltaETLProcessor:
                 "dimensional_tables": dim_results,
                 "fact_table": fact_result,
                 "analytics_aggregations": analytics_results,
-                "optimizations_applied": enable_optimizations
+                "optimizations_applied": enable_optimizations,
             }
 
             self.logger.info(f"Gold layer processed: {total_records:,} total records")
@@ -313,25 +316,28 @@ class DeltaETLProcessor:
         """Read raw CSV data with proper schema inference"""
 
         # Define expected schema for retail data
-        schema = StructType([
-            StructField("InvoiceNo", StringType(), True),
-            StructField("StockCode", StringType(), True),
-            StructField("Description", StringType(), True),
-            StructField("Quantity", IntegerType(), True),
-            StructField("InvoiceDate", StringType(), True),
-            StructField("UnitPrice", DoubleType(), True),
-            StructField("CustomerID", StringType(), True),
-            StructField("Country", StringType(), True)
-        ])
+        schema = StructType(
+            [
+                StructField("InvoiceNo", StringType(), True),
+                StructField("StockCode", StringType(), True),
+                StructField("Description", StringType(), True),
+                StructField("Quantity", IntegerType(), True),
+                StructField("InvoiceDate", StringType(), True),
+                StructField("UnitPrice", DoubleType(), True),
+                StructField("CustomerID", StringType(), True),
+                StructField("Country", StringType(), True),
+            ]
+        )
 
         # Read CSV with proper options
-        df = (self.spark.read
-              .option("header", "true")
-              .option("inferSchema", "false")
-              .option("multiline", "true")
-              .option("escape", "\"")
-              .schema(schema)
-              .csv(input_file))
+        df = (
+            self.spark.read.option("header", "true")
+            .option("inferSchema", "false")
+            .option("multiline", "true")
+            .option("escape", '"')
+            .schema(schema)
+            .csv(input_file)
+        )
 
         self.logger.info(f"Raw data loaded: {df.count():,} records")
         return df
@@ -340,36 +346,35 @@ class DeltaETLProcessor:
         """Apply Bronze layer transformations"""
 
         # Add ingestion metadata
-        transformed_df = (df
-            .withColumn("__bronze_ingestion_date", date_format(current_timestamp(), "yyyy-MM-dd"))
+        transformed_df = (
+            df.withColumn("__bronze_ingestion_date", date_format(current_timestamp(), "yyyy-MM-dd"))
             .withColumn("__bronze_ingestion_timestamp", current_timestamp())
             .withColumn("__bronze_file_source", lit("csv_import"))
-
             # Basic cleaning
             .withColumn("InvoiceNo", trim(col("InvoiceNo")))
             .withColumn("StockCode", trim(upper(col("StockCode"))))
             .withColumn("Description", trim(col("Description")))
             .withColumn("Country", trim(col("Country")))
             .withColumn("CustomerID", trim(col("CustomerID")))
-
             # Convert InvoiceDate to timestamp
-            .withColumn("InvoiceTimestamp",
-                       to_timestamp(col("InvoiceDate"), "M/d/yyyy H:mm"))
-
+            .withColumn("InvoiceTimestamp", to_timestamp(col("InvoiceDate"), "M/d/yyyy H:mm"))
             # Create calculated fields
-            .withColumn("TotalAmount",
-                       when(col("Quantity").isNotNull() & col("UnitPrice").isNotNull(),
-                            col("Quantity") * col("UnitPrice")).otherwise(0.0))
-
+            .withColumn(
+                "TotalAmount",
+                when(
+                    col("Quantity").isNotNull() & col("UnitPrice").isNotNull(),
+                    col("Quantity") * col("UnitPrice"),
+                ).otherwise(0.0),
+            )
             # Add row ID
             .withColumn("__bronze_row_id", monotonically_increasing_id())
         )
 
         # Filter out completely null rows
         transformed_df = transformed_df.filter(
-            col("InvoiceNo").isNotNull() |
-            col("StockCode").isNotNull() |
-            col("Description").isNotNull()
+            col("InvoiceNo").isNotNull()
+            | col("StockCode").isNotNull()
+            | col("Description").isNotNull()
         )
 
         self.logger.info(f"Bronze transformations applied: {transformed_df.count():,} records")
@@ -378,54 +383,62 @@ class DeltaETLProcessor:
     def _apply_silver_transformations(self, bronze_df: DataFrame) -> DataFrame:
         """Apply Silver layer transformations with data cleaning and standardization"""
 
-        silver_df = (bronze_df
+        silver_df = (
+            bronze_df
             # Create primary key
-            .withColumn("transaction_id",
-                       concat_ws("_", col("InvoiceNo"), col("StockCode"), col("__bronze_row_id")))
-
+            .withColumn(
+                "transaction_id",
+                concat_ws("_", col("InvoiceNo"), col("StockCode"), col("__bronze_row_id")),
+            )
             # Enhanced cleaning
             .withColumn("invoice_no", regexp_replace(col("InvoiceNo"), "[^A-Z0-9]", ""))
             .withColumn("stock_code", upper(trim(col("StockCode"))))
-            .withColumn("description",
-                       regexp_replace(trim(col("Description")), "\\s+", " "))
-            .withColumn("customer_id",
-                       when(col("CustomerID").isNotNull() & (col("CustomerID") != ""),
-                            col("CustomerID")).otherwise(lit("UNKNOWN")))
+            .withColumn("description", regexp_replace(trim(col("Description")), "\\s+", " "))
+            .withColumn(
+                "customer_id",
+                when(
+                    col("CustomerID").isNotNull() & (col("CustomerID") != ""), col("CustomerID")
+                ).otherwise(lit("UNKNOWN")),
+            )
             .withColumn("country", trim(upper(col("Country"))))
-
             # Data type conversions and validations
-            .withColumn("quantity",
-                       when(col("Quantity").isNull() | (col("Quantity") < 0), 0)
-                       .otherwise(col("Quantity")))
-            .withColumn("unit_price",
-                       when(col("UnitPrice").isNull() | (col("UnitPrice") < 0), 0.0)
-                       .otherwise(col("UnitPrice")))
-            .withColumn("total_amount",
-                       col("quantity") * col("unit_price"))
-
+            .withColumn(
+                "quantity",
+                when(col("Quantity").isNull() | (col("Quantity") < 0), 0).otherwise(
+                    col("Quantity")
+                ),
+            )
+            .withColumn(
+                "unit_price",
+                when(col("UnitPrice").isNull() | (col("UnitPrice") < 0), 0.0).otherwise(
+                    col("UnitPrice")
+                ),
+            )
+            .withColumn("total_amount", col("quantity") * col("unit_price"))
             # Date standardization
             .withColumn("invoice_timestamp", col("InvoiceTimestamp"))
             .withColumn("invoice_date", col("InvoiceTimestamp").cast(DateType()))
             .withColumn("year_month", date_format(col("InvoiceTimestamp"), "yyyy-MM"))
-
             # Business categorization
-            .withColumn("transaction_type",
-                       when(col("quantity") > 0, "SALE")
-                       .when(col("quantity") < 0, "RETURN")
-                       .otherwise("OTHER"))
-
-            .withColumn("customer_type",
-                       when(col("customer_id") == "UNKNOWN", "GUEST")
-                       .otherwise("REGISTERED"))
-
+            .withColumn(
+                "transaction_type",
+                when(col("quantity") > 0, "SALE")
+                .when(col("quantity") < 0, "RETURN")
+                .otherwise("OTHER"),
+            )
+            .withColumn(
+                "customer_type",
+                when(col("customer_id") == "UNKNOWN", "GUEST").otherwise("REGISTERED"),
+            )
             # Data quality flags
-            .withColumn("is_valid_transaction",
-                       (col("invoice_no").isNotNull()) &
-                       (col("stock_code").isNotNull()) &
-                       (col("quantity") != 0) &
-                       (col("unit_price") >= 0) &
-                       (col("invoice_timestamp").isNotNull()))
-
+            .withColumn(
+                "is_valid_transaction",
+                (col("invoice_no").isNotNull())
+                & (col("stock_code").isNotNull())
+                & (col("quantity") != 0)
+                & (col("unit_price") >= 0)
+                & (col("invoice_timestamp").isNotNull()),
+            )
             # Select final columns
             .select(
                 "transaction_id",
@@ -443,7 +456,7 @@ class DeltaETLProcessor:
                 "year_month",
                 "transaction_type",
                 "is_valid_transaction",
-                "__bronze_ingestion_timestamp"
+                "__bronze_ingestion_timestamp",
             )
         )
 
@@ -454,7 +467,7 @@ class DeltaETLProcessor:
         """Apply business rules and validation"""
 
         # Business rule: Filter out invalid transactions
-        validated_df = df.filter(col("is_valid_transaction") == True)
+        validated_df = df.filter(col("is_valid_transaction"))
 
         # Business rule: Reasonable price range (0.01 to 10000)
         validated_df = validated_df.filter(
@@ -462,15 +475,11 @@ class DeltaETLProcessor:
         )
 
         # Business rule: Reasonable quantity range (-1000 to 10000)
-        validated_df = validated_df.filter(
-            (col("quantity") >= -1000) & (col("quantity") <= 10000)
-        )
+        validated_df = validated_df.filter((col("quantity") >= -1000) & (col("quantity") <= 10000))
 
         # Business rule: Valid invoice date (last 10 years)
         current_year = datetime.now().year
-        validated_df = validated_df.filter(
-            year(col("invoice_timestamp")) >= (current_year - 10)
-        )
+        validated_df = validated_df.filter(year(col("invoice_timestamp")) >= (current_year - 10))
 
         self.logger.info(f"Business rules applied: {validated_df.count():,} records")
         return validated_df
@@ -483,66 +492,67 @@ class DeltaETLProcessor:
         # 1. Customer Dimension with SCD2
         customer_dim = self._create_customer_dimension(silver_df)
         customer_result = self.delta_manager.write_gold_layer(
-            customer_dim, "dim_customer",
+            customer_dim,
+            "dim_customer",
             partition_cols=["customer_type"],
-            optimize_for_queries=True
+            optimize_for_queries=True,
         )
         results["dim_customer"] = customer_result
 
         # 2. Product Dimension
         product_dim = self._create_product_dimension(silver_df)
         product_result = self.delta_manager.write_gold_layer(
-            product_dim, "dim_product",
-            optimize_for_queries=True
+            product_dim, "dim_product", optimize_for_queries=True
         )
         results["dim_product"] = product_result
 
         # 3. Date Dimension
         date_dim = self._create_date_dimension(silver_df)
         date_result = self.delta_manager.write_gold_layer(
-            date_dim, "dim_date",
-            optimize_for_queries=True
+            date_dim, "dim_date", optimize_for_queries=True
         )
         results["dim_date"] = date_result
 
         # 4. Country Dimension
         country_dim = self._create_country_dimension(silver_df)
         country_result = self.delta_manager.write_gold_layer(
-            country_dim, "dim_country",
-            optimize_for_queries=True
+            country_dim, "dim_country", optimize_for_queries=True
         )
         results["dim_country"] = country_result
 
         total_records = sum(result["record_count"] for result in results.values())
         results["total_dim_records"] = total_records
 
-        self.logger.info(f"Created {len(results)-1} dimensional tables with {total_records:,} total records")
+        self.logger.info(
+            f"Created {len(results) - 1} dimensional tables with {total_records:,} total records"
+        )
         return results
 
     def _create_customer_dimension(self, df: DataFrame) -> DataFrame:
         """Create customer dimension table"""
 
-        customer_stats = (df
-            .groupBy("customer_id", "customer_type")
-            .agg(
-                countDistinct("invoice_no").alias("total_orders"),
-                spark_sum("total_amount").alias("total_spent"),
-                avg("total_amount").alias("avg_order_value"),
-                spark_min("invoice_timestamp").alias("first_purchase_date"),
-                spark_max("invoice_timestamp").alias("last_purchase_date"),
-                count("transaction_id").alias("total_transactions")
-            )
+        customer_stats = df.groupBy("customer_id", "customer_type").agg(
+            countDistinct("invoice_no").alias("total_orders"),
+            spark_sum("total_amount").alias("total_spent"),
+            avg("total_amount").alias("avg_order_value"),
+            spark_min("invoice_timestamp").alias("first_purchase_date"),
+            spark_max("invoice_timestamp").alias("last_purchase_date"),
+            count("transaction_id").alias("total_transactions"),
         )
 
         # Add customer segmentation
-        customer_dim = (customer_stats
-            .withColumn("customer_key", monotonically_increasing_id())
-            .withColumn("customer_segment",
+        customer_dim = (
+            customer_stats.withColumn("customer_key", monotonically_increasing_id())
+            .withColumn(
+                "customer_segment",
                 when(col("total_spent") >= 1000, "HIGH_VALUE")
                 .when(col("total_spent") >= 500, "MEDIUM_VALUE")
-                .otherwise("LOW_VALUE"))
-            .withColumn("is_active_customer",
-                col("last_purchase_date") >= expr("current_date() - interval 365 days"))
+                .otherwise("LOW_VALUE"),
+            )
+            .withColumn(
+                "is_active_customer",
+                col("last_purchase_date") >= expr("current_date() - interval 365 days"),
+            )
             .select(
                 "customer_key",
                 "customer_id",
@@ -554,7 +564,7 @@ class DeltaETLProcessor:
                 "first_purchase_date",
                 "last_purchase_date",
                 "total_transactions",
-                "is_active_customer"
+                "is_active_customer",
             )
         )
 
@@ -563,31 +573,32 @@ class DeltaETLProcessor:
     def _create_product_dimension(self, df: DataFrame) -> DataFrame:
         """Create product dimension table"""
 
-        product_stats = (df
-            .groupBy("stock_code", "description")
-            .agg(
-                count("transaction_id").alias("total_transactions"),
-                spark_sum("quantity").alias("total_quantity_sold"),
-                spark_sum("total_amount").alias("total_revenue"),
-                avg("unit_price").alias("avg_unit_price"),
-                spark_min("unit_price").alias("min_unit_price"),
-                spark_max("unit_price").alias("max_unit_price"),
-                countDistinct("customer_id").alias("unique_customers")
-            )
+        product_stats = df.groupBy("stock_code", "description").agg(
+            count("transaction_id").alias("total_transactions"),
+            spark_sum("quantity").alias("total_quantity_sold"),
+            spark_sum("total_amount").alias("total_revenue"),
+            avg("unit_price").alias("avg_unit_price"),
+            spark_min("unit_price").alias("min_unit_price"),
+            spark_max("unit_price").alias("max_unit_price"),
+            countDistinct("customer_id").alias("unique_customers"),
         )
 
-        product_dim = (product_stats
-            .withColumn("product_key", monotonically_increasing_id())
-            .withColumn("product_category",
+        product_dim = (
+            product_stats.withColumn("product_key", monotonically_increasing_id())
+            .withColumn(
+                "product_category",
                 when(col("description").contains("BAG"), "BAGS")
                 .when(col("description").contains("CANDLE"), "CANDLES")
                 .when(col("description").contains("CARD"), "CARDS")
                 .when(col("description").contains("LIGHT"), "LIGHTING")
-                .otherwise("OTHER"))
-            .withColumn("price_tier",
+                .otherwise("OTHER"),
+            )
+            .withColumn(
+                "price_tier",
                 when(col("avg_unit_price") >= 10, "PREMIUM")
                 .when(col("avg_unit_price") >= 5, "STANDARD")
-                .otherwise("BUDGET"))
+                .otherwise("BUDGET"),
+            )
             .select(
                 "product_key",
                 "stock_code",
@@ -600,7 +611,7 @@ class DeltaETLProcessor:
                 "avg_unit_price",
                 "min_unit_price",
                 "max_unit_price",
-                "unique_customers"
+                "unique_customers",
             )
         )
 
@@ -610,14 +621,12 @@ class DeltaETLProcessor:
         """Create date dimension table"""
 
         # Get unique dates from transactions
-        dates = (df
-            .select(col("invoice_date").alias("date"))
-            .distinct()
-            .filter(col("date").isNotNull())
+        dates = (
+            df.select(col("invoice_date").alias("date")).distinct().filter(col("date").isNotNull())
         )
 
-        date_dim = (dates
-            .withColumn("date_key", monotonically_increasing_id())
+        date_dim = (
+            dates.withColumn("date_key", monotonically_increasing_id())
             .withColumn("year", year(col("date")))
             .withColumn("month", month(col("date")))
             .withColumn("day", dayofmonth(col("date")))
@@ -625,8 +634,7 @@ class DeltaETLProcessor:
             .withColumn("day_of_week", expr("dayofweek(date)"))
             .withColumn("day_name", date_format(col("date"), "EEEE"))
             .withColumn("month_name", date_format(col("date"), "MMMM"))
-            .withColumn("is_weekend",
-                expr("dayofweek(date) IN (1, 7)"))
+            .withColumn("is_weekend", expr("dayofweek(date) IN (1, 7)"))
             .withColumn("year_month", date_format(col("date"), "yyyy-MM"))
             .select(
                 "date_key",
@@ -639,7 +647,7 @@ class DeltaETLProcessor:
                 "day_of_week",
                 "day_name",
                 "is_weekend",
-                "year_month"
+                "year_month",
             )
         )
 
@@ -648,28 +656,32 @@ class DeltaETLProcessor:
     def _create_country_dimension(self, df: DataFrame) -> DataFrame:
         """Create country dimension table"""
 
-        country_stats = (df
-            .groupBy("country")
-            .agg(
-                countDistinct("customer_id").alias("unique_customers"),
-                countDistinct("stock_code").alias("unique_products"),
-                count("transaction_id").alias("total_transactions"),
-                spark_sum("total_amount").alias("total_revenue")
-            )
+        country_stats = df.groupBy("country").agg(
+            countDistinct("customer_id").alias("unique_customers"),
+            countDistinct("stock_code").alias("unique_products"),
+            count("transaction_id").alias("total_transactions"),
+            spark_sum("total_amount").alias("total_revenue"),
         )
 
-        country_dim = (country_stats
-            .withColumn("country_key", monotonically_increasing_id())
-            .withColumn("region",
+        country_dim = (
+            country_stats.withColumn("country_key", monotonically_increasing_id())
+            .withColumn(
+                "region",
                 when(col("country").isin("United Kingdom", "Ireland"), "UK_IRELAND")
-                .when(col("country").isin("Germany", "France", "Netherlands", "Belgium"), "WESTERN_EUROPE")
+                .when(
+                    col("country").isin("Germany", "France", "Netherlands", "Belgium"),
+                    "WESTERN_EUROPE",
+                )
                 .when(col("country").isin("Spain", "Italy", "Portugal"), "SOUTHERN_EUROPE")
                 .when(col("country").isin("Norway", "Sweden", "Denmark", "Finland"), "NORDIC")
-                .otherwise("OTHER"))
-            .withColumn("market_size",
+                .otherwise("OTHER"),
+            )
+            .withColumn(
+                "market_size",
                 when(col("total_revenue") >= 100000, "LARGE")
                 .when(col("total_revenue") >= 10000, "MEDIUM")
-                .otherwise("SMALL"))
+                .otherwise("SMALL"),
+            )
             .select(
                 "country_key",
                 "country",
@@ -678,7 +690,7 @@ class DeltaETLProcessor:
                 "unique_customers",
                 "unique_products",
                 "total_transactions",
-                "total_revenue"
+                "total_revenue",
             )
         )
 
@@ -690,8 +702,8 @@ class DeltaETLProcessor:
         # This would typically involve joining with dimension tables to get keys
         # For simplicity, using generated keys based on values
 
-        fact_sales = (silver_df
-            .withColumn("fact_key", monotonically_increasing_id())
+        fact_sales = (
+            silver_df.withColumn("fact_key", monotonically_increasing_id())
             .withColumn("customer_key", hash(col("customer_id")))
             .withColumn("product_key", hash(col("stock_code")))
             .withColumn("date_key", hash(col("invoice_date")))
@@ -708,14 +720,12 @@ class DeltaETLProcessor:
                 "unit_price",
                 "total_amount",
                 "transaction_type",
-                "invoice_timestamp"
+                "invoice_timestamp",
             )
         )
 
         fact_result = self.delta_manager.write_gold_layer(
-            fact_sales, "fact_sales",
-            partition_cols=["transaction_type"],
-            optimize_for_queries=True
+            fact_sales, "fact_sales", partition_cols=["transaction_type"], optimize_for_queries=True
         )
 
         return fact_result
@@ -726,43 +736,45 @@ class DeltaETLProcessor:
         results = {}
 
         # 1. Daily sales summary
-        daily_sales = (silver_df
-            .groupBy("invoice_date", "country")
+        daily_sales = (
+            silver_df.groupBy("invoice_date", "country")
             .agg(
                 count("transaction_id").alias("transaction_count"),
                 spark_sum("total_amount").alias("total_revenue"),
                 countDistinct("customer_id").alias("unique_customers"),
                 countDistinct("stock_code").alias("unique_products"),
-                avg("total_amount").alias("avg_transaction_value")
+                avg("total_amount").alias("avg_transaction_value"),
             )
             .withColumn("summary_key", monotonically_increasing_id())
         )
 
         daily_result = self.delta_manager.write_gold_layer(
-            daily_sales, "analytics_daily_sales",
+            daily_sales,
+            "analytics_daily_sales",
             partition_cols=["country"],
-            optimize_for_queries=True
+            optimize_for_queries=True,
         )
         results["daily_sales"] = daily_result
 
         # 2. Customer analytics
-        customer_analytics = (silver_df
-            .groupBy("customer_id", "customer_type", "country")
+        customer_analytics = (
+            silver_df.groupBy("customer_id", "customer_type", "country")
             .agg(
                 count("transaction_id").alias("total_transactions"),
                 spark_sum("total_amount").alias("customer_ltv"),
                 avg("total_amount").alias("avg_order_value"),
                 countDistinct("stock_code").alias("unique_products_purchased"),
                 spark_min("invoice_timestamp").alias("first_purchase"),
-                spark_max("invoice_timestamp").alias("last_purchase")
+                spark_max("invoice_timestamp").alias("last_purchase"),
             )
             .withColumn("analytics_key", monotonically_increasing_id())
         )
 
         customer_result = self.delta_manager.write_gold_layer(
-            customer_analytics, "analytics_customer_summary",
+            customer_analytics,
+            "analytics_customer_summary",
             partition_cols=["customer_type"],
-            optimize_for_queries=True
+            optimize_for_queries=True,
         )
         results["customer_analytics"] = customer_result
 
@@ -781,7 +793,7 @@ class DeltaETLProcessor:
         quality_metrics = {
             "layer": layer,
             "total_records": total_records,
-            "assessment_timestamp": datetime.now().isoformat()
+            "assessment_timestamp": datetime.now().isoformat(),
         }
 
         # Column-level quality assessment
@@ -794,7 +806,7 @@ class DeltaETLProcessor:
                 column_metrics[column] = {
                     "null_count": null_count,
                     "null_percentage": round(null_percentage, 2),
-                    "non_null_count": total_records - null_count
+                    "non_null_count": total_records - null_count,
                 }
 
         quality_metrics["column_quality"] = column_metrics
@@ -815,7 +827,7 @@ class DeltaETLProcessor:
         stats = {
             "pipeline_type": "Delta Lake Spark ETL",
             "timestamp": datetime.now().isoformat(),
-            "layers": {}
+            "layers": {},
         }
 
         # Get statistics for each layer
@@ -824,7 +836,9 @@ class DeltaETLProcessor:
 
             # List tables in layer
             layer_path = getattr(self.delta_manager, f"{layer}_path")
-            tables = [d.name for d in layer_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+            tables = [
+                d.name for d in layer_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+            ]
 
             layer_stats["table_count"] = len(tables)
             layer_stats["tables"] = []
@@ -875,6 +889,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Testing failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
     finally:
         processor.close()

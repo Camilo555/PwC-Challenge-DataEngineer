@@ -1,4 +1,5 @@
 """Data quality validation and metrics."""
+
 from __future__ import annotations
 
 import statistics
@@ -30,11 +31,11 @@ class QualityThreshold:
     """Quality thresholds for validation."""
 
     min_completeness: float = 0.95  # 95% complete
-    min_accuracy: float = 0.98      # 98% accurate
-    min_consistency: float = 0.99   # 99% consistent
-    max_duplicates: float = 0.01    # 1% duplicates allowed
-    max_outliers: float = 0.05      # 5% outliers allowed
-    max_missing: float = 0.05       # 5% missing allowed
+    min_accuracy: float = 0.98  # 98% accurate
+    min_consistency: float = 0.99  # 99% consistent
+    max_duplicates: float = 0.01  # 1% duplicates allowed
+    max_outliers: float = 0.05  # 5% outliers allowed
+    max_missing: float = 0.05  # 5% missing allowed
 
 
 @dataclass
@@ -173,33 +174,23 @@ class DataQualityReport:
                         f"Address missing values in: {', '.join(result.details.get('fields', []))}"
                     )
                 elif result.dimension == QualityDimension.ACCURACY:
-                    recommendations.append(
-                        f"Fix format/range errors in: {result.metric_name}"
-                    )
+                    recommendations.append(f"Fix format/range errors in: {result.metric_name}")
                 elif result.dimension == QualityDimension.UNIQUENESS:
                     recommendations.append(
                         f"Remove {result.details.get('duplicate_count', 0)} duplicate records"
                     )
                 elif result.dimension == QualityDimension.CONSISTENCY:
-                    recommendations.append(
-                        "Review and fix data consistency issues"
-                    )
+                    recommendations.append("Review and fix data consistency issues")
 
         # General recommendations
         if self.metrics.completeness_rate < 0.95:
-            recommendations.append(
-                "Implement data imputation strategy for missing values"
-            )
+            recommendations.append("Implement data imputation strategy for missing values")
 
         if self.metrics.accuracy_rate < 0.98:
-            recommendations.append(
-                "Review data validation rules and cleansing procedures"
-            )
+            recommendations.append("Review data validation rules and cleansing procedures")
 
         if self.metrics.duplicate_records > 100:
-            recommendations.append(
-                "Implement deduplication process in ETL pipeline"
-            )
+            recommendations.append("Implement deduplication process in ETL pipeline")
 
         self.recommendations = recommendations[:10]  # Limit to top 10
         return self.recommendations
@@ -237,7 +228,7 @@ class DataQualityValidator:
         self,
         data: list[dict[str, Any]],
         required_fields: list[str],
-        optional_fields: list[str] | None = None
+        optional_fields: list[str] | None = None,
     ) -> ValidationResult:
         """
         Validate data completeness.
@@ -271,8 +262,7 @@ class DataQualityValidator:
                     missing_count += 1
                     missing_by_field[field_name] += 1
 
-        completeness = 1 - \
-            (missing_count / total_fields) if total_fields > 0 else 0
+        completeness = 1 - (missing_count / total_fields) if total_fields > 0 else 0
 
         self.metrics.missing_values = dict(missing_by_field)
         self.metrics.completeness_rate = completeness
@@ -287,13 +277,11 @@ class DataQualityValidator:
             details={
                 "missing_count": missing_count,
                 "fields": list(missing_by_field.keys()),
-            }
+            },
         )
 
     def validate_uniqueness(
-        self,
-        data: list[dict[str, Any]],
-        key_fields: list[str]
+        self, data: list[dict[str, Any]], key_fields: list[str]
     ) -> ValidationResult:
         """
         Validate data uniqueness.
@@ -341,13 +329,11 @@ class DataQualityValidator:
             details={
                 "duplicate_count": len(duplicates),
                 "duplicate_keys": list(duplicates)[:10],  # Sample
-            }
+            },
         )
 
     def validate_accuracy(
-        self,
-        data: list[dict[str, Any]],
-        validation_rules: dict[str, Any]
+        self, data: list[dict[str, Any]], validation_rules: dict[str, Any]
     ) -> ValidationResult:
         """
         Validate data accuracy against rules.
@@ -400,13 +386,11 @@ class DataQualityValidator:
             details={
                 "error_count": errors,
                 "fields": list(error_by_field.keys()),
-            }
+            },
         )
 
     def validate_consistency(
-        self,
-        data: list[dict[str, Any]],
-        consistency_checks: list[tuple[str, str, Any]]
+        self, data: list[dict[str, Any]], consistency_checks: list[tuple[str, str, Any]]
     ) -> ValidationResult:
         """
         Validate data consistency.
@@ -457,14 +441,14 @@ class DataQualityValidator:
             message=f"Consistency: {consistency:.2%}",
             details={
                 "inconsistent_count": inconsistent,
-            }
+            },
         )
 
     def validate_timeliness(
         self,
         data: list[dict[str, Any]],
         date_field: str,
-        max_age_days: int = 730  # 2 years
+        max_age_days: int = 730,  # 2 years
     ) -> ValidationResult:
         """
         Validate data timeliness.
@@ -524,14 +508,11 @@ class DataQualityValidator:
             details={
                 "future_dates": future,
                 "old_dates": old,
-            }
+            },
         )
 
     def detect_outliers(
-        self,
-        data: list[dict[str, Any]],
-        numeric_fields: list[str],
-        z_threshold: float = 3.0
+        self, data: list[dict[str, Any]], numeric_fields: list[str], z_threshold: float = 3.0
     ) -> dict[str, list[Any]]:
         """
         Detect outliers using Z-score method.
@@ -573,7 +554,7 @@ class DataQualityValidator:
         required_fields: list[str],
         key_fields: list[str],
         validation_rules: dict[str, Any] | None = None,
-        consistency_checks: list[tuple[str, str, Any]] | None = None
+        consistency_checks: list[tuple[str, str, Any]] | None = None,
     ) -> DataQualityReport:
         """
         Generate comprehensive data quality report.
@@ -601,26 +582,18 @@ class DataQualityValidator:
         results = []
 
         # Completeness
-        results.append(
-            self.validate_completeness(data, required_fields)
-        )
+        results.append(self.validate_completeness(data, required_fields))
 
         # Uniqueness
-        results.append(
-            self.validate_uniqueness(data, key_fields)
-        )
+        results.append(self.validate_uniqueness(data, key_fields))
 
         # Accuracy
         if validation_rules:
-            results.append(
-                self.validate_accuracy(data, validation_rules)
-            )
+            results.append(self.validate_accuracy(data, validation_rules))
 
         # Consistency
         if consistency_checks:
-            results.append(
-                self.validate_consistency(data, consistency_checks)
-            )
+            results.append(self.validate_consistency(data, consistency_checks))
 
         # Add all results
         for result in results:
@@ -628,12 +601,10 @@ class DataQualityValidator:
 
         # Calculate metrics
         report.metrics = self.metrics
-        report.metrics.valid_records = sum(
-            1 for r in results if r.passed
-        ) * len(data) // len(results)
-        report.metrics.invalid_records = (
-            report.metrics.total_records - report.metrics.valid_records
+        report.metrics.valid_records = (
+            sum(1 for r in results if r.passed) * len(data) // len(results)
         )
+        report.metrics.invalid_records = report.metrics.total_records - report.metrics.valid_records
 
         # Calculate overall score
         report.calculate_overall_score()

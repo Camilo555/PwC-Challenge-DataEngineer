@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Data Engineering Pipeline (Development)
+  pipeline:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: pwc-pipeline-dev
+    environment:
+      - ENV=development
+      - DATABASE_URL=sqlite:///./data/warehouse/retail.db
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=DEBUG
+      - ENABLE_MONITORING=true
+      - ENABLE_CACHING=true
+      - PROCESSING_ENGINE=pandas
+      - HOT_RELOAD=true
+    volumes:
+      - ../src:/app/src:ro  # Read-only for development
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../config:/app/config
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # Debug port
+    depends_on:
+      - redis
+    networks:
+      - pwc-dev-network
+    restart: "no"
+    command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "-m", "src.api.main"]
+
+  # Redis Cache (Lightweight for dev)
+  redis:
+    image: redis:7.2-alpine
+    container_name: pwc-redis-dev
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - pwc-dev-network
+    restart: "no"
+
+  # Simple monitoring stack for development
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: pwc-prometheus-dev
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=24h'  # Shorter retention for dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - pwc-dev-network
+    restart: "no"
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: pwc-grafana-dev
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-dev-data:/var/lib/grafana
+    networks:
+      - pwc-dev-network
+    restart: "no"
+
+volumes:
+  grafana-dev-data:
+
+networks:
+  pwc-dev-network:
+    driver: bridge

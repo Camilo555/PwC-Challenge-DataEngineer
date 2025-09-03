@@ -2,64 +2,65 @@
 Advanced Real-time Silver Layer Processing
 Provides comprehensive data cleaning, enrichment, and quality assurance for streaming data
 """
+
 from __future__ import annotations
 
-import json
-import uuid
-import re
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
-from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
-    col, current_timestamp, expr, lit, struct, when, coalesce, isnull, isnan,
-    upper, lower, trim, regexp_replace, regexp_extract, split, length,
-    date_format, unix_timestamp, from_unixtime, to_timestamp, datediff,
-    round as spark_round, floor, ceil, abs as spark_abs, sqrt, log, 
-    array, array_contains, element_at, size, sort_array,
-    map_keys, map_values, map_from_arrays, create_map,
-    hash, crc32, md5, sha1, sha2,
-    rand, randn, monotonically_increasing_id,
-    broadcast, bucketBy, sortBy
+    array,
+    col,
+    current_timestamp,
+    date_format,
+    expr,
+    lit,
+    trim,
+    upper,
+    when,
 )
+from pyspark.sql.functions import round as spark_round
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import (
-    StringType, StructField, StructType, TimestampType,
-    DoubleType, IntegerType, BooleanType, LongType, ArrayType, 
-    MapType, DecimalType, FloatType
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.sql.window import Window
 
-from core.config.unified_config import get_unified_config
 from core.logging import get_logger
 from etl.spark.delta_lake_manager import DeltaLakeManager
 from monitoring.advanced_metrics import get_metrics_collector
-from src.streaming.kafka_manager import KafkaManager, StreamingTopic
-from src.streaming.hybrid_messaging_architecture import (
-    HybridMessagingArchitecture, RabbitMQManager, RabbitMQConfig,
-    HybridMessage, MessageType, MessagePriority
-)
 from src.streaming.event_sourcing_cache_integration import (
-    EventCache, CacheConfig, CacheStrategy, ConsistencyLevel
+    CacheConfig,
+    CacheStrategy,
+    ConsistencyLevel,
+    EventCache,
 )
+from src.streaming.hybrid_messaging_architecture import (
+    HybridMessagingArchitecture,
+    RabbitMQConfig,
+    RabbitMQManager,
+)
+from src.streaming.kafka_manager import KafkaManager
 
 
 class DataQualityLevel(Enum):
     """Data quality levels"""
+
     EXCELLENT = "excellent"  # 0.95-1.0
-    GOOD = "good"           # 0.85-0.95
-    FAIR = "fair"           # 0.70-0.85
-    POOR = "poor"           # 0.50-0.70
+    GOOD = "good"  # 0.85-0.95
+    FAIR = "fair"  # 0.70-0.85
+    POOR = "poor"  # 0.50-0.70
     UNACCEPTABLE = "unacceptable"  # < 0.50
 
 
 class EnrichmentType(Enum):
     """Types of data enrichment"""
+
     CURRENCY_CONVERSION = "currency_conversion"
     COUNTRY_MAPPING = "country_mapping"
     PRODUCT_CATEGORIZATION = "product_categorization"
@@ -71,6 +72,7 @@ class EnrichmentType(Enum):
 
 class ProcessingRule(Enum):
     """Data processing rule types"""
+
     VALIDATION = "validation"
     CLEANING = "cleaning"
     TRANSFORMATION = "transformation"
@@ -81,12 +83,13 @@ class ProcessingRule(Enum):
 @dataclass
 class QualityRule:
     """Data quality rule definition"""
+
     rule_id: str
     name: str
     rule_type: ProcessingRule
     condition: str
     severity: str  # critical, high, medium, low
-    action: str    # reject, flag, fix, ignore
+    action: str  # reject, flag, fix, ignore
     description: str = ""
     weight: float = 1.0
     enabled: bool = True
@@ -95,13 +98,14 @@ class QualityRule:
 @dataclass
 class EnrichmentRule:
     """Data enrichment rule definition"""
+
     rule_id: str
     name: str
     enrichment_type: EnrichmentType
-    source_columns: List[str]
-    target_columns: List[str]
+    source_columns: list[str]
+    target_columns: list[str]
     transformation_logic: str
-    lookup_table: Optional[str] = None
+    lookup_table: str | None = None
     cache_ttl: int = 3600  # seconds
     enabled: bool = True
 
@@ -109,32 +113,33 @@ class EnrichmentRule:
 @dataclass
 class SilverProcessingConfig:
     """Configuration for Silver layer processing with enhanced infrastructure"""
+
     enable_data_cleaning: bool = True
     enable_enrichment: bool = True
     enable_business_rules: bool = True
     enable_deduplication: bool = True
     enable_schema_evolution: bool = True
     quality_threshold: float = 0.8
-    duplicate_detection_columns: List[str] = field(default_factory=lambda: [
-        "invoice_no", "stock_code", "customer_id", "kafka_timestamp"
-    ])
+    duplicate_detection_columns: list[str] = field(
+        default_factory=lambda: ["invoice_no", "stock_code", "customer_id", "kafka_timestamp"]
+    )
     watermark_delay: str = "10 minutes"
     checkpoint_interval: str = "30 seconds"
     state_timeout: str = "1 hour"
     max_records_per_batch: int = 100000
-    
+
     # Enhanced caching configuration
     enable_silver_caching: bool = True
     redis_url: str = "redis://localhost:6379"
     processing_cache_ttl: int = 1800  # 30 minutes
     quality_cache_ttl: int = 3600  # 1 hour
     reference_data_cache_ttl: int = 7200  # 2 hours
-    
+
     # RabbitMQ configuration for processing coordination
     enable_silver_messaging: bool = True
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
-    
+
     # CQRS pattern configuration
     enable_cqrs: bool = True
     read_model_cache_ttl: int = 900  # 15 minutes
@@ -142,20 +147,20 @@ class SilverProcessingConfig:
 
 class DataQualityEngine:
     """Engine for data quality assessment and improvement"""
-    
+
     def __init__(self, spark: SparkSession):
         self.spark = spark
         self.logger = get_logger(__name__)
-        
+
         # Quality rules registry
-        self.quality_rules: Dict[str, QualityRule] = {}
-        
+        self.quality_rules: dict[str, QualityRule] = {}
+
         # Load built-in quality rules
         self._load_builtin_quality_rules()
-        
+
     def _load_builtin_quality_rules(self):
         """Load built-in data quality rules"""
-        
+
         rules = [
             # Critical validation rules
             QualityRule(
@@ -166,7 +171,7 @@ class DataQualityEngine:
                 severity="critical",
                 action="reject",
                 description="Invoice number must be present",
-                weight=2.0
+                weight=2.0,
             ),
             QualityRule(
                 rule_id="positive_quantity",
@@ -176,7 +181,7 @@ class DataQualityEngine:
                 severity="high",
                 action="flag",
                 description="Quantity should be positive for regular sales",
-                weight=1.5
+                weight=1.5,
             ),
             QualityRule(
                 rule_id="positive_unit_price",
@@ -186,7 +191,7 @@ class DataQualityEngine:
                 severity="high",
                 action="flag",
                 description="Unit price should be positive",
-                weight=1.5
+                weight=1.5,
             ),
             QualityRule(
                 rule_id="valid_customer_id",
@@ -196,7 +201,7 @@ class DataQualityEngine:
                 severity="medium",
                 action="fix",
                 description="Customer ID should be numeric or GUEST",
-                weight=1.0
+                weight=1.0,
             ),
             QualityRule(
                 rule_id="reasonable_line_total",
@@ -206,7 +211,7 @@ class DataQualityEngine:
                 severity="medium",
                 action="flag",
                 description="Line total should be within reasonable bounds",
-                weight=1.0
+                weight=1.0,
             ),
             QualityRule(
                 rule_id="valid_date_range",
@@ -216,7 +221,7 @@ class DataQualityEngine:
                 severity="high",
                 action="reject",
                 description="Transaction date should be within valid range",
-                weight=1.5
+                weight=1.5,
             ),
             QualityRule(
                 rule_id="stock_code_format",
@@ -226,7 +231,7 @@ class DataQualityEngine:
                 severity="medium",
                 action="flag",
                 description="Stock code should not be empty",
-                weight=1.0
+                weight=1.0,
             ),
             QualityRule(
                 rule_id="country_not_null",
@@ -236,91 +241,95 @@ class DataQualityEngine:
                 severity="low",
                 action="fix",
                 description="Country should be present",
-                weight=0.5
-            )
+                weight=0.5,
+            ),
         ]
-        
+
         for rule in rules:
             self.quality_rules[rule.rule_id] = rule
-        
+
         self.logger.info(f"Loaded {len(rules)} built-in quality rules")
-    
+
     def assess_quality(self, df: DataFrame) -> DataFrame:
         """Assess data quality for each record"""
         try:
             result_df = df
             quality_scores = []
             quality_flags = []
-            
+
             # Apply each quality rule
             for rule_id, rule in self.quality_rules.items():
                 if not rule.enabled:
                     continue
-                
+
                 try:
                     # Create rule check column
                     rule_column = f"rule_{rule_id}"
                     result_df = result_df.withColumn(
                         rule_column,
-                        when(expr(rule.condition), lit(rule.weight)).otherwise(lit(0.0))
+                        when(expr(rule.condition), lit(rule.weight)).otherwise(lit(0.0)),
                     )
                     quality_scores.append(col(rule_column))
-                    
+
                     # Create rule flag column
                     flag_column = f"flag_{rule_id}"
                     result_df = result_df.withColumn(
-                        flag_column,
-                        when(expr(rule.condition), lit(False)).otherwise(lit(True))
+                        flag_column, when(expr(rule.condition), lit(False)).otherwise(lit(True))
                     )
                     quality_flags.append(col(flag_column))
-                    
+
                 except Exception as e:
                     self.logger.error(f"Failed to apply rule {rule_id}: {e}")
-            
+
             # Calculate overall quality score
             total_weight = sum(rule.weight for rule in self.quality_rules.values() if rule.enabled)
             if quality_scores:
                 quality_score_expr = sum(quality_scores) / lit(total_weight)
             else:
                 quality_score_expr = lit(1.0)
-            
+
             # Add quality assessment columns
             result_df = (
-                result_df
-                .withColumn("silver_quality_score", quality_score_expr)
-                .withColumn("quality_flags_count", sum([when(flag, lit(1)).otherwise(lit(0)) for flag in quality_flags]))
+                result_df.withColumn("silver_quality_score", quality_score_expr)
+                .withColumn(
+                    "quality_flags_count",
+                    sum([when(flag, lit(1)).otherwise(lit(0)) for flag in quality_flags]),
+                )
                 .withColumn(
                     "quality_tier",
                     when(col("silver_quality_score") >= 0.95, lit(DataQualityLevel.EXCELLENT.value))
                     .when(col("silver_quality_score") >= 0.85, lit(DataQualityLevel.GOOD.value))
                     .when(col("silver_quality_score") >= 0.70, lit(DataQualityLevel.FAIR.value))
                     .when(col("silver_quality_score") >= 0.50, lit(DataQualityLevel.POOR.value))
-                    .otherwise(lit(DataQualityLevel.UNACCEPTABLE.value))
+                    .otherwise(lit(DataQualityLevel.UNACCEPTABLE.value)),
                 )
                 .withColumn(
                     "quality_issues",
-                    array([
-                        when(col(f"flag_{rule_id}"), lit(rule_id)).otherwise(lit(None))
-                        for rule_id in self.quality_rules.keys()
-                        if self.quality_rules[rule_id].enabled
-                    ])
+                    array(
+                        [
+                            when(col(f"flag_{rule_id}"), lit(rule_id)).otherwise(lit(None))
+                            for rule_id in self.quality_rules.keys()
+                            if self.quality_rules[rule_id].enabled
+                        ]
+                    ),
                 )
             )
-            
+
             # Clean up temporary rule columns
-            columns_to_drop = [f"rule_{rule_id}" for rule_id in self.quality_rules.keys()] + \
-                             [f"flag_{rule_id}" for rule_id in self.quality_rules.keys()]
-            
+            columns_to_drop = [f"rule_{rule_id}" for rule_id in self.quality_rules.keys()] + [
+                f"flag_{rule_id}" for rule_id in self.quality_rules.keys()
+            ]
+
             for col_name in columns_to_drop:
                 if col_name in result_df.columns:
                     result_df = result_df.drop(col_name)
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Quality assessment failed: {e}")
             return df.withColumn("silver_quality_score", lit(0.0))
-    
+
     def add_quality_rule(self, rule: QualityRule):
         """Add custom quality rule"""
         self.quality_rules[rule.rule_id] = rule
@@ -329,24 +338,24 @@ class DataQualityEngine:
 
 class DataEnrichmentEngine:
     """Engine for data enrichment and transformation"""
-    
+
     def __init__(self, spark: SparkSession):
         self.spark = spark
         self.logger = get_logger(__name__)
-        
+
         # Enrichment rules registry
-        self.enrichment_rules: Dict[str, EnrichmentRule] = {}
-        
+        self.enrichment_rules: dict[str, EnrichmentRule] = {}
+
         # Reference data caches
-        self.reference_data: Dict[str, DataFrame] = {}
-        
+        self.reference_data: dict[str, DataFrame] = {}
+
         # Load built-in enrichment rules
         self._load_builtin_enrichment_rules()
         self._load_reference_data()
-        
+
     def _load_builtin_enrichment_rules(self):
         """Load built-in enrichment rules"""
-        
+
         rules = [
             EnrichmentRule(
                 rule_id="clean_customer_id",
@@ -355,12 +364,12 @@ class DataEnrichmentEngine:
                 source_columns=["customer_id"],
                 target_columns=["customer_id_clean"],
                 transformation_logic="""
-                case 
+                case
                     when customer_id is null or trim(customer_id) = '' then 'ANONYMOUS'
                     when regexp_like(customer_id, '^[0-9]+$') then customer_id
                     else 'GUEST'
                 end
-                """
+                """,
             ),
             EnrichmentRule(
                 rule_id="clean_country",
@@ -379,7 +388,7 @@ class DataEnrichmentEngine:
                     when country is null or trim(country) = '' then 'Unknown'
                     else initcap(trim(country))
                 end
-                """
+                """,
             ),
             EnrichmentRule(
                 rule_id="clean_description",
@@ -398,7 +407,7 @@ class DataEnrichmentEngine:
                         '^\\s+|\\s+$', ''
                     )
                 end
-                """
+                """,
             ),
             EnrichmentRule(
                 rule_id="derive_line_total",
@@ -406,7 +415,7 @@ class DataEnrichmentEngine:
                 enrichment_type=EnrichmentType.REFERENCE_DATA,
                 source_columns=["quantity", "unit_price"],
                 target_columns=["line_total"],
-                transformation_logic="coalesce(quantity * unit_price, 0.0)"
+                transformation_logic="coalesce(quantity * unit_price, 0.0)",
             ),
             EnrichmentRule(
                 rule_id="detect_returns",
@@ -422,7 +431,7 @@ class DataEnrichmentEngine:
                     when upper(description) like '%REFUND%' then true
                     else false
                 end
-                """
+                """,
             ),
             EnrichmentRule(
                 rule_id="currency_detection",
@@ -441,15 +450,21 @@ class DataEnrichmentEngine:
                     when country_clean = 'Switzerland' then 'CHF'
                     else 'GBP'
                 end
-                """
+                """,
             ),
             EnrichmentRule(
                 rule_id="temporal_features",
                 name="Extract Temporal Features",
                 enrichment_type=EnrichmentType.TEMPORAL_FEATURES,
                 source_columns=["kafka_timestamp"],
-                target_columns=["processing_date", "hour_of_day", "day_of_week", "month_of_year", "is_weekend"],
-                transformation_logic="multiple"  # Special marker for multiple column transformation
+                target_columns=[
+                    "processing_date",
+                    "hour_of_day",
+                    "day_of_week",
+                    "month_of_year",
+                    "is_weekend",
+                ],
+                transformation_logic="multiple",  # Special marker for multiple column transformation
             ),
             EnrichmentRule(
                 rule_id="risk_scoring",
@@ -466,15 +481,15 @@ class DataEnrichmentEngine:
                     when abs(line_total) > 1000 then 0.4
                     else 0.1
                 end
-                """
-            )
+                """,
+            ),
         ]
-        
+
         for rule in rules:
             self.enrichment_rules[rule.rule_id] = rule
-        
+
         self.logger.info(f"Loaded {len(rules)} built-in enrichment rules")
-    
+
     def _load_reference_data(self):
         """Load reference data for enrichment"""
         try:
@@ -489,81 +504,81 @@ class DataEnrichmentEngine:
                 ("JP", "Japan", "JPY", "Asia"),
                 ("CA", "Canada", "CAD", "North America"),
                 ("AU", "Australia", "AUD", "Oceania"),
-                ("CH", "Switzerland", "CHF", "Europe")
+                ("CH", "Switzerland", "CHF", "Europe"),
             ]
-            
-            country_schema = StructType([
-                StructField("country_code", StringType(), True),
-                StructField("country_name", StringType(), True),
-                StructField("currency", StringType(), True),
-                StructField("region", StringType(), True)
-            ])
-            
+
+            country_schema = StructType(
+                [
+                    StructField("country_code", StringType(), True),
+                    StructField("country_name", StringType(), True),
+                    StructField("currency", StringType(), True),
+                    StructField("region", StringType(), True),
+                ]
+            )
+
             self.reference_data["countries"] = self.spark.createDataFrame(
                 country_data, country_schema
             )
-            
+
             self.logger.info("Loaded reference data for enrichment")
-            
+
         except Exception as e:
             self.logger.warning(f"Failed to load reference data: {e}")
-    
+
     def apply_enrichment(self, df: DataFrame) -> DataFrame:
         """Apply all enabled enrichment rules"""
         try:
             result_df = df
-            
+
             # Apply enrichment rules in order
             for rule_id, rule in self.enrichment_rules.items():
                 if not rule.enabled:
                     continue
-                
+
                 try:
                     result_df = self._apply_single_enrichment(result_df, rule)
                 except Exception as e:
                     self.logger.error(f"Failed to apply enrichment rule {rule_id}: {e}")
-            
+
             # Add enrichment metadata
             result_df = (
-                result_df
-                .withColumn("silver_processed_at", current_timestamp())
+                result_df.withColumn("silver_processed_at", current_timestamp())
                 .withColumn("enrichment_version", lit("2.0"))
                 .withColumn("processing_date", date_format(current_timestamp(), "yyyy-MM-dd"))
             )
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Enrichment failed: {e}")
             return df
-    
+
     def _apply_single_enrichment(self, df: DataFrame, rule: EnrichmentRule) -> DataFrame:
         """Apply a single enrichment rule"""
         try:
             if rule.rule_id == "temporal_features":
                 # Special handling for temporal features
                 return (
-                    df
-                    .withColumn("processing_date", date_format(col("kafka_timestamp"), "yyyy-MM-dd"))
+                    df.withColumn(
+                        "processing_date", date_format(col("kafka_timestamp"), "yyyy-MM-dd")
+                    )
                     .withColumn("hour_of_day", expr("hour(kafka_timestamp)"))
                     .withColumn("day_of_week", expr("dayofweek(kafka_timestamp)"))
                     .withColumn("month_of_year", expr("month(kafka_timestamp)"))
-                    .withColumn("is_weekend", 
-                               when(col("day_of_week").isin([1, 7]), True).otherwise(False))
+                    .withColumn(
+                        "is_weekend", when(col("day_of_week").isin([1, 7]), True).otherwise(False)
+                    )
                 )
-            
+
             # Standard single-column transformation
             target_column = rule.target_columns[0]
-            
-            return df.withColumn(
-                target_column,
-                expr(rule.transformation_logic)
-            )
-            
+
+            return df.withColumn(target_column, expr(rule.transformation_logic))
+
         except Exception as e:
             self.logger.error(f"Single enrichment failed for rule {rule.rule_id}: {e}")
             return df
-    
+
     def add_enrichment_rule(self, rule: EnrichmentRule):
         """Add custom enrichment rule"""
         self.enrichment_rules[rule.rule_id] = rule
@@ -572,34 +587,34 @@ class DataEnrichmentEngine:
 
 class DeduplicationEngine:
     """Engine for detecting and handling duplicate records"""
-    
-    def __init__(self, spark: SparkSession, dedup_columns: List[str]):
+
+    def __init__(self, spark: SparkSession, dedup_columns: list[str]):
         self.spark = spark
         self.dedup_columns = dedup_columns
         self.logger = get_logger(__name__)
-        
+
     def deduplicate_stream(self, df: DataFrame) -> DataFrame:
         """Remove duplicates from streaming DataFrame"""
         try:
             # Add deduplication logic with watermark
-            window_spec = (
-                Window
-                .partitionBy(*self.dedup_columns)
-                .orderBy(col("kafka_timestamp").desc())
-            )
-            
+            (Window.partitionBy(*self.dedup_columns).orderBy(col("kafka_timestamp").desc()))
+
             result_df = (
-                df
-                .withColumn("row_number", expr("row_number() over (partition by {} order by kafka_timestamp desc)".format(
-                    ", ".join(self.dedup_columns)
-                )))
+                df.withColumn(
+                    "row_number",
+                    expr(
+                        "row_number() over (partition by {} order by kafka_timestamp desc)".format(
+                            ", ".join(self.dedup_columns)
+                        )
+                    ),
+                )
                 .withColumn("is_duplicate_removed", col("row_number") > 1)
                 .filter(col("row_number") == 1)
                 .drop("row_number")
             )
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Deduplication failed: {e}")
             return df.withColumn("is_duplicate_removed", lit(False))
@@ -607,47 +622,43 @@ class DeduplicationEngine:
 
 class RealtimeSilverProcessor:
     """Comprehensive real-time Silver layer processor with enhanced infrastructure"""
-    
-    def __init__(
-        self, 
-        spark: SparkSession, 
-        config: SilverProcessingConfig = None
-    ):
+
+    def __init__(self, spark: SparkSession, config: SilverProcessingConfig = None):
         self.spark = spark
         self.config = config or SilverProcessingConfig()
         self.logger = get_logger(__name__)
         self.metrics_collector = get_metrics_collector()
-        
+
         # Enhanced infrastructure components
-        self.cache_manager: Optional[EventCache] = None
-        self.messaging_manager: Optional[HybridMessagingArchitecture] = None
-        self.rabbitmq_manager: Optional[RabbitMQManager] = None
-        
+        self.cache_manager: EventCache | None = None
+        self.messaging_manager: HybridMessagingArchitecture | None = None
+        self.rabbitmq_manager: RabbitMQManager | None = None
+
         # Initialize enhanced infrastructure
         if config.enable_silver_caching:
             self._initialize_cache_manager()
         if config.enable_silver_messaging:
             self._initialize_messaging_manager()
-        
+
         # Initialize processing engines with enhanced features
         self.quality_engine = DataQualityEngine(spark, self.cache_manager)
         self.enrichment_engine = DataEnrichmentEngine(spark, self.cache_manager)
         self.deduplication_engine = DeduplicationEngine(
             spark, self.config.duplicate_detection_columns
         )
-        
+
         # Managers and services
         self.kafka_manager = KafkaManager()
         self.delta_manager = DeltaLakeManager(spark)
-        
+
         # Processing metrics
         self.processed_batches = 0
         self.total_records_processed = 0
         self.quality_improvements = 0
         self.duplicates_removed = 0
-        
+
         self.logger.info("Real-time Silver Processor initialized with enhanced infrastructure")
-    
+
     def _initialize_cache_manager(self):
         """Initialize Silver-specific cache manager"""
         try:
@@ -656,147 +667,151 @@ class RealtimeSilverProcessor:
                 default_ttl=self.config.processing_cache_ttl,
                 cache_strategy=CacheStrategy.CACHE_ASIDE,
                 consistency_level=ConsistencyLevel.EVENTUAL,
-                enable_cache_warming=True
+                enable_cache_warming=True,
             )
             self.cache_manager = EventCache(cache_config)
             self.logger.info("Silver cache manager initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize Silver cache manager: {e}")
-    
+
     def _initialize_messaging_manager(self):
         """Initialize messaging for Silver processing coordination"""
         try:
             rabbitmq_config = RabbitMQConfig(
                 host=self.config.rabbitmq_host,
                 port=self.config.rabbitmq_port,
-                enable_dead_letter=True
+                enable_dead_letter=True,
             )
             self.rabbitmq_manager = RabbitMQManager(rabbitmq_config)
             self.messaging_manager = HybridMessagingArchitecture(
                 kafka_manager=self.kafka_manager,
                 rabbitmq_manager=self.rabbitmq_manager,
-                cache_manager=self.cache_manager
+                cache_manager=self.cache_manager,
             )
             self.logger.info("Silver messaging manager initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize Silver messaging manager: {e}")
-    
+
     def process_streaming_data(
-        self,
-        bronze_stream: DataFrame,
-        output_path: str,
-        checkpoint_path: str
+        self, bronze_stream: DataFrame, output_path: str, checkpoint_path: str
     ) -> StreamingQuery:
         """Process streaming data through Silver layer pipeline"""
         try:
             self.logger.info("Starting Silver layer processing")
-            
+
             # Add watermark for late data handling
             watermarked_stream = bronze_stream.withWatermark(
-                "kafka_timestamp", 
-                self.config.watermark_delay
+                "kafka_timestamp", self.config.watermark_delay
             )
-            
+
             # Apply Silver transformations
             processed_stream = self._apply_silver_transformations(watermarked_stream)
-            
+
             # Configure and start streaming query
             query = (
-                processed_stream
-                .writeStream
-                .format("delta")
+                processed_stream.writeStream.format("delta")
                 .outputMode("append")
                 .option("checkpointLocation", checkpoint_path)
                 .option("mergeSchema", "true")
                 .trigger(processingTime=self.config.checkpoint_interval)
-                .foreachBatch(lambda batch_df, batch_id: 
-                             self._process_silver_batch(batch_df, batch_id, output_path))
+                .foreachBatch(
+                    lambda batch_df, batch_id: self._process_silver_batch(
+                        batch_df, batch_id, output_path
+                    )
+                )
                 .start()
             )
-            
+
             return query
-            
+
         except Exception as e:
             self.logger.error(f"Failed to start Silver processing: {e}")
             raise
-    
+
     def _apply_silver_transformations(self, df: DataFrame) -> DataFrame:
         """Apply all Silver layer transformations"""
         try:
             result_df = df
-            
+
             # 1. Data cleaning and standardization
             if self.config.enable_data_cleaning:
                 result_df = self._apply_data_cleaning(result_df)
-            
+
             # 2. Data enrichment
             if self.config.enable_enrichment:
                 result_df = self.enrichment_engine.apply_enrichment(result_df)
-            
+
             # 3. Deduplication
             if self.config.enable_deduplication:
                 result_df = self.deduplication_engine.deduplicate_stream(result_df)
-            
+
             # 4. Quality assessment
             result_df = self.quality_engine.assess_quality(result_df)
-            
+
             # 5. Business rules validation
             if self.config.enable_business_rules:
                 result_df = self._apply_business_rules(result_df)
-            
+
             # 6. Add final metadata
             result_df = self._add_silver_metadata(result_df)
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Silver transformations failed: {e}")
             return df
-    
+
     def _apply_data_cleaning(self, df: DataFrame) -> DataFrame:
         """Apply data cleaning transformations"""
         try:
             result_df = (
                 df
                 # Clean string fields
-                .withColumn("description", 
-                           when(col("description").isNull(), lit("Unknown"))
-                           .otherwise(trim(col("description"))))
-                .withColumn("country", 
-                           when(col("country").isNull(), lit("Unknown"))
-                           .otherwise(trim(col("country"))))
-                
+                .withColumn(
+                    "description",
+                    when(col("description").isNull(), lit("Unknown")).otherwise(
+                        trim(col("description"))
+                    ),
+                )
+                .withColumn(
+                    "country",
+                    when(col("country").isNull(), lit("Unknown")).otherwise(trim(col("country"))),
+                )
                 # Handle numeric nulls and negatives appropriately
-                .withColumn("quantity", 
-                           when(col("quantity").isNull(), lit(0))
-                           .otherwise(col("quantity")))
-                .withColumn("unit_price", 
-                           when(col("unit_price").isNull(), lit(0.0))
-                           .when(col("unit_price") < 0, lit(0.0))
-                           .otherwise(spark_round(col("unit_price"), 2)))
-                
+                .withColumn(
+                    "quantity", when(col("quantity").isNull(), lit(0)).otherwise(col("quantity"))
+                )
+                .withColumn(
+                    "unit_price",
+                    when(col("unit_price").isNull(), lit(0.0))
+                    .when(col("unit_price") < 0, lit(0.0))
+                    .otherwise(spark_round(col("unit_price"), 2)),
+                )
                 # Clean customer ID
-                .withColumn("customer_id", 
-                           when(col("customer_id").isNull(), lit(""))
-                           .otherwise(trim(col("customer_id"))))
-                
+                .withColumn(
+                    "customer_id",
+                    when(col("customer_id").isNull(), lit("")).otherwise(trim(col("customer_id"))),
+                )
                 # Clean stock code
-                .withColumn("stock_code", 
-                           when(col("stock_code").isNull(), lit("UNKNOWN"))
-                           .otherwise(trim(upper(col("stock_code")))))
-                
+                .withColumn(
+                    "stock_code",
+                    when(col("stock_code").isNull(), lit("UNKNOWN")).otherwise(
+                        trim(upper(col("stock_code")))
+                    ),
+                )
                 # Clean invoice number
-                .withColumn("invoice_no", 
-                           when(col("invoice_no").isNull(), lit(""))
-                           .otherwise(trim(col("invoice_no"))))
+                .withColumn(
+                    "invoice_no",
+                    when(col("invoice_no").isNull(), lit("")).otherwise(trim(col("invoice_no"))),
+                )
             )
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Data cleaning failed: {e}")
             return df
-    
+
     def _apply_business_rules(self, df: DataFrame) -> DataFrame:
         """Apply business-specific validation rules"""
         try:
@@ -805,20 +820,18 @@ class RealtimeSilverProcessor:
                 # Mark suspicious transactions
                 .withColumn(
                     "is_suspicious",
-                    (col("risk_score") > 0.7) |
-                    (col("silver_quality_score") < 0.5) |
-                    (abs(col("line_total")) > 10000)
+                    (col("risk_score") > 0.7)
+                    | (col("silver_quality_score") < 0.5)
+                    | (abs(col("line_total")) > 10000),
                 )
-                
                 # Customer segment classification
                 .withColumn(
                     "customer_segment",
                     when(col("customer_id_clean") == "ANONYMOUS", "anonymous")
                     .when(col("customer_id_clean") == "GUEST", "guest")
                     .when(col("line_total") > 100, "premium")
-                    .otherwise("standard")
+                    .otherwise("standard"),
                 )
-                
                 # Transaction category
                 .withColumn(
                     "transaction_category",
@@ -826,103 +839,93 @@ class RealtimeSilverProcessor:
                     .when(col("quantity") == 0, "cancellation")
                     .when(col("line_total") > 500, "high_value")
                     .when(col("line_total") < 5, "low_value")
-                    .otherwise("standard")
+                    .otherwise("standard"),
                 )
-                
                 # Processing priority
                 .withColumn(
                     "processing_priority",
                     when(col("is_suspicious"), "high")
                     .when(col("customer_segment") == "premium", "high")
                     .when(col("silver_quality_score") < 0.7, "medium")
-                    .otherwise("standard")
+                    .otherwise("standard"),
                 )
             )
-            
+
             return result_df
-            
+
         except Exception as e:
             self.logger.error(f"Business rules application failed: {e}")
             return df
-    
+
     def _add_silver_metadata(self, df: DataFrame) -> DataFrame:
         """Add Silver layer metadata"""
         return (
-            df
-            .withColumn("silver_id", expr("uuid()"))
+            df.withColumn("silver_id", expr("uuid()"))
             .withColumn("silver_processed_at", current_timestamp())
             .withColumn("silver_version", lit("2.0"))
             .withColumn("data_lineage", lit("bronze -> silver"))
         )
-    
-    def _process_silver_batch(
-        self, 
-        batch_df: DataFrame, 
-        batch_id: int, 
-        output_path: str
-    ):
+
+    def _process_silver_batch(self, batch_df: DataFrame, batch_id: int, output_path: str):
         """Process each Silver batch"""
         try:
             if batch_df.isEmpty():
                 return
-            
+
             batch_count = batch_df.count()
             self.logger.info(f"Processing Silver batch {batch_id}: {batch_count} records")
-            
+
             # Calculate quality metrics for this batch
             quality_stats = self._calculate_batch_quality_metrics(batch_df)
-            
+
             # Write to Delta Lake
             (
-                batch_df
-                .write
-                .format("delta")
+                batch_df.write.format("delta")
                 .mode("append")
                 .option("mergeSchema", "true")
                 .partitionBy("processing_date", "country_clean")
                 .save(output_path)
             )
-            
+
             # Update processing metrics
             self.processed_batches += 1
             self.total_records_processed += batch_count
-            
+
             # Update quality metrics
             duplicates_count = batch_df.filter(col("is_duplicate_removed")).count()
             self.duplicates_removed += duplicates_count
-            
+
             # Send metrics
             if self.metrics_collector:
                 self.metrics_collector.increment_counter(
-                    "silver_records_processed", 
-                    {"batch_id": str(batch_id)}
+                    "silver_records_processed", {"batch_id": str(batch_id)}
                 )
                 self.metrics_collector.gauge(
-                    "silver_quality_score_avg", 
+                    "silver_quality_score_avg",
                     quality_stats["avg_quality_score"],
-                    {"batch_id": str(batch_id)}
+                    {"batch_id": str(batch_id)},
                 )
                 self.metrics_collector.gauge(
-                    "silver_duplicates_removed", 
+                    "silver_duplicates_removed",
                     float(duplicates_count),
-                    {"batch_id": str(batch_id)}
+                    {"batch_id": str(batch_id)},
                 )
-            
+
             # Send quality alerts if needed
             if quality_stats["avg_quality_score"] < self.config.quality_threshold:
                 self._send_quality_alert(quality_stats, batch_id)
-            
+
             self.logger.info(
                 f"Silver batch {batch_id} processed - "
                 f"Records: {batch_count}, Quality Score: {quality_stats['avg_quality_score']:.3f}, "
                 f"Duplicates Removed: {duplicates_count}"
             )
-            
+
         except Exception as e:
             self.logger.error(f"Silver batch {batch_id} processing failed: {e}")
             raise
-    
-    def _calculate_batch_quality_metrics(self, batch_df: DataFrame) -> Dict[str, Any]:
+
+    def _calculate_batch_quality_metrics(self, batch_df: DataFrame) -> dict[str, Any]:
         """Calculate quality metrics for a batch"""
         try:
             stats = batch_df.agg(
@@ -930,24 +933,26 @@ class RealtimeSilverProcessor:
                 expr("min(silver_quality_score)").alias("min_quality_score"),
                 expr("max(silver_quality_score)").alias("max_quality_score"),
                 expr("count(*)").alias("total_records"),
-                expr("sum(case when silver_quality_score < 0.5 then 1 else 0 end)").alias("poor_quality_count"),
-                expr("avg(quality_flags_count)").alias("avg_flags_per_record")
+                expr("sum(case when silver_quality_score < 0.5 then 1 else 0 end)").alias(
+                    "poor_quality_count"
+                ),
+                expr("avg(quality_flags_count)").alias("avg_flags_per_record"),
             ).collect()[0]
-            
+
             return {
                 "avg_quality_score": float(stats["avg_quality_score"] or 0),
                 "min_quality_score": float(stats["min_quality_score"] or 0),
                 "max_quality_score": float(stats["max_quality_score"] or 0),
                 "total_records": int(stats["total_records"] or 0),
                 "poor_quality_count": int(stats["poor_quality_count"] or 0),
-                "avg_flags_per_record": float(stats["avg_flags_per_record"] or 0)
+                "avg_flags_per_record": float(stats["avg_flags_per_record"] or 0),
             }
-            
+
         except Exception as e:
             self.logger.error(f"Quality metrics calculation failed: {e}")
             return {"avg_quality_score": 0.0}
-    
-    def _send_quality_alert(self, quality_stats: Dict[str, Any], batch_id: int):
+
+    def _send_quality_alert(self, quality_stats: dict[str, Any], batch_id: int):
         """Send quality alert for poor quality batch"""
         try:
             alert_data = {
@@ -958,23 +963,23 @@ class RealtimeSilverProcessor:
                 "poor_quality_count": quality_stats.get("poor_quality_count", 0),
                 "total_records": quality_stats.get("total_records", 0),
                 "severity": "high" if quality_stats["avg_quality_score"] < 0.5 else "medium",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
-            
+
             self.kafka_manager.produce_data_quality_alert(alert_data)
             self.logger.warning(f"Quality alert sent for batch {batch_id}")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to send quality alert: {e}")
-    
-    def get_cache_metrics(self) -> Dict[str, Any]:
+
+    def get_cache_metrics(self) -> dict[str, Any]:
         """Get Silver cache performance metrics"""
         cache_metrics = {}
         if self.cache_manager:
             cache_metrics = self.cache_manager.metrics.get_metrics_summary()
         return cache_metrics
-    
-    def get_processing_metrics(self) -> Dict[str, Any]:
+
+    def get_processing_metrics(self) -> dict[str, Any]:
         """Get Silver processing metrics with enhanced info"""
         return {
             "silver_metrics": {
@@ -982,14 +987,14 @@ class RealtimeSilverProcessor:
                 "total_records_processed": self.total_records_processed,
                 "duplicates_removed": self.duplicates_removed,
                 "quality_rules_count": len(self.quality_engine.quality_rules),
-                "enrichment_rules_count": len(self.enrichment_engine.enrichment_rules)
+                "enrichment_rules_count": len(self.enrichment_engine.enrichment_rules),
             },
             "configuration": {
                 "quality_threshold": self.config.quality_threshold,
                 "enable_data_cleaning": self.config.enable_data_cleaning,
                 "enable_enrichment": self.config.enable_enrichment,
                 "enable_business_rules": self.config.enable_business_rules,
-                "enable_deduplication": self.config.enable_deduplication
+                "enable_deduplication": self.config.enable_deduplication,
             },
             "timestamp": datetime.now().isoformat(),
             "cache_metrics": self.get_cache_metrics(),
@@ -997,8 +1002,10 @@ class RealtimeSilverProcessor:
             "infrastructure_status": {
                 "caching_enabled": self.config.enable_silver_caching,
                 "messaging_enabled": self.config.enable_silver_messaging,
-                "cache_hit_ratio": self.get_cache_metrics().get("hit_ratio", 0.0) if self.cache_manager else 0.0
-            }
+                "cache_hit_ratio": self.get_cache_metrics().get("hit_ratio", 0.0)
+                if self.cache_manager
+                else 0.0,
+            },
         }
 
 
@@ -1009,8 +1016,7 @@ def create_silver_processing_config(**kwargs) -> SilverProcessingConfig:
 
 
 def create_realtime_silver_processor(
-    spark: SparkSession,
-    config: SilverProcessingConfig = None
+    spark: SparkSession, config: SilverProcessingConfig = None
 ) -> RealtimeSilverProcessor:
     """Create real-time Silver processor instance"""
     return RealtimeSilverProcessor(spark, config)
@@ -1019,50 +1025,54 @@ def create_realtime_silver_processor(
 # Example usage
 if __name__ == "__main__":
     from pyspark.sql import SparkSession
-    
+
     # Create Spark session
     spark = (
-        SparkSession.builder
-        .appName("RealtimeSilverProcessor")
+        SparkSession.builder.appName("RealtimeSilverProcessor")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config(
+            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        )
         .getOrCreate()
     )
-    
+
     try:
         print("Testing Real-time Silver Processor...")
-        
+
         # Create configuration
         config = create_silver_processing_config(
             enable_data_cleaning=True,
             enable_enrichment=True,
             enable_business_rules=True,
             enable_deduplication=True,
-            quality_threshold=0.8
+            quality_threshold=0.8,
         )
-        
+
         # Create processor
         processor = create_realtime_silver_processor(spark, config)
-        
+
         # Get metrics
         metrics = processor.get_processing_metrics()
-        print(f"✅ Created Silver processor with {metrics['silver_metrics']['quality_rules_count']} quality rules")
+        print(
+            f"✅ Created Silver processor with {metrics['silver_metrics']['quality_rules_count']} quality rules"
+        )
         print(f"   Enrichment rules: {metrics['silver_metrics']['enrichment_rules_count']}")
         print(f"   Quality threshold: {metrics['configuration']['quality_threshold']}")
-        
+
         # Show data quality rules
         quality_rules = list(processor.quality_engine.quality_rules.keys())
         print(f"   Quality rules: {', '.join(quality_rules[:3])}...")
-        
+
         # Show enrichment rules
         enrichment_rules = list(processor.enrichment_engine.enrichment_rules.keys())
         print(f"   Enrichment rules: {', '.join(enrichment_rules[:3])}...")
-        
+
         print("✅ Real-time Silver Processor testing completed")
-        
+
     except Exception as e:
         print(f"❌ Testing failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
     finally:
         spark.stop()

@@ -2,6 +2,7 @@
 Windows-Compatible Bronze Layer Implementation using Pandas
 Provides data ingestion without Spark/Hadoop dependencies
 """
+
 from __future__ import annotations
 
 import uuid
@@ -41,11 +42,11 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # Handle common column name variations
     column_variations = {
-        'invoiceno': 'invoice_no',
-        'stockcode': 'stock_code',
-        'invoicedate': 'invoice_timestamp',
-        'unitprice': 'unit_price',
-        'customerid': 'customer_id'
+        "invoiceno": "invoice_no",
+        "stockcode": "stock_code",
+        "invoicedate": "invoice_timestamp",
+        "unitprice": "unit_price",
+        "customerid": "customer_id",
     }
 
     df = df.rename(columns=column_variations)
@@ -55,9 +56,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _read_raw_csvs(files: list[Path]) -> pd.DataFrame:
     """Read and combine CSV files."""
     if not files:
-        raise FileNotFoundError(
-            f"No raw CSV files found under {settings.raw_data_path.resolve()}"
-        )
+        raise FileNotFoundError(f"No raw CSV files found under {settings.raw_data_path.resolve()}")
 
     job_id = str(uuid.uuid4())
 
@@ -71,11 +70,13 @@ def _read_raw_csvs(files: list[Path]) -> pd.DataFrame:
             df = _normalize_columns(df)
 
             # Add source metadata
-            df['source_file_path'] = str(file_path.absolute())
-            df['source_file_type'] = 'csv'
-            df['ingestion_job_id'] = job_id
+            df["source_file_path"] = str(file_path.absolute())
+            df["source_file_type"] = "csv"
+            df["ingestion_job_id"] = job_id
             dfs.append(df)
-            logger.info(f"Read {len(df)} records from {file_path.name} with columns: {list(df.columns)}")
+            logger.info(
+                f"Read {len(df)} records from {file_path.name} with columns: {list(df.columns)}"
+            )
         except Exception as e:
             logger.error(f"Failed to read {file_path}: {e}")
             continue
@@ -94,9 +95,9 @@ def _add_metadata(df: pd.DataFrame) -> pd.DataFrame:
     """Add ingestion metadata."""
     current_timestamp = pd.Timestamp.now()
 
-    df['ingestion_timestamp'] = current_timestamp
-    df['schema_version'] = '1.0'
-    df['row_id'] = range(1, len(df) + 1)
+    df["ingestion_timestamp"] = current_timestamp
+    df["schema_version"] = "1.0"
+    df["row_id"] = range(1, len(df) + 1)
 
     return df
 
@@ -114,12 +115,12 @@ def _ensure_required_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _add_partitioning_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Add date-based partitioning columns."""
     # Convert invoice_timestamp if possible
-    if 'invoice_timestamp' in df.columns:
-        df['invoice_timestamp'] = pd.to_datetime(df['invoice_timestamp'], errors='coerce')
-        df['invoice_date'] = df['invoice_timestamp'].dt.date
+    if "invoice_timestamp" in df.columns:
+        df["invoice_timestamp"] = pd.to_datetime(df["invoice_timestamp"], errors="coerce")
+        df["invoice_date"] = df["invoice_timestamp"].dt.date
 
     # Add ingestion_date for partitioning
-    df['ingestion_date'] = pd.Timestamp.now().date()
+    df["ingestion_date"] = pd.Timestamp.now().date()
 
     return df
 

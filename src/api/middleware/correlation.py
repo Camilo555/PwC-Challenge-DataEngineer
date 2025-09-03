@@ -3,6 +3,7 @@ Correlation ID Middleware
 Provides automatic correlation ID propagation for FastAPI applications with logging integration.
 Implements distributed tracing patterns and request context management.
 """
+
 from __future__ import annotations
 
 import time
@@ -15,6 +16,7 @@ try:
     from fastapi import FastAPI, Request, Response
     from fastapi.middleware.base import BaseHTTPMiddleware
     from starlette.responses import Response as StarletteResponse
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -34,7 +36,7 @@ from monitoring.logging import (
 class CorrelationMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware for automatic correlation ID management.
-    
+
     Features:
     - Automatic correlation ID generation and propagation
     - Support for distributed tracing headers
@@ -59,7 +61,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         "x-real-ip",
         "user-agent",
         "x-api-key",
-        "authorization"
+        "authorization",
     ]
 
     def __init__(
@@ -70,11 +72,11 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         include_response_body: bool = False,
         sensitive_headers: list[str] | None = None,
         max_body_size: int = 1024 * 10,  # 10KB
-        exclude_paths: list[str] | None = None
+        exclude_paths: list[str] | None = None,
     ):
         """
         Initialize correlation middleware.
-        
+
         Args:
             app: FastAPI application instance
             correlation_manager: Custom correlation manager
@@ -94,14 +96,17 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         self.exclude_paths = exclude_paths or ["/health", "/metrics", "/favicon.ico"]
 
         # Headers to exclude from logging (PII/sensitive data)
-        self.sensitive_headers = set((sensitive_headers or []) + [
-            "authorization",
-            "x-api-key",
-            "cookie",
-            "set-cookie",
-            "x-auth-token",
-            "x-access-token"
-        ])
+        self.sensitive_headers = set(
+            (sensitive_headers or [])
+            + [
+                "authorization",
+                "x-api-key",
+                "cookie",
+                "set-cookie",
+                "x-auth-token",
+                "x-access-token",
+            ]
+        )
 
         # Setup logger
         self.logger = get_structured_logger("api.middleware.correlation")
@@ -172,9 +177,9 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
         # Extract correlation ID
         correlation_id = (
-            headers.get(self.CORRELATION_ID_HEADER) or
-            headers.get(self.REQUEST_ID_HEADER) or
-            self.correlation_manager.generate_correlation_id()
+            headers.get(self.CORRELATION_ID_HEADER)
+            or headers.get(self.REQUEST_ID_HEADER)
+            or self.correlation_manager.generate_correlation_id()
         )
 
         # Extract trace ID
@@ -182,8 +187,8 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         if not trace_id and headers.get(self.OTEL_TRACE_ID):
             # Extract from OpenTelemetry traceparent header
             traceparent = headers.get(self.OTEL_TRACE_ID)
-            if traceparent and len(traceparent.split('-')) >= 2:
-                trace_id = traceparent.split('-')[1][:16]  # Use first 16 chars of trace ID
+            if traceparent and len(traceparent.split("-")) >= 2:
+                trace_id = traceparent.split("-")[1][:16]  # Use first 16 chars of trace ID
 
         if not trace_id:
             trace_id = self.correlation_manager.generate_trace_id()
@@ -193,11 +198,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         if not user_id:
             user_id = self._extract_user_from_jwt(headers.get("authorization"))
 
-        return {
-            "correlation_id": correlation_id,
-            "trace_id": trace_id,
-            "user_id": user_id
-        }
+        return {"correlation_id": correlation_id, "trace_id": trace_id, "user_id": user_id}
 
     def _extract_user_from_jwt(self, auth_header: str | None) -> str | None:
         """Extract user ID from JWT token (simplified implementation)."""
@@ -213,21 +214,21 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
             # Decode payload (without verification - just for user ID extraction)
             # In production, use proper JWT library with signature verification
-            parts = token.split('.')
+            parts = token.split(".")
             if len(parts) >= 2:
                 # Decode payload
                 payload = parts[1]
                 # Add padding if needed
-                payload += '=' * (4 - len(payload) % 4)
+                payload += "=" * (4 - len(payload) % 4)
                 decoded = base64.urlsafe_b64decode(payload)
                 claims = json.loads(decoded)
 
                 # Extract user identifier (common claim names)
                 return (
-                    claims.get('sub') or
-                    claims.get('user_id') or
-                    claims.get('uid') or
-                    claims.get('email')
+                    claims.get("sub")
+                    or claims.get("user_id")
+                    or claims.get("uid")
+                    or claims.get("email")
                 )
 
         except Exception:
@@ -236,10 +237,12 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
         return None
 
-    def _add_correlation_headers(self, response: Response, context: dict[str, str | None]) -> Response:
+    def _add_correlation_headers(
+        self, response: Response, context: dict[str, str | None]
+    ) -> Response:
         """Add correlation headers to response."""
 
-        if hasattr(response, 'headers'):
+        if hasattr(response, "headers"):
             response.headers[self.CORRELATION_ID_HEADER] = context["correlation_id"]
 
             if context.get("trace_id"):
@@ -251,10 +254,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         return response
 
     async def _log_request_start(
-        self,
-        request: Request,
-        context: dict[str, str | None],
-        timestamp: datetime
+        self, request: Request, context: dict[str, str | None], timestamp: datetime
     ) -> None:
         """Log request start with context."""
 
@@ -269,7 +269,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
             "user_agent": request.headers.get("user-agent"),
             "request_timestamp": timestamp.isoformat(),
             "event": "request_start",
-            **{k: v for k, v in context.items() if v is not None}
+            **{k: v for k, v in context.items() if v is not None},
         }
 
         # Add request body if configured
@@ -289,7 +289,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         response: Response,
         context: dict[str, str | None],
         duration_ms: int,
-        request_timestamp: datetime
+        request_timestamp: datetime,
     ) -> None:
         """Log request completion with metrics."""
 
@@ -298,18 +298,20 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
             "http_url": str(request.url),
             "http_path": request.url.path,
             "http_status_code": response.status_code,
-            "http_status_text": getattr(response, 'status_text', ''),
+            "http_status_text": getattr(response, "status_text", ""),
             "duration_ms": duration_ms,
             "request_timestamp": request_timestamp.isoformat(),
             "response_timestamp": datetime.utcnow().isoformat(),
             "event": "request_completed",
-            **{k: v for k, v in context.items() if v is not None}
+            **{k: v for k, v in context.items() if v is not None},
         }
 
         # Add response body if configured and status indicates success
-        if (self.include_response_body and
-            hasattr(response, 'body') and
-            200 <= response.status_code < 300):
+        if (
+            self.include_response_body
+            and hasattr(response, "body")
+            and 200 <= response.status_code < 300
+        ):
             try:
                 body = await self._get_response_body(response)
                 if body:
@@ -333,7 +335,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         error: Exception,
         context: dict[str, str | None],
         duration_ms: int,
-        request_timestamp: datetime
+        request_timestamp: datetime,
     ) -> None:
         """Log request error."""
 
@@ -347,7 +349,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
             "request_timestamp": request_timestamp.isoformat(),
             "error_timestamp": datetime.utcnow().isoformat(),
             "event": "request_error",
-            **{k: v for k, v in context.items() if v is not None}
+            **{k: v for k, v in context.items() if v is not None},
         }
 
         self.logger.error("HTTP request failed", extra=error_info, exc_info=True)
@@ -366,14 +368,14 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         forwarded_for = request.headers.get("x-forwarded-for")
         if forwarded_for:
             # Take the first IP in the chain
-            return forwarded_for.split(',')[0].strip()
+            return forwarded_for.split(",")[0].strip()
 
         real_ip = request.headers.get("x-real-ip")
         if real_ip:
             return real_ip
 
         # Fallback to client address
-        if hasattr(request, 'client') and request.client:
+        if hasattr(request, "client") and request.client:
             return request.client.host
 
         return None
@@ -397,11 +399,11 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
             content_type = request.headers.get("content-type", "")
 
             if "application/json" in content_type:
-                return body.decode('utf-8')
+                return body.decode("utf-8")
             elif "application/x-www-form-urlencoded" in content_type:
-                return body.decode('utf-8')
+                return body.decode("utf-8")
             elif "text/" in content_type:
-                return body.decode('utf-8')
+                return body.decode("utf-8")
             else:
                 return f"[BINARY_CONTENT_{len(body)}_BYTES]"
 
@@ -412,20 +414,20 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         """Safely extract response body for logging."""
 
         try:
-            if not hasattr(response, 'body'):
+            if not hasattr(response, "body"):
                 return None
 
             body = response.body
             if isinstance(body, bytes):
                 if len(body) > self.max_body_size:
                     return f"[RESPONSE_TOO_LARGE_{len(body)}_BYTES]"
-                return body.decode('utf-8')
+                return body.decode("utf-8")
             elif isinstance(body, str):
                 if len(body) > self.max_body_size:
                     return f"[RESPONSE_TOO_LARGE_{len(body)}_CHARS]"
                 return body
 
-            return str(body)[:self.max_body_size]
+            return str(body)[: self.max_body_size]
 
         except Exception:
             return "[RESPONSE_READ_ERROR]"
@@ -433,12 +435,13 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
 # Utility functions for manual correlation management
 
+
 def get_correlation_context() -> dict[str, str | None]:
     """Get current correlation context from context variables."""
     return {
         "correlation_id": correlation_id_context.get(),
         "trace_id": trace_id_context.get(),
-        "user_id": user_id_context.get()
+        "user_id": user_id_context.get(),
     }
 
 
@@ -446,24 +449,17 @@ def extract_correlation_headers(headers: dict[str, str]) -> dict[str, str | None
     """Extract correlation headers from header dictionary."""
 
     correlation_id = (
-        headers.get("x-correlation-id") or
-        headers.get("x-request-id") or
-        str(uuid.uuid4())
+        headers.get("x-correlation-id") or headers.get("x-request-id") or str(uuid.uuid4())
     )
 
     trace_id = headers.get("x-trace-id")
     user_id = headers.get("x-user-id")
 
-    return {
-        "correlation_id": correlation_id,
-        "trace_id": trace_id,
-        "user_id": user_id
-    }
+    return {"correlation_id": correlation_id, "trace_id": trace_id, "user_id": user_id}
 
 
 def add_correlation_headers(
-    headers: dict[str, str],
-    context: dict[str, str | None] | None = None
+    headers: dict[str, str], context: dict[str, str | None] | None = None
 ) -> dict[str, str]:
     """Add correlation headers to header dictionary."""
 
@@ -484,17 +480,18 @@ def add_correlation_headers(
 
 # FastAPI integration helper
 
+
 def setup_correlation_middleware(
     app: Any,  # FastAPI app
-    **middleware_kwargs
+    **middleware_kwargs,
 ) -> CorrelationMiddleware:
     """
     Setup correlation middleware on FastAPI application.
-    
+
     Args:
         app: FastAPI application instance
         **middleware_kwargs: Arguments to pass to CorrelationMiddleware
-    
+
     Returns:
         Configured middleware instance
     """

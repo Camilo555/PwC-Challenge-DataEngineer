@@ -1,0 +1,362 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-mesh
+  labels:
+    name: data-mesh
+    app.kubernetes.io/name: data-mesh-platform
+    app.kubernetes.io/version: "1.0.0"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-product-registry-config
+  namespace: data-mesh
+data:
+  config.yaml: |
+    registry:
+      storage:
+        type: postgresql
+        connection_string: "postgresql://user:pass@postgres:5432/data_products"
+      catalog:
+        enable_auto_discovery: true
+        scan_interval: "30m"
+        supported_formats: ["delta", "iceberg", "hudi"]
+      governance:
+        enable_lineage_tracking: true
+        enable_quality_monitoring: true
+        enable_schema_validation: true
+      api:
+        port: 8080
+        enable_swagger: true
+        rate_limit: 1000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-product-registry
+  namespace: data-mesh
+  labels:
+    app: data-product-registry
+    component: registry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-product-registry
+  template:
+    metadata:
+      labels:
+        app: data-product-registry
+        component: registry
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: data-mesh-service-account
+      containers:
+      - name: registry
+        image: data-mesh/product-registry:v1.0.0
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: metrics
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: data-mesh-secrets
+              key: database-url
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SCHEMA_REGISTRY_URL
+          value: "http://schema-registry:8081"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: data-product-registry-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-product-registry
+  namespace: data-mesh
+  labels:
+    app: data-product-registry
+    component: registry
+spec:
+  selector:
+    app: data-product-registry
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: data-product-registry-ingress
+  namespace: data-mesh
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  tls:
+  - hosts:
+    - data-mesh.company.com
+    secretName: data-mesh-tls
+  rules:
+  - host: data-mesh.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: data-product-registry
+            port:
+              number: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-quality-monitor
+  namespace: data-mesh
+  labels:
+    app: data-quality-monitor
+    component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-quality-monitor
+  template:
+    metadata:
+      labels:
+        app: data-quality-monitor
+        component: monitoring
+    spec:
+      serviceAccountName: data-mesh-service-account
+      containers:
+      - name: monitor
+        image: data-mesh/quality-monitor:v1.0.0
+        env:
+        - name: DATA_LAKE_BUCKET
+          value: "s3://retail-data-lake"
+        - name: QUALITY_THRESHOLDS
+          value: '{"completeness": 0.95, "accuracy": 0.99, "consistency": 0.98}'
+        - name: ALERT_WEBHOOK
+          valueFrom:
+            secretKeyRef:
+              name: data-mesh-secrets
+              key: alert-webhook
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "300m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: quality-rules
+          mountPath: /app/rules
+      volumes:
+      - name: quality-rules
+        configMap:
+          name: data-quality-rules
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-quality-rules
+  namespace: data-mesh
+data:
+  customer_data.yaml: |
+    rules:
+      - name: "customer_id_not_null"
+        type: "completeness"
+        column: "customer_id"
+        threshold: 1.0
+      - name: "email_format"
+        type: "validity"
+        column: "email"
+        pattern: "^[\\w\\.-]+@[\\w\\.-]+\\.[a-zA-Z]{2,}$"
+      - name: "age_range"
+        type: "validity"
+        column: "age"
+        min: 0
+        max: 120
+  
+  sales_data.yaml: |
+    rules:
+      - name: "amount_positive"
+        type: "validity"
+        column: "amount"
+        min: 0
+      - name: "transaction_date_recent"
+        type: "freshness"
+        column: "transaction_date"
+        max_days: 7
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-lineage-scanner
+  namespace: data-mesh
+spec:
+  schedule: "0 2 * * *"  # Run daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: data-mesh-service-account
+          containers:
+          - name: lineage-scanner
+            image: data-mesh/lineage-scanner:v1.0.0
+            env:
+            - name: SCAN_TARGETS
+              value: "s3://retail-data-lake,postgresql://warehouse"
+            - name: GRAPH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: data-mesh-secrets
+                  key: neo4j-url
+            resources:
+              requests:
+                memory: "1Gi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-mesh-service-account
+  namespace: data-mesh
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/data-mesh-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: data-mesh
+  name: data-mesh-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: data-mesh-role-binding
+  namespace: data-mesh
+subjects:
+- kind: ServiceAccount
+  name: data-mesh-service-account
+  namespace: data-mesh
+roleRef:
+  kind: Role
+  name: data-mesh-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: data-mesh-secrets
+  namespace: data-mesh
+type: Opaque
+stringData:
+  database-url: "postgresql://datamesh:password@postgres:5432/datamesh"
+  alert-webhook: "https://hooks.slack.com/services/your/webhook/url"
+  neo4j-url: "bolt://neo4j:7687"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: data-mesh-monitoring
+  namespace: data-mesh
+  labels:
+    app: data-mesh
+spec:
+  selector:
+    matchLabels:
+      app: data-product-registry
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-mesh-alerts
+  namespace: data-mesh
+data:
+  alerts.yaml: |
+    groups:
+    - name: data-mesh.rules
+      rules:
+      - alert: DataProductRegistryDown
+        expr: up{job="data-product-registry"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Data Product Registry is down"
+          description: "Data Product Registry has been down for more than 5 minutes"
+      
+      - alert: DataQualityThresholdViolation
+        expr: data_quality_score < 0.95
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data quality threshold violated"
+          description: "Data quality score {{ $value }} is below threshold of 0.95"
+      
+      - alert: DataLineageMissing
+        expr: data_lineage_coverage < 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data lineage coverage low"
+          description: "Data lineage coverage {{ $value }} is below 80%"

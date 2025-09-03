@@ -2,6 +2,7 @@
 Custom exception classes for the application.
 Provides specific error types for better error handling and debugging.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -66,11 +67,7 @@ class ValidationException(BaseApplicationException):
     """Raised when data validation fails."""
 
     def __init__(
-        self,
-        message: str,
-        field: str | None = None,
-        value: Any = None,
-        **kwargs: Any
+        self, message: str, field: str | None = None, value: Any = None, **kwargs: Any
     ) -> None:
         """
         Initialize validation exception.
@@ -98,7 +95,7 @@ class DataQualityException(ValidationException):
         message: str,
         failed_records: int | None = None,
         total_records: int | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Initialize data quality exception.
@@ -115,7 +112,7 @@ class DataQualityException(ValidationException):
         if total_records is not None:
             details["total_records"] = total_records
             if failed_records is not None:
-                details["failure_rate"] = f"{(failed_records/total_records)*100:.2f}%"
+                details["failure_rate"] = f"{(failed_records / total_records) * 100:.2f}%"
         kwargs["details"] = details
         super().__init__(message, **kwargs)
 
@@ -141,12 +138,7 @@ class RepositoryException(DatabaseException):
 class APIException(BaseApplicationException):
     """Base exception for API-related errors."""
 
-    def __init__(
-        self,
-        message: str,
-        status_code: int = 500,
-        **kwargs: Any
-    ) -> None:
+    def __init__(self, message: str, status_code: int = 500, **kwargs: Any) -> None:
         """
         Initialize API exception.
 
@@ -225,7 +217,7 @@ class FileProcessingException(BaseApplicationException):
         message: str,
         file_path: str | None = None,
         file_type: str | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Initialize file processing exception.

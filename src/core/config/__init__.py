@@ -2,6 +2,7 @@
 Enhanced Configuration Management System
 Provides centralized configuration with environment-specific settings
 """
+
 from .airflow_config import AirflowConfig
 from .base_config import BaseConfig, DatabaseType, Environment
 from .dagster_config import DagsterConfig
@@ -15,6 +16,10 @@ from .unified_config import get_unified_config
 # Backwards compatibility - expose the base config as settings
 settings = get_unified_config().base
 
+def get_settings():
+    """Get the unified configuration settings."""
+    return settings
+
 __all__ = [
     "BaseConfig",
     "Environment",
@@ -24,5 +29,6 @@ __all__ = [
     "DagsterConfig",
     "MonitoringConfig",
     "SecurityConfig",
-    "settings"
+    "settings",
+    "get_settings",
 ]

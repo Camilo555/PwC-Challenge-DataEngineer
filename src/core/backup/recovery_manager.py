@@ -4,6 +4,7 @@ Disaster Recovery Manager
 Enterprise-grade disaster recovery system with automated recovery procedures,
 point-in-time restoration, and comprehensive disaster recovery planning.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +28,7 @@ logger = get_logger(__name__)
 
 class RecoveryType(str, Enum):
     """Types of recovery operations."""
+
     POINT_IN_TIME = "point_in_time"
     FULL_RESTORE = "full_restore"
     PARTIAL_RESTORE = "partial_restore"
@@ -35,6 +37,7 @@ class RecoveryType(str, Enum):
 
 class RecoveryStatus(str, Enum):
     """Status of recovery operations."""
+
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -45,6 +48,7 @@ class RecoveryStatus(str, Enum):
 @dataclass
 class RecoveryPoint:
     """Represents a point-in-time recovery target."""
+
     timestamp: datetime
     backup_id: str
     component: str
@@ -54,17 +58,18 @@ class RecoveryPoint:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            'timestamp': self.timestamp.isoformat(),
-            'backup_id': self.backup_id,
-            'component': self.component,
-            'description': self.description,
-            'metadata': self.metadata
+            "timestamp": self.timestamp.isoformat(),
+            "backup_id": self.backup_id,
+            "component": self.component,
+            "description": self.description,
+            "metadata": self.metadata,
         }
 
 
 @dataclass
 class DisasterRecoveryPlan:
     """Comprehensive disaster recovery plan."""
+
     plan_id: str
     name: str
     description: str
@@ -80,24 +85,24 @@ class DisasterRecoveryPlan:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            'plan_id': self.plan_id,
-            'name': self.name,
-            'description': self.description,
-            'recovery_time_objective_minutes': self.recovery_time_objective_minutes,
-            'recovery_point_objective_minutes': self.recovery_point_objective_minutes,
-            'priority_components': self.priority_components,
-            'recovery_steps': self.recovery_steps,
-            'contact_information': self.contact_information,
-            'validation_procedures': self.validation_procedures,
-            'created_at': self.created_at.isoformat(),
-            'last_tested': self.last_tested.isoformat() if self.last_tested else None
+            "plan_id": self.plan_id,
+            "name": self.name,
+            "description": self.description,
+            "recovery_time_objective_minutes": self.recovery_time_objective_minutes,
+            "recovery_point_objective_minutes": self.recovery_point_objective_minutes,
+            "priority_components": self.priority_components,
+            "recovery_steps": self.recovery_steps,
+            "contact_information": self.contact_information,
+            "validation_procedures": self.validation_procedures,
+            "created_at": self.created_at.isoformat(),
+            "last_tested": self.last_tested.isoformat() if self.last_tested else None,
         }
 
 
 class RecoveryManager:
     """
     Enterprise disaster recovery manager with comprehensive recovery capabilities.
-    
+
     Features:
     - Point-in-time recovery from backups
     - Full system disaster recovery
@@ -122,7 +127,7 @@ class RecoveryManager:
             self.plans_dir,
             self.logs_dir,
             self.recovery_root / "temp",
-            self.recovery_root / "verification"
+            self.recovery_root / "verification",
         ]
 
         for directory in directories:
@@ -131,19 +136,16 @@ class RecoveryManager:
         logger.info(f"Recovery structure initialized at {self.recovery_root}")
 
     async def create_recovery_point(
-        self,
-        component: str,
-        description: str = "",
-        metadata: dict[str, Any] | None = None
+        self, component: str, description: str = "", metadata: dict[str, Any] | None = None
     ) -> RecoveryPoint:
         """
         Create a recovery point by triggering a backup.
-        
+
         Args:
             component: Component to create recovery point for
             description: Human-readable description
             metadata: Additional metadata
-            
+
         Returns:
             Recovery point information
         """
@@ -153,19 +155,16 @@ class RecoveryManager:
             # Trigger appropriate backup based on component
             if component == "database":
                 backup_metadata = await self.backup_manager.backup_database(
-                    backup_type=BackupType.FULL,
-                    compress=True,
-                    validate=True
+                    backup_type=BackupType.FULL, compress=True, validate=True
                 )
             elif component == "data_lake":
                 backup_results = await self.backup_manager.backup_data_lake(
-                    backup_type=BackupType.FULL,
-                    compress=True
+                    backup_type=BackupType.FULL, compress=True
                 )
                 # Use first successful backup
                 backup_metadata = next(
                     (b for b in backup_results if b.status == BackupStatus.COMPLETED),
-                    backup_results[0] if backup_results else None
+                    backup_results[0] if backup_results else None,
                 )
             elif component == "configuration":
                 backup_metadata = await self.backup_manager.backup_configuration(compress=True)
@@ -180,7 +179,7 @@ class RecoveryManager:
                 backup_id=backup_metadata.backup_id,
                 component=component,
                 description=description or f"Recovery point for {component}",
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
 
             # Save recovery point metadata
@@ -194,19 +193,16 @@ class RecoveryManager:
             raise
 
     async def restore_from_backup(
-        self,
-        backup_id: str,
-        target_location: Path | None = None,
-        verify_integrity: bool = True
+        self, backup_id: str, target_location: Path | None = None, verify_integrity: bool = True
     ) -> dict[str, Any]:
         """
         Restore system from a specific backup.
-        
+
         Args:
             backup_id: ID of backup to restore from
             target_location: Optional custom restore location
             verify_integrity: Whether to verify backup integrity
-            
+
         Returns:
             Recovery operation results
         """
@@ -222,7 +218,7 @@ class RecoveryManager:
             "status": RecoveryStatus.IN_PROGRESS.value,
             "steps_completed": [],
             "error_message": None,
-            "verification_results": {}
+            "verification_results": {},
         }
 
         try:
@@ -297,19 +293,19 @@ class RecoveryManager:
         name: str,
         description: str,
         rto_minutes: int = 240,  # 4 hours default RTO
-        rpo_minutes: int = 60,   # 1 hour default RPO
-        priority_components: list[str] | None = None
+        rpo_minutes: int = 60,  # 1 hour default RPO
+        priority_components: list[str] | None = None,
     ) -> DisasterRecoveryPlan:
         """
         Create a comprehensive disaster recovery plan.
-        
+
         Args:
             name: Plan name
             description: Plan description
             rto_minutes: Recovery Time Objective in minutes
             rpo_minutes: Recovery Point Objective in minutes
             priority_components: Components in order of recovery priority
-            
+
         Returns:
             Disaster recovery plan
         """
@@ -325,21 +321,21 @@ class RecoveryManager:
                 "name": "Assess Disaster Scope",
                 "description": "Determine extent of system failure and components affected",
                 "estimated_minutes": 15,
-                "required_personnel": ["incident_commander", "technical_lead"]
+                "required_personnel": ["incident_commander", "technical_lead"],
             },
             {
                 "step": 2,
                 "name": "Activate DR Team",
                 "description": "Notify and mobilize disaster recovery team",
                 "estimated_minutes": 10,
-                "required_personnel": ["incident_commander"]
+                "required_personnel": ["incident_commander"],
             },
             {
                 "step": 3,
                 "name": "Secure Alternative Infrastructure",
                 "description": "Prepare backup systems and infrastructure",
                 "estimated_minutes": 30,
-                "required_personnel": ["infrastructure_team"]
+                "required_personnel": ["infrastructure_team"],
             },
             {
                 "step": 4,
@@ -347,7 +343,7 @@ class RecoveryManager:
                 "description": "Restore database and critical configuration",
                 "estimated_minutes": 60,
                 "required_personnel": ["database_admin", "technical_lead"],
-                "components": ["database", "configuration"]
+                "components": ["database", "configuration"],
             },
             {
                 "step": 5,
@@ -355,22 +351,22 @@ class RecoveryManager:
                 "description": "Restore analytical data and data lake layers",
                 "estimated_minutes": 120,
                 "required_personnel": ["data_engineer"],
-                "components": ["data_lake"]
+                "components": ["data_lake"],
             },
             {
                 "step": 6,
                 "name": "Verify System Integrity",
                 "description": "Run comprehensive system verification checks",
                 "estimated_minutes": 30,
-                "required_personnel": ["technical_lead", "qa_engineer"]
+                "required_personnel": ["technical_lead", "qa_engineer"],
             },
             {
                 "step": 7,
                 "name": "Resume Operations",
                 "description": "Bring systems online and resume normal operations",
                 "estimated_minutes": 15,
-                "required_personnel": ["incident_commander", "operations_team"]
-            }
+                "required_personnel": ["incident_commander", "operations_team"],
+            },
         ]
 
         # Standard validation procedures
@@ -381,7 +377,7 @@ class RecoveryManager:
             "Validate data lake accessibility and structure",
             "Check monitoring and alerting systems",
             "Perform end-to-end system functionality test",
-            "Confirm backup systems are operational"
+            "Confirm backup systems are operational",
         ]
 
         # Contact information template
@@ -392,7 +388,7 @@ class RecoveryManager:
             "data_engineer": "TBD - Data systems specialist",
             "infrastructure_team": "TBD - Infrastructure and cloud team",
             "qa_engineer": "TBD - Quality assurance lead",
-            "operations_team": "TBD - Operations and monitoring team"
+            "operations_team": "TBD - Operations and monitoring team",
         }
 
         plan = DisasterRecoveryPlan(
@@ -404,7 +400,7 @@ class RecoveryManager:
             priority_components=priority_components,
             recovery_steps=recovery_steps,
             contact_information=contact_information,
-            validation_procedures=validation_procedures
+            validation_procedures=validation_procedures,
         )
 
         # Save the plan
@@ -414,17 +410,15 @@ class RecoveryManager:
         return plan
 
     async def execute_disaster_recovery_plan(
-        self,
-        plan_id: str,
-        simulate: bool = False
+        self, plan_id: str, simulate: bool = False
     ) -> dict[str, Any]:
         """
         Execute a disaster recovery plan.
-        
+
         Args:
             plan_id: ID of disaster recovery plan to execute
             simulate: Whether to simulate execution (dry run)
-            
+
         Returns:
             Execution results and timeline
         """
@@ -445,10 +439,12 @@ class RecoveryManager:
             "start_time": start_time.isoformat(),
             "simulation": simulate,
             "steps": [],
-            "total_estimated_minutes": sum(step.get("estimated_minutes", 0) for step in plan.recovery_steps),
+            "total_estimated_minutes": sum(
+                step.get("estimated_minutes", 0) for step in plan.recovery_steps
+            ),
             "actual_duration_minutes": 0,
             "status": "in_progress",
-            "components_recovered": []
+            "components_recovered": [],
         }
 
         try:
@@ -459,7 +455,7 @@ class RecoveryManager:
                     "name": step_info["name"],
                     "start_time": step_start.isoformat(),
                     "estimated_minutes": step_info.get("estimated_minutes", 0),
-                    "status": "in_progress"
+                    "status": "in_progress",
                 }
 
                 try:
@@ -472,7 +468,9 @@ class RecoveryManager:
                         # Execute actual recovery step
                         if "components" in step_info:
                             await self._execute_recovery_step(step_info, plan.priority_components)
-                            execution_results["components_recovered"].extend(step_info["components"])
+                            execution_results["components_recovered"].extend(
+                                step_info["components"]
+                            )
 
                         step_result["status"] = "completed"
 
@@ -492,12 +490,16 @@ class RecoveryManager:
 
                 execution_results["steps"].append(step_result)
 
-                logger.info(f"DR step {'simulated' if simulate else 'completed'}: {step_info['name']}")
+                logger.info(
+                    f"DR step {'simulated' if simulate else 'completed'}: {step_info['name']}"
+                )
 
             # Calculate final results
             end_time = datetime.utcnow()
             execution_results["end_time"] = end_time.isoformat()
-            execution_results["actual_duration_minutes"] = (end_time - start_time).total_seconds() / 60
+            execution_results["actual_duration_minutes"] = (
+                end_time - start_time
+            ).total_seconds() / 60
 
             if execution_results["status"] != "failed":
                 execution_results["status"] = "completed"
@@ -510,7 +512,9 @@ class RecoveryManager:
                 plan.last_tested = datetime.utcnow()
                 await self._save_dr_plan(plan)
 
-            logger.info(f"DR plan {'simulation' if simulate else 'execution'} completed: {execution_id}")
+            logger.info(
+                f"DR plan {'simulation' if simulate else 'execution'} completed: {execution_id}"
+            )
 
         except Exception as e:
             execution_results["status"] = "failed"
@@ -522,14 +526,16 @@ class RecoveryManager:
 
         return execution_results
 
-    def get_recovery_points(self, component: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def get_recovery_points(
+        self, component: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
         """
         Get available recovery points.
-        
+
         Args:
             component: Filter by component
             limit: Maximum number of recovery points
-            
+
         Returns:
             List of recovery points
         """
@@ -554,23 +560,22 @@ class RecoveryManager:
 
         for backup in backup_history:
             if backup.get("status") in ["completed", "validated"]:
-                recovery_points.append({
-                    "timestamp": backup["timestamp"],
-                    "backup_id": backup["backup_id"],
-                    "component": backup.get("tags", {}).get("component", "unknown"),
-                    "description": f"Backup-based recovery point: {backup['backup_id']}",
-                    "metadata": backup
-                })
+                recovery_points.append(
+                    {
+                        "timestamp": backup["timestamp"],
+                        "backup_id": backup["backup_id"],
+                        "component": backup.get("tags", {}).get("component", "unknown"),
+                        "description": f"Backup-based recovery point: {backup['backup_id']}",
+                        "metadata": backup,
+                    }
+                )
 
         # Sort by timestamp and limit
         recovery_points.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         return recovery_points[:limit]
 
     async def _restore_database(
-        self,
-        backup_path: Path,
-        backup_metadata: dict[str, Any],
-        target_location: Path
+        self, backup_path: Path, backup_metadata: dict[str, Any], target_location: Path
     ) -> None:
         """Restore database from backup."""
         logger.info(f"Restoring database to {target_location}")
@@ -580,8 +585,8 @@ class RecoveryManager:
 
         # Handle compressed backups
         if backup_path.suffix == ".gz":
-            with gzip.open(backup_path, 'rb') as f_in:
-                with open(target_location, 'wb') as f_out:
+            with gzip.open(backup_path, "rb") as f_in:
+                with open(target_location, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
         else:
             shutil.copy2(backup_path, target_location)
@@ -589,10 +594,7 @@ class RecoveryManager:
         logger.info("Database restoration completed")
 
     async def _restore_data_lake(
-        self,
-        backup_path: Path,
-        backup_metadata: dict[str, Any],
-        target_location: Path
+        self, backup_path: Path, backup_metadata: dict[str, Any], target_location: Path
     ) -> None:
         """Restore data lake from backup."""
         logger.info(f"Restoring data lake to {target_location}")
@@ -610,10 +612,7 @@ class RecoveryManager:
         logger.info("Data lake restoration completed")
 
     async def _restore_configuration(
-        self,
-        backup_path: Path,
-        backup_metadata: dict[str, Any],
-        target_location: Path
+        self, backup_path: Path, backup_metadata: dict[str, Any], target_location: Path
     ) -> None:
         """Restore configuration from backup."""
         logger.info(f"Restoring configuration to {target_location}")
@@ -631,9 +630,7 @@ class RecoveryManager:
         logger.info("Configuration restoration completed")
 
     async def _verify_backup_integrity(
-        self,
-        backup_path: Path,
-        backup_metadata: dict[str, Any]
+        self, backup_path: Path, backup_metadata: dict[str, Any]
     ) -> bool:
         """Verify backup file integrity."""
         try:
@@ -654,7 +651,9 @@ class RecoveryManager:
             if expected_checksum:
                 actual_checksum = await self.backup_manager._calculate_checksum(backup_path)
                 if actual_checksum != expected_checksum:
-                    logger.error(f"Backup checksum mismatch: expected {expected_checksum}, got {actual_checksum}")
+                    logger.error(
+                        f"Backup checksum mismatch: expected {expected_checksum}, got {actual_checksum}"
+                    )
                     return False
 
             logger.info("Backup integrity verification passed")
@@ -670,72 +669,84 @@ class RecoveryManager:
             "component": component,
             "target_location": str(target_location),
             "checks": [],
-            "overall_success": True
+            "overall_success": True,
         }
 
         try:
             # Basic file existence check
             if target_location.exists():
-                verification_results["checks"].append({
-                    "name": "file_exists",
-                    "status": "passed",
-                    "message": f"Target location exists: {target_location}"
-                })
+                verification_results["checks"].append(
+                    {
+                        "name": "file_exists",
+                        "status": "passed",
+                        "message": f"Target location exists: {target_location}",
+                    }
+                )
             else:
-                verification_results["checks"].append({
-                    "name": "file_exists",
-                    "status": "failed",
-                    "message": f"Target location missing: {target_location}"
-                })
+                verification_results["checks"].append(
+                    {
+                        "name": "file_exists",
+                        "status": "failed",
+                        "message": f"Target location missing: {target_location}",
+                    }
+                )
                 verification_results["overall_success"] = False
 
             # Component-specific verification
             if component == "database":
                 # Try to read database file
                 if target_location.is_file() and target_location.stat().st_size > 0:
-                    verification_results["checks"].append({
-                        "name": "database_readable",
-                        "status": "passed",
-                        "message": "Database file appears valid"
-                    })
+                    verification_results["checks"].append(
+                        {
+                            "name": "database_readable",
+                            "status": "passed",
+                            "message": "Database file appears valid",
+                        }
+                    )
                 else:
-                    verification_results["checks"].append({
-                        "name": "database_readable",
-                        "status": "failed",
-                        "message": "Database file is missing or empty"
-                    })
+                    verification_results["checks"].append(
+                        {
+                            "name": "database_readable",
+                            "status": "failed",
+                            "message": "Database file is missing or empty",
+                        }
+                    )
                     verification_results["overall_success"] = False
 
             elif component in ["data_lake", "configuration"]:
                 # Check directory structure
                 if target_location.is_dir() and any(target_location.iterdir()):
-                    verification_results["checks"].append({
-                        "name": "directory_structure",
-                        "status": "passed",
-                        "message": "Directory structure appears valid"
-                    })
+                    verification_results["checks"].append(
+                        {
+                            "name": "directory_structure",
+                            "status": "passed",
+                            "message": "Directory structure appears valid",
+                        }
+                    )
                 else:
-                    verification_results["checks"].append({
-                        "name": "directory_structure",
-                        "status": "failed",
-                        "message": "Directory is missing or empty"
-                    })
+                    verification_results["checks"].append(
+                        {
+                            "name": "directory_structure",
+                            "status": "failed",
+                            "message": "Directory is missing or empty",
+                        }
+                    )
                     verification_results["overall_success"] = False
 
         except Exception as e:
-            verification_results["checks"].append({
-                "name": "verification_error",
-                "status": "failed",
-                "message": f"Verification failed with error: {e}"
-            })
+            verification_results["checks"].append(
+                {
+                    "name": "verification_error",
+                    "status": "failed",
+                    "message": f"Verification failed with error: {e}",
+                }
+            )
             verification_results["overall_success"] = False
 
         return verification_results
 
     async def _execute_recovery_step(
-        self,
-        step_info: dict[str, Any],
-        priority_components: list[str]
+        self, step_info: dict[str, Any], priority_components: list[str]
     ) -> None:
         """Execute a specific recovery step."""
         components = step_info.get("components", [])
@@ -748,8 +759,7 @@ class RecoveryManager:
                 if recovery_points:
                     latest_backup = recovery_points[0]
                     await self.restore_from_backup(
-                        backup_id=latest_backup["backup_id"],
-                        verify_integrity=True
+                        backup_id=latest_backup["backup_id"], verify_integrity=True
                     )
                 else:
                     logger.warning(f"No recovery points found for component: {component}")
@@ -773,21 +783,21 @@ class RecoveryManager:
         points_dir.mkdir(exist_ok=True)
 
         point_file = points_dir / f"{recovery_point.backup_id}.json"
-        with open(point_file, 'w') as f:
+        with open(point_file, "w") as f:
             json.dump(recovery_point.to_dict(), f, indent=2)
 
     async def _save_recovery_log(self, recovery_results: dict[str, Any]) -> None:
         """Save recovery operation log."""
         log_file = self.logs_dir / f"{recovery_results['recovery_id']}.json"
 
-        with open(log_file, 'w') as f:
+        with open(log_file, "w") as f:
             json.dump(recovery_results, f, indent=2)
 
     async def _save_dr_plan(self, plan: DisasterRecoveryPlan) -> None:
         """Save disaster recovery plan."""
         plan_file = self.plans_dir / f"{plan.plan_id}.json"
 
-        with open(plan_file, 'w') as f:
+        with open(plan_file, "w") as f:
             json.dump(plan.to_dict(), f, indent=2)
 
     async def _load_dr_plan(self, plan_id: str) -> DisasterRecoveryPlan | None:
@@ -812,7 +822,9 @@ class RecoveryManager:
                 contact_information=plan_data["contact_information"],
                 validation_procedures=plan_data["validation_procedures"],
                 created_at=datetime.fromisoformat(plan_data["created_at"]),
-                last_tested=datetime.fromisoformat(plan_data["last_tested"]) if plan_data.get("last_tested") else None
+                last_tested=datetime.fromisoformat(plan_data["last_tested"])
+                if plan_data.get("last_tested")
+                else None,
             )
 
         except Exception as e:
@@ -823,5 +835,5 @@ class RecoveryManager:
         """Save disaster recovery execution log."""
         log_file = self.logs_dir / f"{execution_results['execution_id']}.json"
 
-        with open(log_file, 'w') as f:
+        with open(log_file, "w") as f:
             json.dump(execution_results, f, indent=2)

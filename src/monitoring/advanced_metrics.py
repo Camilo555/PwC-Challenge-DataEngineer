@@ -2,6 +2,7 @@
 Advanced Metrics Collection and Monitoring Architecture
 Provides comprehensive metrics, tracing, and observability capabilities.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ from core.logging import get_logger
 
 class MetricType(Enum):
     """Types of metrics"""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -32,6 +34,7 @@ class MetricType(Enum):
 
 class MetricUnit(Enum):
     """Units for metrics"""
+
     NONE = ""
     BYTES = "bytes"
     SECONDS = "seconds"
@@ -44,6 +47,7 @@ class MetricUnit(Enum):
 @dataclass
 class MetricValue:
     """A single metric value with timestamp"""
+
     value: int | float
     timestamp: datetime
     labels: dict[str, str] = field(default_factory=dict)
@@ -52,6 +56,7 @@ class MetricValue:
 @dataclass
 class MetricDefinition:
     """Definition of a metric"""
+
     name: str
     metric_type: MetricType
     description: str
@@ -97,13 +102,15 @@ class MetricStorage(ABC):
         name: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-        labels: dict[str, str] | None = None
+        labels: dict[str, str] | None = None,
     ) -> list[MetricValue]:
         """Query metric values"""
         pass
 
     @abstractmethod
-    def get_latest_value(self, name: str, labels: dict[str, str] | None = None) -> MetricValue | None:
+    def get_latest_value(
+        self, name: str, labels: dict[str, str] | None = None
+    ) -> MetricValue | None:
         """Get the latest value for a metric"""
         pass
 
@@ -126,7 +133,7 @@ class InMemoryMetricStorage(MetricStorage):
         name: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-        labels: dict[str, str] | None = None
+        labels: dict[str, str] | None = None,
     ) -> list[MetricValue]:
         """Query metric values"""
         with self._lock:
@@ -144,7 +151,9 @@ class InMemoryMetricStorage(MetricStorage):
 
         return values
 
-    def get_latest_value(self, name: str, labels: dict[str, str] | None = None) -> MetricValue | None:
+    def get_latest_value(
+        self, name: str, labels: dict[str, str] | None = None
+    ) -> MetricValue | None:
         """Get the latest value for a metric"""
         with self._lock:
             values = list(self._data.get(name, []))
@@ -162,6 +171,7 @@ class InMemoryMetricStorage(MetricStorage):
 @dataclass
 class TraceSpan:
     """A span in distributed tracing"""
+
     trace_id: str
     span_id: str
     parent_span_id: str | None
@@ -187,7 +197,7 @@ class DistributedTracer:
         self,
         operation_name: str,
         parent_span_id: str | None = None,
-        tags: dict[str, Any] | None = None
+        tags: dict[str, Any] | None = None,
     ) -> TraceSpan:
         """Start a new span"""
         span = TraceSpan(
@@ -196,7 +206,7 @@ class DistributedTracer:
             parent_span_id=parent_span_id,
             operation_name=operation_name,
             start_time=datetime.now(),
-            tags=tags or {}
+            tags=tags or {},
         )
 
         with self._lock:
@@ -216,12 +226,7 @@ class DistributedTracer:
 
     def add_log(self, span: TraceSpan, message: str, level: str = "info", **kwargs) -> None:
         """Add a log entry to a span"""
-        log_entry = {
-            "timestamp": datetime.now(),
-            "level": level,
-            "message": message,
-            **kwargs
-        }
+        log_entry = {"timestamp": datetime.now(), "level": level, "message": message, **kwargs}
         span.logs.append(log_entry)
 
     def get_trace(self, trace_id: str) -> list[TraceSpan]:
@@ -230,7 +235,9 @@ class DistributedTracer:
 
         # Check active spans
         with self._lock:
-            spans.extend([span for span in self._active_spans.values() if span.trace_id == trace_id])
+            spans.extend(
+                [span for span in self._active_spans.values() if span.trace_id == trace_id]
+            )
             spans.extend([span for span in self._completed_spans if span.trace_id == trace_id])
 
         return sorted(spans, key=lambda s: s.start_time)
@@ -252,27 +259,84 @@ class MetricCollector:
     def _register_default_metrics(self) -> None:
         """Register common ETL metrics"""
         default_metrics = [
-            MetricDefinition("etl_records_processed", MetricType.COUNTER, "Total records processed", MetricUnit.COUNT),
-            MetricDefinition("etl_records_failed", MetricType.COUNTER, "Total records failed", MetricUnit.COUNT),
-            MetricDefinition("etl_processing_time", MetricType.HISTOGRAM, "Processing time", MetricUnit.SECONDS),
-            MetricDefinition("etl_data_quality_score", MetricType.GAUGE, "Data quality score", MetricUnit.PERCENT),
+            MetricDefinition(
+                "etl_records_processed",
+                MetricType.COUNTER,
+                "Total records processed",
+                MetricUnit.COUNT,
+            ),
+            MetricDefinition(
+                "etl_records_failed", MetricType.COUNTER, "Total records failed", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "etl_processing_time", MetricType.HISTOGRAM, "Processing time", MetricUnit.SECONDS
+            ),
+            MetricDefinition(
+                "etl_data_quality_score", MetricType.GAUGE, "Data quality score", MetricUnit.PERCENT
+            ),
             MetricDefinition("etl_error_rate", MetricType.GAUGE, "Error rate", MetricUnit.PERCENT),
-            MetricDefinition("etl_throughput", MetricType.GAUGE, "Records per second", MetricUnit.RATE),
-            MetricDefinition("system_memory_usage", MetricType.GAUGE, "Memory usage", MetricUnit.BYTES),
+            MetricDefinition(
+                "etl_throughput", MetricType.GAUGE, "Records per second", MetricUnit.RATE
+            ),
+            MetricDefinition(
+                "system_memory_usage", MetricType.GAUGE, "Memory usage", MetricUnit.BYTES
+            ),
             MetricDefinition("system_cpu_usage", MetricType.GAUGE, "CPU usage", MetricUnit.PERCENT),
             # Messaging system metrics
-            MetricDefinition("rabbitmq_queue_depth", MetricType.GAUGE, "RabbitMQ queue message count", MetricUnit.COUNT),
-            MetricDefinition("rabbitmq_consumer_count", MetricType.GAUGE, "RabbitMQ consumer count", MetricUnit.COUNT),
-            MetricDefinition("rabbitmq_message_rate", MetricType.GAUGE, "RabbitMQ message rate", MetricUnit.RATE),
-            MetricDefinition("rabbitmq_connection_count", MetricType.GAUGE, "RabbitMQ connection count", MetricUnit.COUNT),
-            MetricDefinition("kafka_consumer_lag", MetricType.GAUGE, "Kafka consumer lag", MetricUnit.COUNT),
-            MetricDefinition("kafka_partition_count", MetricType.GAUGE, "Kafka partition count", MetricUnit.COUNT),
-            MetricDefinition("kafka_broker_count", MetricType.GAUGE, "Kafka broker count", MetricUnit.COUNT),
-            MetricDefinition("kafka_messages_per_sec", MetricType.GAUGE, "Kafka messages per second", MetricUnit.RATE),
-            MetricDefinition("api_request_duration", MetricType.HISTOGRAM, "API request duration", MetricUnit.MILLISECONDS),
-            MetricDefinition("api_request_count", MetricType.COUNTER, "API request count", MetricUnit.COUNT),
-            MetricDefinition("messaging_errors", MetricType.COUNTER, "Messaging system errors", MetricUnit.COUNT),
-            MetricDefinition("message_processing_time", MetricType.HISTOGRAM, "Message processing time", MetricUnit.MILLISECONDS),
+            MetricDefinition(
+                "rabbitmq_queue_depth",
+                MetricType.GAUGE,
+                "RabbitMQ queue message count",
+                MetricUnit.COUNT,
+            ),
+            MetricDefinition(
+                "rabbitmq_consumer_count",
+                MetricType.GAUGE,
+                "RabbitMQ consumer count",
+                MetricUnit.COUNT,
+            ),
+            MetricDefinition(
+                "rabbitmq_message_rate", MetricType.GAUGE, "RabbitMQ message rate", MetricUnit.RATE
+            ),
+            MetricDefinition(
+                "rabbitmq_connection_count",
+                MetricType.GAUGE,
+                "RabbitMQ connection count",
+                MetricUnit.COUNT,
+            ),
+            MetricDefinition(
+                "kafka_consumer_lag", MetricType.GAUGE, "Kafka consumer lag", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "kafka_partition_count", MetricType.GAUGE, "Kafka partition count", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "kafka_broker_count", MetricType.GAUGE, "Kafka broker count", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "kafka_messages_per_sec",
+                MetricType.GAUGE,
+                "Kafka messages per second",
+                MetricUnit.RATE,
+            ),
+            MetricDefinition(
+                "api_request_duration",
+                MetricType.HISTOGRAM,
+                "API request duration",
+                MetricUnit.MILLISECONDS,
+            ),
+            MetricDefinition(
+                "api_request_count", MetricType.COUNTER, "API request count", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "messaging_errors", MetricType.COUNTER, "Messaging system errors", MetricUnit.COUNT
+            ),
+            MetricDefinition(
+                "message_processing_time",
+                MetricType.HISTOGRAM,
+                "Message processing time",
+                MetricUnit.MILLISECONDS,
+            ),
         ]
 
         for metric in default_metrics:
@@ -281,33 +345,45 @@ class MetricCollector:
             except ValueError:
                 pass  # Already registered
 
-    def increment_counter(self, name: str, value: int | float = 1, labels: dict[str, str] | None = None) -> None:
+    def increment_counter(
+        self, name: str, value: int | float = 1, labels: dict[str, str] | None = None
+    ) -> None:
         """Increment a counter metric"""
         self._record_metric(name, MetricType.COUNTER, value, labels)
 
-    def set_gauge(self, name: str, value: int | float, labels: dict[str, str] | None = None) -> None:
+    def set_gauge(
+        self, name: str, value: int | float, labels: dict[str, str] | None = None
+    ) -> None:
         """Set a gauge metric value"""
         self._record_metric(name, MetricType.GAUGE, value, labels)
 
-    def record_histogram(self, name: str, value: int | float, labels: dict[str, str] | None = None) -> None:
+    def record_histogram(
+        self, name: str, value: int | float, labels: dict[str, str] | None = None
+    ) -> None:
         """Record a histogram metric value"""
         self._record_metric(name, MetricType.HISTOGRAM, value, labels)
 
-    def record_timer(self, name: str, duration_seconds: float, labels: dict[str, str] | None = None) -> None:
+    def record_timer(
+        self, name: str, duration_seconds: float, labels: dict[str, str] | None = None
+    ) -> None:
         """Record a timer metric"""
         self._record_metric(name, MetricType.TIMER, duration_seconds, labels)
 
-    def _record_metric(self, name: str, expected_type: MetricType, value: int | float, labels: dict[str, str] | None = None) -> None:
+    def _record_metric(
+        self,
+        name: str,
+        expected_type: MetricType,
+        value: int | float,
+        labels: dict[str, str] | None = None,
+    ) -> None:
         """Internal method to record a metric"""
         definition = self.registry.get_definition(name)
         if definition and definition.metric_type != expected_type:
-            raise ValueError(f"Metric '{name}' is of type {definition.metric_type.value}, not {expected_type.value}")
+            raise ValueError(
+                f"Metric '{name}' is of type {definition.metric_type.value}, not {expected_type.value}"
+            )
 
-        metric_value = MetricValue(
-            value=value,
-            timestamp=datetime.now(),
-            labels=labels or {}
-        )
+        metric_value = MetricValue(value=value, timestamp=datetime.now(), labels=labels or {})
 
         self.storage.store_metric(name, metric_value)
         self.logger.debug(f"Recorded metric: {name} = {value}")
@@ -338,7 +414,7 @@ class MetricCollector:
         processing_time: float,
         data_quality_score: float,
         error_count: int = 0,
-        warnings_count: int = 0
+        warnings_count: int = 0,
     ) -> None:
         """Record comprehensive ETL metrics"""
         labels = {"pipeline": pipeline_name, "stage": stage}
@@ -381,10 +457,7 @@ class MetricCollector:
             "median": statistics.median(numeric_values),
             "std_dev": statistics.stdev(numeric_values) if len(numeric_values) > 1 else 0,
             "latest": numeric_values[-1],
-            "time_range": {
-                "start": start_time.isoformat(),
-                "end": end_time.isoformat()
-            }
+            "time_range": {"start": start_time.isoformat(), "end": end_time.isoformat()},
         }
 
     def export_metrics(self, format: str = "prometheus") -> str:
@@ -429,7 +502,7 @@ class MetricCollector:
                     "labels": latest_value.labels,
                     "type": definition.metric_type.value,
                     "description": definition.description,
-                    "unit": definition.unit.value
+                    "unit": definition.unit.value,
                 }
 
         return json.dumps(metrics_data, indent=2)
@@ -437,6 +510,7 @@ class MetricCollector:
 
 def timed(metric_name: str | None = None, labels: dict[str, str] | None = None):
     """Decorator to time function execution"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -447,11 +521,13 @@ def timed(metric_name: str | None = None, labels: dict[str, str] | None = None):
                 return func(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
 def counted(metric_name: str | None = None, labels: dict[str, str] | None = None):
     """Decorator to count function calls"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -468,6 +544,7 @@ def counted(metric_name: str | None = None, labels: dict[str, str] | None = None
                 raise
 
         return wrapper
+
     return decorator
 
 

@@ -2,6 +2,7 @@
 Enhanced Sales Schemas for API V2
 Includes additional fields and improved validation.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field, validator
 
 class EnhancedSaleItem(BaseModel):
     """Enhanced sale item with additional analytics fields."""
+
     sale_id: UUID
     invoice_no: str
     stock_code: str
@@ -20,8 +22,8 @@ class EnhancedSaleItem(BaseModel):
     quantity: int
     unit_price: Decimal
     total_amount: Decimal
-    discount_amount: Decimal = Field(default=Decimal('0.00'))
-    tax_amount: Decimal = Field(default=Decimal('0.00'))
+    discount_amount: Decimal = Field(default=Decimal("0.00"))
+    tax_amount: Decimal = Field(default=Decimal("0.00"))
     profit_amount: Decimal | None = None
     margin_percentage: Decimal | None = None
 
@@ -49,14 +51,12 @@ class EnhancedSaleItem(BaseModel):
     customer_value_tier: str | None = None
 
     class Config:
-        json_encoders = {
-            Decimal: lambda v: float(v),
-            UUID: lambda v: str(v)
-        }
+        json_encoders = {Decimal: lambda v: float(v), UUID: lambda v: str(v)}
 
 
 class SalesAggregation(BaseModel):
     """Sales aggregation with multiple dimensions."""
+
     dimension: str  # e.g., 'country', 'category', 'month'
     dimension_value: str
     total_revenue: Decimal
@@ -73,6 +73,7 @@ class SalesAggregation(BaseModel):
 
 class TimeSeriesPoint(BaseModel):
     """Time series data point."""
+
     period: str  # ISO date or period identifier
     revenue: Decimal
     quantity: int
@@ -88,6 +89,7 @@ class TimeSeriesPoint(BaseModel):
 
 class EnhancedSalesAnalytics(BaseModel):
     """Comprehensive sales analytics response."""
+
     summary: dict
     time_series: list[TimeSeriesPoint]
     top_products: list[dict]
@@ -103,6 +105,7 @@ class EnhancedSalesAnalytics(BaseModel):
 
 class PaginatedEnhancedSales(BaseModel):
     """Paginated enhanced sales with metadata."""
+
     items: list[EnhancedSaleItem]
     total: int
     page: int
@@ -121,6 +124,7 @@ class PaginatedEnhancedSales(BaseModel):
 
 class SalesFiltersV2(BaseModel):
     """Enhanced filters with more options."""
+
     # Date filters
     date_from: date | None = None
     date_to: date | None = None
@@ -154,16 +158,17 @@ class SalesFiltersV2(BaseModel):
     include_weekends: bool | None = None
     include_holidays: bool | None = None
 
-    @validator('date_from', 'date_to')
+    @validator("date_from", "date_to")
     def validate_dates(cls, v, values):
-        if 'date_from' in values and v and values['date_from']:
-            if v < values['date_from']:
-                raise ValueError('date_to must be after date_from')
+        if "date_from" in values and v and values["date_from"]:
+            if v < values["date_from"]:
+                raise ValueError("date_to must be after date_from")
         return v
 
 
 class SalesExportRequest(BaseModel):
     """Request for exporting sales data."""
+
     format: str = Field(..., regex="^(csv|excel|parquet|json)$")
     filters: SalesFiltersV2 | None = None
     include_analytics: bool = False
@@ -175,6 +180,7 @@ class SalesExportRequest(BaseModel):
 
 class SalesExportResponse(BaseModel):
     """Response for sales export request."""
+
     export_id: UUID
     status: str
     estimated_completion: datetime

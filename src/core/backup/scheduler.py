@@ -4,6 +4,7 @@ Backup Scheduling and Retention Management
 Enterprise backup scheduling system with retention policies, automated cleanup,
 and compliance monitoring.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,6 +16,7 @@ from typing import Any
 
 try:
     import croniter
+
     HAS_CRONITER = True
 except ImportError:
     HAS_CRONITER = False
@@ -27,6 +29,7 @@ logger = get_logger(__name__)
 
 class ScheduleType(str, Enum):
     """Types of backup schedules."""
+
     CRON = "cron"
     INTERVAL = "interval"
     MANUAL = "manual"
@@ -34,6 +37,7 @@ class ScheduleType(str, Enum):
 
 class RetentionUnit(str, Enum):
     """Units for retention policies."""
+
     DAYS = "days"
     WEEKS = "weeks"
     MONTHS = "months"
@@ -42,6 +46,7 @@ class RetentionUnit(str, Enum):
 
 class BackupPriority(str, Enum):
     """Backup priority levels."""
+
     CRITICAL = "critical"
     HIGH = "high"
     NORMAL = "normal"
@@ -51,20 +56,23 @@ class BackupPriority(str, Enum):
 @dataclass
 class RetentionRule:
     """Individual retention rule."""
+
     name: str
     count: int
     unit: RetentionUnit
     backup_types: list[str] = field(default_factory=lambda: ["full", "incremental"])
-    components: list[str] = field(default_factory=lambda: ["database", "data_lake", "configuration"])
+    components: list[str] = field(
+        default_factory=lambda: ["database", "data_lake", "configuration"]
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'name': self.name,
-            'count': self.count,
-            'unit': self.unit.value,
-            'backup_types': self.backup_types,
-            'components': self.components
+            "name": self.name,
+            "count": self.count,
+            "unit": self.unit.value,
+            "backup_types": self.backup_types,
+            "components": self.components,
         }
 
     def calculate_expiry_date(self, backup_date: datetime) -> datetime:
@@ -85,9 +93,10 @@ class RetentionRule:
 class RetentionPolicy:
     """
     Comprehensive retention policy with multiple rules.
-    
+
     Implements grandfather-father-son (GFS) retention strategy and custom rules.
     """
+
     policy_id: str
     name: str
     description: str
@@ -99,13 +108,13 @@ class RetentionPolicy:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'policy_id': self.policy_id,
-            'name': self.name,
-            'description': self.description,
-            'rules': [rule.to_dict() for rule in self.rules],
-            'gfs_enabled': self.gfs_enabled,
-            'compliance_requirements': self.compliance_requirements,
-            'created_at': self.created_at.isoformat()
+            "policy_id": self.policy_id,
+            "name": self.name,
+            "description": self.description,
+            "rules": [rule.to_dict() for rule in self.rules],
+            "gfs_enabled": self.gfs_enabled,
+            "compliance_requirements": self.compliance_requirements,
+            "created_at": self.created_at.isoformat(),
         }
 
     @classmethod
@@ -115,7 +124,7 @@ class RetentionPolicy:
             RetentionRule("daily", 7, RetentionUnit.DAYS, ["full", "incremental"]),
             RetentionRule("weekly", 4, RetentionUnit.WEEKS, ["full"]),
             RetentionRule("monthly", 12, RetentionUnit.MONTHS, ["full"]),
-            RetentionRule("yearly", 7, RetentionUnit.YEARS, ["full"])
+            RetentionRule("yearly", 7, RetentionUnit.YEARS, ["full"]),
         ]
 
         return cls(
@@ -123,7 +132,7 @@ class RetentionPolicy:
             name=name,
             description="Standard 3-2-1 backup retention policy",
             rules=rules,
-            gfs_enabled=True
+            gfs_enabled=True,
         )
 
     @classmethod
@@ -132,14 +141,14 @@ class RetentionPolicy:
         rules = [
             RetentionRule("daily", 30, RetentionUnit.DAYS, ["full", "incremental"]),
             RetentionRule("monthly", 12, RetentionUnit.MONTHS, ["full"]),
-            RetentionRule("yearly", years, RetentionUnit.YEARS, ["full"])
+            RetentionRule("yearly", years, RetentionUnit.YEARS, ["full"]),
         ]
 
         compliance_requirements = {
             "regulatory_framework": "SOX/GDPR",
             "audit_trail_required": True,
             "immutable_storage": True,
-            "retention_years": years
+            "retention_years": years,
         }
 
         return cls(
@@ -148,13 +157,14 @@ class RetentionPolicy:
             description=f"Compliance retention policy ({years} years)",
             rules=rules,
             gfs_enabled=True,
-            compliance_requirements=compliance_requirements
+            compliance_requirements=compliance_requirements,
         )
 
 
 @dataclass
 class BackupSchedule:
     """Backup schedule configuration."""
+
     schedule_id: str
     name: str
     component: str
@@ -172,26 +182,26 @@ class BackupSchedule:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'schedule_id': self.schedule_id,
-            'name': self.name,
-            'component': self.component,
-            'backup_type': self.backup_type,
-            'schedule_type': self.schedule_type.value,
-            'schedule_expression': self.schedule_expression,
-            'retention_policy_id': self.retention_policy_id,
-            'priority': self.priority.value,
-            'enabled': self.enabled,
-            'next_run': self.next_run.isoformat() if self.next_run else None,
-            'last_run': self.last_run.isoformat() if self.last_run else None,
-            'tags': self.tags,
-            'created_at': self.created_at.isoformat()
+            "schedule_id": self.schedule_id,
+            "name": self.name,
+            "component": self.component,
+            "backup_type": self.backup_type,
+            "schedule_type": self.schedule_type.value,
+            "schedule_expression": self.schedule_expression,
+            "retention_policy_id": self.retention_policy_id,
+            "priority": self.priority.value,
+            "enabled": self.enabled,
+            "next_run": self.next_run.isoformat() if self.next_run else None,
+            "last_run": self.last_run.isoformat() if self.last_run else None,
+            "tags": self.tags,
+            "created_at": self.created_at.isoformat(),
         }
 
 
 class BackupScheduler:
     """
     Enterprise backup scheduler with retention management.
-    
+
     Features:
     - Cron-based scheduling
     - Interval-based scheduling
@@ -203,6 +213,7 @@ class BackupScheduler:
 
     def __init__(self, backup_manager, config: dict[str, Any] | None = None):
         from .backup_manager import BackupManager
+
         self.backup_manager: BackupManager = backup_manager
         self.config = config or {}
 
@@ -229,22 +240,20 @@ class BackupScheduler:
         """Create default retention policies."""
         # Standard policy
         standard_policy = RetentionPolicy.create_standard_policy(
-            "standard_3_2_1",
-            "Standard 3-2-1 Policy"
+            "standard_3_2_1", "Standard 3-2-1 Policy"
         )
         self.retention_policies[standard_policy.policy_id] = standard_policy
 
         # Compliance policy
         compliance_policy = RetentionPolicy.create_compliance_policy(
-            "compliance_7_year",
-            "7-Year Compliance Policy"
+            "compliance_7_year", "7-Year Compliance Policy"
         )
         self.retention_policies[compliance_policy.policy_id] = compliance_policy
 
         # Short-term policy for testing
         test_rules = [
             RetentionRule("hourly", 24, RetentionUnit.DAYS, ["full", "incremental"]),
-            RetentionRule("daily", 7, RetentionUnit.DAYS, ["full"])
+            RetentionRule("daily", 7, RetentionUnit.DAYS, ["full"]),
         ]
 
         test_policy = RetentionPolicy(
@@ -252,7 +261,7 @@ class BackupScheduler:
             name="Test Short-Term Policy",
             description="Short retention for testing and development",
             rules=test_rules,
-            gfs_enabled=False
+            gfs_enabled=False,
         )
         self.retention_policies[test_policy.policy_id] = test_policy
 
@@ -264,11 +273,11 @@ class BackupScheduler:
         schedule_expression: str,
         retention_policy_id: str,
         priority: BackupPriority = BackupPriority.NORMAL,
-        tags: dict[str, str] | None = None
+        tags: dict[str, str] | None = None,
     ) -> BackupSchedule:
         """
         Create a new backup schedule.
-        
+
         Args:
             name: Schedule name
             component: Component to backup (database, data_lake, configuration)
@@ -277,11 +286,13 @@ class BackupScheduler:
             retention_policy_id: ID of retention policy to apply
             priority: Backup priority level
             tags: Additional metadata tags
-            
+
         Returns:
             Created backup schedule
         """
-        schedule_id = f"schedule_{len(self.schedules) + 1}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        schedule_id = (
+            f"schedule_{len(self.schedules) + 1}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        )
 
         # Determine schedule type
         if schedule_expression.startswith("@") or " " in schedule_expression:
@@ -302,7 +313,7 @@ class BackupScheduler:
             retention_policy_id=retention_policy_id,
             priority=priority,
             next_run=next_run,
-            tags=tags or {}
+            tags=tags or {},
         )
 
         self.schedules[schedule_id] = schedule
@@ -317,47 +328,55 @@ class BackupScheduler:
         schedules = []
 
         # Database backups
-        schedules.append(self.create_schedule(
-            "Database Daily Full Backup",
-            "database",
-            "full",
-            "0 2 * * *",  # Daily at 2 AM
-            "standard_3_2_1",
-            BackupPriority.HIGH,
-            {"frequency": "daily", "time": "02:00"}
-        ))
+        schedules.append(
+            self.create_schedule(
+                "Database Daily Full Backup",
+                "database",
+                "full",
+                "0 2 * * *",  # Daily at 2 AM
+                "standard_3_2_1",
+                BackupPriority.HIGH,
+                {"frequency": "daily", "time": "02:00"},
+            )
+        )
 
-        schedules.append(self.create_schedule(
-            "Database Hourly Incremental",
-            "database",
-            "incremental",
-            "0 * * * *",  # Every hour
-            "test_short_term",
-            BackupPriority.NORMAL,
-            {"frequency": "hourly"}
-        ))
+        schedules.append(
+            self.create_schedule(
+                "Database Hourly Incremental",
+                "database",
+                "incremental",
+                "0 * * * *",  # Every hour
+                "test_short_term",
+                BackupPriority.NORMAL,
+                {"frequency": "hourly"},
+            )
+        )
 
         # Data lake backups
-        schedules.append(self.create_schedule(
-            "Data Lake Weekly Full Backup",
-            "data_lake",
-            "full",
-            "0 3 * * 0",  # Weekly on Sunday at 3 AM
-            "standard_3_2_1",
-            BackupPriority.NORMAL,
-            {"frequency": "weekly", "day": "sunday"}
-        ))
+        schedules.append(
+            self.create_schedule(
+                "Data Lake Weekly Full Backup",
+                "data_lake",
+                "full",
+                "0 3 * * 0",  # Weekly on Sunday at 3 AM
+                "standard_3_2_1",
+                BackupPriority.NORMAL,
+                {"frequency": "weekly", "day": "sunday"},
+            )
+        )
 
         # Configuration backups
-        schedules.append(self.create_schedule(
-            "Configuration Daily Backup",
-            "configuration",
-            "full",
-            "0 1 * * *",  # Daily at 1 AM
-            "standard_3_2_1",
-            BackupPriority.LOW,
-            {"frequency": "daily", "time": "01:00"}
-        ))
+        schedules.append(
+            self.create_schedule(
+                "Configuration Daily Backup",
+                "configuration",
+                "full",
+                "0 1 * * *",  # Daily at 1 AM
+                "standard_3_2_1",
+                BackupPriority.LOW,
+                {"frequency": "daily", "time": "01:00"},
+            )
+        )
 
         logger.info(f"Created {len(schedules)} standard backup schedules")
         return schedules
@@ -399,19 +418,16 @@ class BackupScheduler:
                 # Check for due backups
                 due_schedules = []
                 for schedule in self.schedules.values():
-                    if (schedule.enabled and
-                        schedule.next_run and
-                        current_time >= schedule.next_run):
+                    if schedule.enabled and schedule.next_run and current_time >= schedule.next_run:
                         due_schedules.append(schedule)
 
                 # Sort by priority and execute
                 if due_schedules:
-                    due_schedules.sort(key=lambda s: (
-                        s.priority.value,
-                        s.next_run or datetime.min
-                    ))
+                    due_schedules.sort(key=lambda s: (s.priority.value, s.next_run or datetime.min))
 
-                    await self._execute_scheduled_backups(due_schedules[:self.max_concurrent_backups])
+                    await self._execute_scheduled_backups(
+                        due_schedules[: self.max_concurrent_backups]
+                    )
 
                 # Check for cleanup
                 if self._next_cleanup and current_time >= self._next_cleanup:
@@ -447,8 +463,7 @@ class BackupScheduler:
                 # Update schedule
                 schedule.last_run = datetime.utcnow()
                 schedule.next_run = self._calculate_next_run(
-                    schedule.schedule_expression,
-                    schedule.schedule_type
+                    schedule.schedule_expression, schedule.schedule_type
                 )
 
     async def _execute_single_backup(self, schedule: BackupSchedule) -> Any:
@@ -458,19 +473,18 @@ class BackupScheduler:
         try:
             if schedule.component == "database":
                 from .backup_manager import BackupType
+
                 backup_type = BackupType(schedule.backup_type)
                 result = await self.backup_manager.backup_database(
-                    backup_type=backup_type,
-                    compress=True,
-                    validate=True
+                    backup_type=backup_type, compress=True, validate=True
                 )
 
             elif schedule.component == "data_lake":
                 from .backup_manager import BackupType
+
                 backup_type = BackupType(schedule.backup_type)
                 result = await self.backup_manager.backup_data_lake(
-                    backup_type=backup_type,
-                    compress=True
+                    backup_type=backup_type, compress=True
                 )
 
             elif schedule.component == "configuration":
@@ -498,7 +512,7 @@ class BackupScheduler:
             "policies_processed": 0,
             "backups_evaluated": 0,
             "backups_deleted": 0,
-            "storage_freed_bytes": 0
+            "storage_freed_bytes": 0,
         }
 
         try:
@@ -516,22 +530,16 @@ class BackupScheduler:
             logger.error(f"Retention cleanup failed: {e}")
 
     async def _apply_retention_policy(
-        self,
-        component: str | None,
-        policy: RetentionPolicy
+        self, component: str | None, policy: RetentionPolicy
     ) -> dict[str, Any]:
         """Apply retention policy to backups."""
-        stats = {
-            "backups_evaluated": 0,
-            "backups_deleted": 0,
-            "storage_freed_bytes": 0
-        }
+        stats = {"backups_evaluated": 0, "backups_deleted": 0, "storage_freed_bytes": 0}
 
         try:
             # Get backup history
             backup_history = self.backup_manager.get_backup_history(
                 component=component,
-                limit=1000  # Process up to 1000 backups
+                limit=1000,  # Process up to 1000 backups
             )
 
             current_time = datetime.utcnow()
@@ -547,9 +555,7 @@ class BackupScheduler:
                 should_retain = False
 
                 for rule in policy.rules:
-                    if (backup_component in rule.components and
-                        backup_type in rule.backup_types):
-
+                    if backup_component in rule.components and backup_type in rule.backup_types:
                         expiry_date = rule.calculate_expiry_date(backup_date)
                         if current_time < expiry_date:
                             should_retain = True
@@ -569,6 +575,7 @@ class BackupScheduler:
                             backup_path.unlink()
                         else:
                             import shutil
+
                             shutil.rmtree(backup_path)
 
                         stats["backups_deleted"] += 1
@@ -584,7 +591,9 @@ class BackupScheduler:
 
         return stats
 
-    def _calculate_next_run(self, schedule_expression: str, schedule_type: ScheduleType) -> datetime:
+    def _calculate_next_run(
+        self, schedule_expression: str, schedule_type: ScheduleType
+    ) -> datetime:
         """Calculate next run time for a schedule."""
         current_time = datetime.utcnow()
 
@@ -606,7 +615,9 @@ class BackupScheduler:
                         try:
                             hour = int(parts[1]) if parts[1] != "*" else current_time.hour
                             # Schedule for next occurrence at specified hour
-                            next_run = current_time.replace(hour=hour, minute=0, second=0, microsecond=0)
+                            next_run = current_time.replace(
+                                hour=hour, minute=0, second=0, microsecond=0
+                            )
                             if next_run <= current_time:
                                 next_run += timedelta(days=1)
                             return next_run
@@ -618,13 +629,13 @@ class BackupScheduler:
         elif schedule_type == ScheduleType.INTERVAL:
             # Parse interval string like "1h", "30m", "2d"
             try:
-                if schedule_expression.endswith('m'):
+                if schedule_expression.endswith("m"):
                     minutes = int(schedule_expression[:-1])
                     return current_time + timedelta(minutes=minutes)
-                elif schedule_expression.endswith('h'):
+                elif schedule_expression.endswith("h"):
                     hours = int(schedule_expression[:-1])
                     return current_time + timedelta(hours=hours)
-                elif schedule_expression.endswith('d'):
+                elif schedule_expression.endswith("d"):
                     days = int(schedule_expression[:-1])
                     return current_time + timedelta(days=days)
                 else:
@@ -649,7 +660,7 @@ class BackupScheduler:
             "enabled_schedules": sum(1 for s in self.schedules.values() if s.enabled),
             "next_cleanup": self._next_cleanup.isoformat() if self._next_cleanup else None,
             "schedules": [],
-            "retention_policies": len(self.retention_policies)
+            "retention_policies": len(self.retention_policies),
         }
 
         # Add individual schedule information
@@ -661,7 +672,9 @@ class BackupScheduler:
                 "enabled": schedule.enabled,
                 "next_run": schedule.next_run.isoformat() if schedule.next_run else None,
                 "last_run": schedule.last_run.isoformat() if schedule.last_run else None,
-                "overdue": (schedule.next_run and current_time > schedule.next_run) if schedule.enabled else False
+                "overdue": (schedule.next_run and current_time > schedule.next_run)
+                if schedule.enabled
+                else False,
             }
             status["schedules"].append(schedule_info)
 
@@ -676,18 +689,11 @@ class BackupScheduler:
         return [policy.to_dict() for policy in self.retention_policies.values()]
 
     def create_retention_policy(
-        self,
-        policy_id: str,
-        name: str,
-        description: str,
-        rules: list[RetentionRule]
+        self, policy_id: str, name: str, description: str, rules: list[RetentionRule]
     ) -> RetentionPolicy:
         """Create a custom retention policy."""
         policy = RetentionPolicy(
-            policy_id=policy_id,
-            name=name,
-            description=description,
-            rules=rules
+            policy_id=policy_id, name=name, description=description, rules=rules
         )
 
         self.retention_policies[policy_id] = policy
@@ -696,10 +702,7 @@ class BackupScheduler:
         return policy
 
     async def trigger_manual_backup(
-        self,
-        component: str,
-        backup_type: str = "full",
-        retention_policy_id: str | None = None
+        self, component: str, backup_type: str = "full", retention_policy_id: str | None = None
     ) -> Any:
         """Trigger a manual backup outside of scheduling."""
         logger.info(f"Triggering manual backup: {component} ({backup_type})")
@@ -707,19 +710,18 @@ class BackupScheduler:
         try:
             if component == "database":
                 from .backup_manager import BackupType
+
                 backup_type_enum = BackupType(backup_type)
                 result = await self.backup_manager.backup_database(
-                    backup_type=backup_type_enum,
-                    compress=True,
-                    validate=True
+                    backup_type=backup_type_enum, compress=True, validate=True
                 )
 
             elif component == "data_lake":
                 from .backup_manager import BackupType
+
                 backup_type_enum = BackupType(backup_type)
                 result = await self.backup_manager.backup_data_lake(
-                    backup_type=backup_type_enum,
-                    compress=True
+                    backup_type=backup_type_enum, compress=True
                 )
 
             elif component == "configuration":

@@ -2,6 +2,7 @@
 Advanced Analytics API v2
 Enterprise-grade analytics endpoints with caching and async processing
 """
+
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -19,8 +20,12 @@ router = APIRouter(prefix="/analytics", tags=["Analytics v2"])
 class AnalyticsRequest(BaseModel):
     start_date: datetime = Field(..., description="Start date for analysis")
     end_date: datetime = Field(..., description="End date for analysis")
-    metrics: list[str] = Field(default=["revenue", "transactions"], description="Metrics to calculate")
-    dimensions: list[str] = Field(default=["country", "product"], description="Dimensions to group by")
+    metrics: list[str] = Field(
+        default=["revenue", "transactions"], description="Metrics to calculate"
+    )
+    dimensions: list[str] = Field(
+        default=["country", "product"], description="Dimensions to group by"
+    )
     filters: dict[str, Any] | None = Field(default=None, description="Additional filters")
 
 
@@ -45,12 +50,13 @@ async def create_advanced_analytics(
     request: AnalyticsRequest,
     background_tasks: BackgroundTasks,
     cache: RedisCache = Depends(),
-    sales_service: SalesService = Depends()
+    sales_service: SalesService = Depends(),
 ):
     """
     Create advanced analytics calculation with async processing
     """
     import uuid
+
     request_id = str(uuid.uuid4())
 
     # Check cache first
@@ -63,7 +69,7 @@ async def create_advanced_analytics(
             request_id=request_id,
             status="completed",
             data=cached_result,
-            metadata={"source": "cache"}
+            metadata={"source": "cache"},
         )
 
     # Queue background processing
@@ -71,14 +77,12 @@ async def create_advanced_analytics(
         process_advanced_analytics,
         request_id=request_id,
         analytics_request=request,
-        cache_key=cache_key
+        cache_key=cache_key,
     )
 
     # Store initial result
     initial_result = AnalyticsResult(
-        request_id=request_id,
-        status="processing",
-        metadata={"estimated_duration": "30-60 seconds"}
+        request_id=request_id, status="processing", metadata={"estimated_duration": "30-60 seconds"}
     )
 
     await cache.set(f"analytics_status:{request_id}", initial_result.dict(), ttl=3600)
@@ -87,10 +91,7 @@ async def create_advanced_analytics(
 
 
 @router.get("/analytics-status/{request_id}", response_model=AnalyticsResult)
-async def get_analytics_status(
-    request_id: str,
-    cache: RedisCache = Depends()
-):
+async def get_analytics_status(request_id: str, cache: RedisCache = Depends()):
     """
     Get status of analytics processing
     """
@@ -106,7 +107,7 @@ async def get_analytics_status(
 async def cohort_analysis(
     request: CohortAnalysisRequest,
     cache: RedisCache = Depends(),
-    sales_service: SalesService = Depends()
+    sales_service: SalesService = Depends(),
 ):
     """
     Perform customer cohort analysis
@@ -135,7 +136,7 @@ async def cohort_analysis(
 async def predictive_insights(
     forecast_days: int = Query(default=30, ge=1, le=365),
     confidence_interval: float = Query(default=0.95, ge=0.8, le=0.99),
-    cache: RedisCache = Depends()
+    cache: RedisCache = Depends(),
 ):
     """
     Generate predictive insights and forecasting
@@ -158,7 +159,7 @@ async def predictive_insights(
 @router.get("/real-time-metrics", response_model=dict[str, Any])
 async def real_time_metrics(
     metrics: list[str] = Query(default=["active_users", "revenue_rate", "conversion_rate"]),
-    cache: RedisCache = Depends()
+    cache: RedisCache = Depends(),
 ):
     """
     Get real-time business metrics
@@ -179,9 +180,7 @@ async def real_time_metrics(
 
 
 async def process_advanced_analytics(
-    request_id: str,
-    analytics_request: AnalyticsRequest,
-    cache_key: str
+    request_id: str, analytics_request: AnalyticsRequest, cache_key: str
 ):
     """
     Background task to process complex analytics
@@ -194,25 +193,26 @@ async def process_advanced_analytics(
             "revenue_analysis": {
                 "total_revenue": 1250000.50,
                 "growth_rate": 15.2,
-                "top_products": ["Product A", "Product B", "Product C"]
+                "top_products": ["Product A", "Product B", "Product C"],
             },
             "customer_analysis": {
                 "total_customers": 45230,
                 "new_customers": 1250,
-                "retention_rate": 87.5
+                "retention_rate": 87.5,
             },
             "geographic_analysis": {
                 "top_countries": ["United Kingdom", "Germany", "France"],
                 "revenue_by_country": {
                     "United Kingdom": 650000.25,
                     "Germany": 320000.75,
-                    "France": 280000.50
-                }
-            }
+                    "France": 280000.50,
+                },
+            },
         }
 
         # Update status
         from core.caching.redis_cache import RedisCache
+
         cache = RedisCache()
 
         completed_result = AnalyticsResult(
@@ -220,7 +220,7 @@ async def process_advanced_analytics(
             status="completed",
             data=result_data,
             metadata={"processing_time": "2.1 seconds"},
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
         )
 
         await cache.set(f"analytics_status:{request_id}", completed_result.dict(), ttl=3600)
@@ -233,8 +233,7 @@ async def process_advanced_analytics(
 
 
 async def calculate_cohort_analysis(
-    request: CohortAnalysisRequest,
-    sales_service: SalesService
+    request: CohortAnalysisRequest, sales_service: SalesService
 ) -> dict[str, Any]:
     """
     Calculate customer cohort analysis
@@ -247,15 +246,15 @@ async def calculate_cohort_analysis(
             "month_1": 45.2,
             "month_2": 32.1,
             "month_3": 28.5,
-            "month_4": 25.8
+            "month_4": 25.8,
         },
         "cohort_sizes": [1200, 1350, 1180, 1420],
         "revenue_per_cohort": [
             {"period": "2024-01", "revenue": 45000.0},
             {"period": "2024-02", "revenue": 52000.0},
             {"period": "2024-03", "revenue": 48000.0},
-            {"period": "2024-04", "revenue": 58000.0}
-        ]
+            {"period": "2024-04", "revenue": 58000.0},
+        ],
     }
 
 
@@ -264,6 +263,7 @@ async def generate_predictions(forecast_days: int, confidence_interval: float) -
     Generate ML-based predictions
     """
     import random
+
     base_revenue = 10000
 
     predictions = []
@@ -274,19 +274,21 @@ async def generate_predictions(forecast_days: int, confidence_interval: float) -
 
         ci_range = predicted_value * (1 - confidence_interval) * 0.1
 
-        predictions.append({
-            "date": (datetime.utcnow() + timedelta(days=i+1)).isoformat(),
-            "predicted_revenue": round(predicted_value, 2),
-            "lower_bound": round(predicted_value - ci_range, 2),
-            "upper_bound": round(predicted_value + ci_range, 2)
-        })
+        predictions.append(
+            {
+                "date": (datetime.utcnow() + timedelta(days=i + 1)).isoformat(),
+                "predicted_revenue": round(predicted_value, 2),
+                "lower_bound": round(predicted_value - ci_range, 2),
+                "upper_bound": round(predicted_value + ci_range, 2),
+            }
+        )
 
     return {
         "forecast_period": forecast_days,
         "confidence_interval": confidence_interval,
         "predictions": predictions,
         "model_accuracy": 0.85,
-        "last_updated": datetime.utcnow().isoformat()
+        "last_updated": datetime.utcnow().isoformat(),
     }
 
 
@@ -303,23 +305,23 @@ async def calculate_real_time_metrics(metrics: list[str]) -> dict[str, Any]:
             metric_data[metric] = {
                 "value": random.randint(450, 650),
                 "change_24h": random.uniform(-5.0, 12.0),
-                "unit": "users"
+                "unit": "users",
             }
         elif metric == "revenue_rate":
             metric_data[metric] = {
                 "value": random.uniform(800.0, 1200.0),
                 "change_24h": random.uniform(-8.0, 15.0),
-                "unit": "$/hour"
+                "unit": "$/hour",
             }
         elif metric == "conversion_rate":
             metric_data[metric] = {
                 "value": random.uniform(2.5, 4.2),
                 "change_24h": random.uniform(-0.5, 0.8),
-                "unit": "%"
+                "unit": "%",
             }
 
     return {
         "metrics": metric_data,
         "timestamp": datetime.utcnow().isoformat(),
-        "refresh_interval": 30
+        "refresh_interval": 30,
     }

@@ -127,8 +127,12 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
                     description=d.get("description"),
                     quantity=int(d.get("quantity")) if d.get("quantity") is not None else None,
                     invoice_date=d.get("invoice_timestamp"),
-                    unit_price=Decimal(str(d.get("unit_price"))) if d.get("unit_price") is not None else None,
-                    customer_id=str(d.get("customer_id")) if d.get("customer_id") is not None else None,
+                    unit_price=Decimal(str(d.get("unit_price")))
+                    if d.get("unit_price") is not None
+                    else None,
+                    customer_id=str(d.get("customer_id"))
+                    if d.get("customer_id") is not None
+                    else None,
                     country=d.get("country"),
                 )
                 item.validate_business_rules()
@@ -176,7 +180,11 @@ def _validate_with_pydantic(df: DataFrame) -> DataFrame:
 
 def _deduplicate(df: DataFrame) -> DataFrame:
     # Prefer latest by ingestion_timestamp if present; else by invoice_timestamp
-    order_col = F.col("ingestion_timestamp") if "ingestion_timestamp" in df.columns else F.col("invoice_timestamp")
+    order_col = (
+        F.col("ingestion_timestamp")
+        if "ingestion_timestamp" in df.columns
+        else F.col("invoice_timestamp")
+    )
     w = Window.partitionBy("invoice_no", "stock_code", "customer_id").orderBy(order_col.desc())
     df = df.withColumn("_rn", F.row_number().over(w)).where(F.col("_rn") == 1).drop("_rn")
     return df
@@ -185,12 +193,7 @@ def _deduplicate(df: DataFrame) -> DataFrame:
 def write_silver(df: DataFrame) -> Path:
     out_dir = (settings.silver_path / "sales").resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    (
-        df.write.mode("overwrite")
-        .format("delta")
-        .option("mergeSchema", "true")
-        .save(str(out_dir))
-    )
+    (df.write.mode("overwrite").format("delta").option("mergeSchema", "true").save(str(out_dir)))
     # Also write rejected/quarantine records if present
     if "row_id" in df.columns:
         # Derive quarantine by anti-join with validated row_ids

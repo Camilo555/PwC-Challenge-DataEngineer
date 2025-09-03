@@ -460,7 +460,7 @@ class LoadTestScenarios:
 # Light load test
 locust -f locustfile.py --host=http://localhost:8000 --users 10 --spawn-rate 2 --run-time 5m
 
-# Normal load test  
+# Normal load test
 locust -f locustfile.py --host=http://localhost:8000 --users 50 --spawn-rate 5 --run-time 10m
 
 # Peak load test

@@ -1,0 +1,449 @@
+---
+# Cluster Autoscaler with cost optimization configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+    component: cost-optimization
+    tier: control-plane
+spec:
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8085'
+        prometheus.io/path: '/metrics'
+    spec:
+      priorityClassName: system-cluster-critical
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      serviceAccountName: cluster-autoscaler
+      
+      containers:
+      - image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.28.0
+        name: cluster-autoscaler
+        
+        resources:
+          limits:
+            cpu: 100m
+            memory: 600Mi
+          requests:
+            cpu: 100m
+            memory: 600Mi
+            
+        command:
+        - ./cluster-autoscaler
+        - --v=2
+        - --stderrthreshold=info
+        - --cloud-provider=aws  # Change based on cloud provider
+        - --skip-nodes-with-local-storage=false
+        - --expander=least-waste  # Cost-optimized expansion strategy
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/pwc-data-platform
+        - --balance-similar-node-groups
+        - --scale-down-enabled=true
+        - --scale-down-delay-after-add=10m
+        - --scale-down-unneeded-time=10m
+        - --scale-down-delay-after-delete=10s
+        - --scale-down-delay-after-failure=3m
+        - --scale-down-utilization-threshold=0.5  # Aggressive cost optimization
+        - --max-node-provision-time=15m
+        - --max-empty-bulk-delete=10
+        - --max-graceful-termination-sec=600
+        - --scan-interval=10s
+        - --skip-nodes-with-system-pods=false
+        # Multi-zone balancing for cost optimization
+        - --balance-similar-node-groups=true
+        - --enforce-node-group-min-size=true
+        # Cost optimization features
+        - --new-pod-scale-up-delay=0s
+        - --max-nodes-total=100
+        - --cores-total=0:320
+        - --memory-total=0:1280
+        # Enhanced cost optimization
+        - --expendable-pods-priority-cutoff=-10
+        - --ignore-daemonsets-utilization=true
+        - --ignore-mirror-pods-utilization=true
+        
+        env:
+        - name: AWS_REGION
+          value: us-west-2  # Configurable based on region
+        - name: AWS_STS_REGIONAL_ENDPOINTS
+          value: regional
+        
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        
+        # Health checks
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health-check
+            port: 8085
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+          
+        # Volume mounts for security
+        volumeMounts:
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+          
+      volumes:
+      - name: ssl-certs
+        hostPath:
+          path: /etc/ssl/certs/ca-certificates.crt
+      - name: tmp
+        emptyDir: {}
+        
+      # Node selection for cost optimization
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+        
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+
+---
+# Service Account for Cluster Autoscaler
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+  name: cluster-autoscaler
+  namespace: kube-system
+  annotations:
+    # AWS specific annotation for IRSA
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/cluster-autoscaler-role
+    # Azure specific annotation
+    azure.workload.identity/client-id: "your-managed-identity-client-id"
+    # GCP specific annotation
+    iam.gke.io/gcp-service-account: cluster-autoscaler@project-id.iam.gserviceaccount.com
+
+---
+# Cluster Role for Cluster Autoscaler
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+rules:
+- apiGroups: [""]
+  resources: ["events", "endpoints"]
+  verbs: ["create", "patch"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["update"]
+- apiGroups: [""]
+  resources: ["endpoints"]
+  resourceNames: ["cluster-autoscaler"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["watch", "list", "get", "update"]
+- apiGroups: [""]
+  resources: ["namespaces", "pods", "services", "replicationcontrollers", "persistentvolumeclaims", "persistentvolumes"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["extensions"]
+  resources: ["replicasets", "daemonsets"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["watch", "list"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets", "replicasets", "daemonsets"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["batch", "extensions"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "patch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resourceNames: ["cluster-autoscaler"]
+  resources: ["leases"]
+  verbs: ["get", "update"]
+
+---
+# Cluster Role Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-autoscaler
+subjects:
+- kind: ServiceAccount
+  name: cluster-autoscaler
+  namespace: kube-system
+
+---
+# Cost-optimized Node Pool Configuration (AWS Example)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-optimization-config
+  namespace: kube-system
+data:
+  # Spot instance configuration
+  spot-instance-pools.yaml: |
+    spotInstancePools:
+      - name: "general-purpose-spot"
+        instanceTypes: 
+          - "t3.medium"
+          - "t3.large"
+          - "t3.xlarge"
+          - "m5.large"
+          - "m5.xlarge"
+        spotAllocationStrategy: "diversified"
+        onDemandPercentage: 30
+        maxPrice: "0.10"  # Maximum price per hour
+        
+      - name: "compute-optimized-spot"
+        instanceTypes:
+          - "c5.large"
+          - "c5.xlarge" 
+          - "c5.2xlarge"
+          - "c5.4xlarge"
+        spotAllocationStrategy: "diversified"
+        onDemandPercentage: 20
+        maxPrice: "0.15"
+        
+      - name: "memory-optimized-spot"
+        instanceTypes:
+          - "r5.large"
+          - "r5.xlarge"
+          - "r5.2xlarge"
+        spotAllocationStrategy: "diversified"
+        onDemandPercentage: 40
+        maxPrice: "0.20"
+  
+  # Cost optimization policies
+  cost-policies.yaml: |
+    costOptimization:
+      # Automatic workload scheduling preferences
+      scheduling:
+        preferSpotInstances: true
+        spotInstanceTolerationSeconds: 120
+        
+      # Resource right-sizing
+      rightSizing:
+        enabled: true
+        cpuUtilizationThreshold: 70
+        memoryUtilizationThreshold: 80
+        recommendationInterval: "24h"
+        
+      # Storage optimization
+      storage:
+        enableTiering: true
+        tieringPolicies:
+          - name: "frequent-access"
+            days: 30
+            storageClass: "gp3"
+          - name: "infrequent-access" 
+            days: 90
+            storageClass: "gp2"
+          - name: "archive"
+            days: 365
+            storageClass: "sc1"
+            
+      # Network optimization
+      network:
+        enableVPCEndpoints: true
+        enableNATGatewayOptimization: true
+        
+      # Auto-shutdown for non-production
+      autoShutdown:
+        nonProdEnvironments: true
+        schedule:
+          weekdays: "18:00-08:00"
+          weekends: "all-day"
+        excludeNamespaces: 
+          - "monitoring"
+          - "logging"
+          - "security"
+
+---
+# Vertical Pod Autoscaler for right-sizing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-recommender
+  namespace: kube-system
+  labels:
+    component: vpa-recommender
+    app: vpa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpa-recommender
+  template:
+    metadata:
+      labels:
+        app: vpa-recommender
+    spec:
+      serviceAccountName: vpa-recommender
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+      - name: recommender
+        image: k8s.gcr.io/autoscaling/vpa-recommender:0.13.0
+        command:
+        - /recommender
+        - --v=4
+        - --stderrthreshold=info
+        - --pod-recommendation-min-cpu-millicores=25  # Minimum CPU recommendation
+        - --pod-recommendation-min-memory-mb=250      # Minimum memory recommendation
+        - --target-cpu-percentile=0.9                 # CPU percentile for recommendations
+        - --recommendation-margin-fraction=0.15       # Safety margin
+        - --recommender-interval=10m                  # Recommendation interval
+        - --checkpoints-timeout=10m
+        # Cost optimization parameters
+        - --memory-aggregation-interval=24h
+        - --memory-aggregation-interval-count=8
+        - --cpu-aggregation-interval=24h
+        - --cpu-aggregation-interval-count=8
+        
+        resources:
+          limits:
+            cpu: 200m
+            memory: 1000Mi
+          requests:
+            cpu: 50m
+            memory: 500Mi
+            
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+---
+# Cost Monitoring Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-monitoring-dashboard
+  namespace: kube-system
+data:
+  dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Kubernetes Cost Optimization Dashboard",
+        "tags": ["kubernetes", "cost", "optimization"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Spot Instance Utilization",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "100 * sum(kube_node_info{node_type=\"spot\"}) / sum(kube_node_info)",
+                "legendFormat": "Spot Instance %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 30},
+                    {"color": "green", "value": 50}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2, 
+            "title": "Cost Per Hour by Node Type",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum by (instance_type) (node_cost_per_hour * on(instance) group_left(instance_type) kube_node_labels)",
+                "legendFormat": "{{instance_type}}"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Resource Utilization vs Cost",
+            "type": "graph", 
+            "targets": [
+              {
+                "expr": "avg(rate(container_cpu_usage_seconds_total[5m])) by (pod)",
+                "legendFormat": "CPU Utilization"
+              },
+              {
+                "expr": "avg(container_memory_usage_bytes) by (pod) / avg(container_spec_memory_limit_bytes) by (pod)",
+                "legendFormat": "Memory Utilization"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Cluster Autoscaler Events",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "increase(cluster_autoscaler_scaled_up_nodes_total[1h])",
+                "legendFormat": "Scale Up Events"
+              },
+              {
+                "expr": "increase(cluster_autoscaler_scaled_down_nodes_total[1h])",
+                "legendFormat": "Scale Down Events"
+              }
+            ]
+          }
+        ]
+      }
+    }

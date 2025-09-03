@@ -59,11 +59,11 @@ _mock_auth_service = MockAuthService()
 async def get_test_jwt_token(username: str = "test_user", password: str = "test_password") -> str:
     """
     Get a JWT token for testing purposes.
-    
+
     Args:
         username: Username for authentication
         password: Password for authentication
-    
+
     Returns:
         JWT token string for use in test requests
     """
@@ -89,13 +89,13 @@ def create_test_user_token(
 ) -> str:
     """
     Create a test JWT token with custom parameters.
-    
+
     Args:
         username: Username for the token
         roles: List of roles for the user
         expires_in_minutes: Token expiration time
         custom_claims: Additional claims to include
-    
+
     Returns:
         JWT token string
     """
@@ -147,7 +147,7 @@ def create_malformed_token() -> str:
 async def authenticate_test_request(username: str, password: str) -> dict[str, Any]:
     """
     Simulate full authentication flow for testing.
-    
+
     Returns authentication response similar to real API.
     """
     await asyncio.sleep(0.05)  # Simulate network delay

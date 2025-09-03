@@ -2,6 +2,7 @@
 Domain Entity for Customer
 Pure Pydantic model for customer business logic and validation.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class CustomerSegment(str, Enum):
     """Customer segment enumeration."""
+
     VIP = "VIP"
     PREMIUM = "Premium"
     REGULAR = "Regular"
@@ -23,6 +25,7 @@ class CustomerSegment(str, Enum):
 
 class CustomerValueTier(str, Enum):
     """Customer value tier enumeration."""
+
     HIGH = "High"
     MEDIUM = "Medium"
     LOW = "Low"
@@ -30,6 +33,7 @@ class CustomerValueTier(str, Enum):
 
 class CustomerStatus(str, Enum):
     """Customer status enumeration."""
+
     ACTIVE = "Active"
     INACTIVE = "Inactive"
     SUSPENDED = "Suspended"
@@ -52,8 +56,8 @@ class CustomerEntity(BaseModel):
     status: CustomerStatus = CustomerStatus.ACTIVE
 
     # Financial metrics
-    lifetime_value: Decimal = Field(default=Decimal('0.00'), ge=0, max_digits=12, decimal_places=2)
-    avg_order_value: Decimal = Field(default=Decimal('0.00'), ge=0, max_digits=10, decimal_places=2)
+    lifetime_value: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    avg_order_value: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=10, decimal_places=2)
     order_count: int = Field(default=0, ge=0)
 
     # Temporal information
@@ -64,12 +68,12 @@ class CustomerEntity(BaseModel):
     created_at: datetime | None = None
     is_active: bool = True
 
-    @field_validator('customer_id')
+    @field_validator("customer_id")
     @classmethod
     def validate_customer_id(cls, v: str) -> str:
         """Validate customer ID format."""
         if not v or v.isspace():
-            raise ValueError('Customer ID cannot be empty')
+            raise ValueError("Customer ID cannot be empty")
 
         v = v.strip()
 
@@ -78,19 +82,22 @@ class CustomerEntity(BaseModel):
             float(v)
             return v
         except ValueError:
-            raise ValueError('Customer ID must be numeric')
+            raise ValueError("Customer ID must be numeric")
 
     def is_high_value_customer(self) -> bool:
         """Business rule: Check if this is a high-value customer."""
-        return (self.customer_value_tier == CustomerValueTier.HIGH or
-                self.customer_segment in [CustomerSegment.VIP, CustomerSegment.PREMIUM])
+        return self.customer_value_tier == CustomerValueTier.HIGH or self.customer_segment in [
+            CustomerSegment.VIP,
+            CustomerSegment.PREMIUM,
+        ]
 
     class Config:
         """Pydantic configuration."""
+
         json_encoders = {
             Decimal: lambda v: float(v),
             datetime: lambda v: v.isoformat(),
             date: lambda v: v.isoformat(),
-            UUID: lambda v: str(v)
+            UUID: lambda v: str(v),
         }
         validate_assignment = True

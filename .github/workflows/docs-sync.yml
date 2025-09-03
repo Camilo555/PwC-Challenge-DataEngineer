@@ -1,0 +1,518 @@
+name: Documentation Synchronization
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: 
+      - 'src/api/**/*.py'
+      - 'src/core/**/*.py'
+      - 'dbt/**/*.sql'
+      - 'dbt/**/*.yml'
+      - 'terraform/**/*.tf'
+      - 'pyproject.toml'
+      - 'dbt_project.yml'
+  schedule:
+    # Sync documentation daily
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-api-docs:
+    name: Sync API Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install fastapi pydantic sqlalchemy openapi-spec-validator pyyaml jinja2
+          pip install -r requirements.txt || echo "No requirements.txt found"
+
+      - name: Create API documentation sync script
+        run: |
+          cat > sync_api_docs.py << 'EOF'
+          #!/usr/bin/env python3
+          """
+          Automated API documentation synchronization.
+          Extracts OpenAPI specs and generates documentation.
+          """
+          
+          import os
+          import json
+          import yaml
+          from pathlib import Path
+          import importlib.util
+          import sys
+          from datetime import datetime
+          import subprocess
+          
+          def extract_fastapi_openapi():
+              """Extract OpenAPI specification from FastAPI app."""
+              try:
+                  # Add src to Python path
+                  sys.path.insert(0, 'src')
+                  
+                  # Try to import the main FastAPI app
+                  from api.main import app
+                  
+                  openapi_schema = app.openapi()
+                  
+                  # Save OpenAPI spec
+                  with open('docs/api/openapi.json', 'w') as f:
+                      json.dump(openapi_schema, f, indent=2)
+                  
+                  # Generate markdown from OpenAPI spec
+                  generate_api_markdown(openapi_schema)
+                  
+                  return True
+              except Exception as e:
+                  print(f"Failed to extract FastAPI OpenAPI spec: {e}")
+                  return False
+          
+          def generate_api_markdown(openapi_schema):
+              """Generate markdown documentation from OpenAPI schema."""
+              markdown_content = f"""# API Documentation
+          
+          > **Auto-generated from OpenAPI specification**  
+          > Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+          
+          ## Overview
+          
+          - **Title**: {openapi_schema.get('info', {}).get('title', 'API')}
+          - **Version**: {openapi_schema.get('info', {}).get('version', '1.0.0')}
+          - **Description**: {openapi_schema.get('info', {}).get('description', 'No description available')}
+          
+          ## Base URL
+          
+          ```
+          {openapi_schema.get('servers', [{}])[0].get('url', 'http://localhost:8000')}
+          ```
+          
+          ## Authentication
+          
+          """
+              
+              # Add security schemes
+              security_schemes = openapi_schema.get('components', {}).get('securitySchemes', {})
+              if security_schemes:
+                  for name, scheme in security_schemes.items():
+                      markdown_content += f"### {name}\n\n"
+                      markdown_content += f"- **Type**: {scheme.get('type', 'Unknown')}\n"
+                      if 'description' in scheme:
+                          markdown_content += f"- **Description**: {scheme['description']}\n"
+                      markdown_content += "\n"
+              
+              markdown_content += "## Endpoints\n\n"
+              
+              # Add endpoints
+              paths = openapi_schema.get('paths', {})
+              for path, methods in paths.items():
+                  markdown_content += f"### `{path}`\n\n"
+                  
+                  for method, details in methods.items():
+                      if method.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+                          markdown_content += f"#### {method.upper()}\n\n"
+                          
+                          if 'summary' in details:
+                              markdown_content += f"**Summary**: {details['summary']}\n\n"
+                          
+                          if 'description' in details:
+                              markdown_content += f"**Description**: {details['description']}\n\n"
+                          
+                          # Parameters
+                          if 'parameters' in details:
+                              markdown_content += "**Parameters**:\n\n"
+                              for param in details['parameters']:
+                                  required = " (required)" if param.get('required', False) else ""
+                                  markdown_content += f"- `{param['name']}` ({param.get('in', 'query')}){required}: {param.get('description', 'No description')}\n"
+                              markdown_content += "\n"
+                          
+                          # Request body
+                          if 'requestBody' in details:
+                              markdown_content += "**Request Body**:\n\n"
+                              content_types = details['requestBody'].get('content', {})
+                              for content_type, content_details in content_types.items():
+                                  markdown_content += f"- Content-Type: `{content_type}`\n"
+                              markdown_content += "\n"
+                          
+                          # Responses
+                          if 'responses' in details:
+                              markdown_content += "**Responses**:\n\n"
+                              for status_code, response in details['responses'].items():
+                                  markdown_content += f"- `{status_code}`: {response.get('description', 'No description')}\n"
+                              markdown_content += "\n"
+                          
+                          markdown_content += "---\n\n"
+              
+              # Save markdown documentation
+              with open('docs/api/AUTO_GENERATED_API_REFERENCE.md', 'w') as f:
+                  f.write(markdown_content)
+          
+          def sync_database_schema_docs():
+              """Sync database schema documentation from SQLModel definitions."""
+              try:
+                  # Add src to Python path
+                  sys.path.insert(0, 'src')
+                  
+                  from pathlib import Path
+                  import inspect
+                  
+                  schema_docs = "# Database Schema Documentation\n\n"
+                  schema_docs += f"> **Auto-generated from SQLModel definitions**  \n"
+                  schema_docs += f"> Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                  
+                  # Find all model files
+                  model_files = list(Path('src/domain/models').rglob('*.py')) if Path('src/domain/models').exists() else []
+                  
+                  for model_file in model_files:
+                      if model_file.name == '__init__.py':
+                          continue
+                      
+                      try:
+                          # Import the module
+                          spec = importlib.util.spec_from_file_location(model_file.stem, model_file)
+                          module = importlib.util.module_from_spec(spec)
+                          spec.loader.exec_module(module)
+                          
+                          # Find SQLModel classes
+                          for name, obj in inspect.getmembers(module):
+                              if inspect.isclass(obj) and hasattr(obj, '__table__'):
+                                  schema_docs += f"## {name}\n\n"
+                                  
+                                  # Add table name
+                                  if hasattr(obj, '__tablename__'):
+                                      schema_docs += f"**Table**: `{obj.__tablename__}`\n\n"
+                                  
+                                  # Add docstring
+                                  if obj.__doc__:
+                                      schema_docs += f"**Description**: {obj.__doc__.strip()}\n\n"
+                                  
+                                  # Add fields
+                                  schema_docs += "**Fields**:\n\n"
+                                  schema_docs += "| Column | Type | Nullable | Description |\n"
+                                  schema_docs += "|--------|------|----------|-------------|\n"
+                                  
+                                  if hasattr(obj, '__table__'):
+                                      for column in obj.__table__.columns:
+                                          nullable = "Yes" if column.nullable else "No"
+                                          col_type = str(column.type)
+                                          description = getattr(column, 'comment', '') or 'N/A'
+                                          schema_docs += f"| `{column.name}` | {col_type} | {nullable} | {description} |\n"
+                                  
+                                  schema_docs += "\n---\n\n"
+                      
+                      except Exception as e:
+                          print(f"Failed to process model file {model_file}: {e}")
+                          continue
+                  
+                  # Save schema documentation
+                  with open('docs/data-engineering/AUTO_GENERATED_DATABASE_SCHEMA.md', 'w') as f:
+                      f.write(schema_docs)
+                  
+                  return True
+              
+              except Exception as e:
+                  print(f"Failed to sync database schema docs: {e}")
+                  return False
+          
+          def sync_dbt_docs():
+              """Sync dbt model documentation."""
+              try:
+                  dbt_docs = "# dbt Models Documentation\n\n"
+                  dbt_docs += f"> **Auto-generated from dbt project**  \n"
+                  dbt_docs += f"> Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                  
+                  # Parse dbt_project.yml
+                  if Path('dbt_project.yml').exists():
+                      with open('dbt_project.yml', 'r') as f:
+                          dbt_config = yaml.safe_load(f)
+                      
+                      dbt_docs += f"## Project: {dbt_config.get('name', 'Unknown')}\n\n"
+                      dbt_docs += f"- **Version**: {dbt_config.get('version', 'Unknown')}\n"
+                      dbt_docs += f"- **Profile**: {dbt_config.get('profile', 'Unknown')}\n\n"
+                  
+                  # Find model files
+                  model_files = list(Path('dbt/models').rglob('*.sql')) if Path('dbt/models').exists() else []
+                  
+                  if model_files:
+                      dbt_docs += "## Models\n\n"
+                      
+                      for model_file in model_files:
+                          model_name = model_file.stem
+                          relative_path = model_file.relative_to(Path('dbt/models'))
+                          
+                          dbt_docs += f"### {model_name}\n\n"
+                          dbt_docs += f"**File**: `dbt/models/{relative_path}`\n\n"
+                          
+                          # Read model file to extract comments
+                          try:
+                              with open(model_file, 'r') as f:
+                                  content = f.read()
+                              
+                              # Extract config and description from model
+                              if '{{' in content and 'config' in content:
+                                  dbt_docs += "**Configuration**: Custom configuration applied\n\n"
+                              
+                              # Look for documentation comments
+                              doc_comments = []
+                              for line in content.split('\n'):
+                                  line = line.strip()
+                                  if line.startswith('--') and len(line) > 3:
+                                      doc_comments.append(line[2:].strip())
+                              
+                              if doc_comments:
+                                  dbt_docs += "**Description**:\n"
+                                  for comment in doc_comments[:3]:  # Limit to first 3 comments
+                                      dbt_docs += f"- {comment}\n"
+                                  dbt_docs += "\n"
+                          
+                          except Exception as e:
+                              print(f"Failed to process dbt model {model_file}: {e}")
+                          
+                          dbt_docs += "---\n\n"
+                  
+                  # Save dbt documentation
+                  with open('docs/data-engineering/AUTO_GENERATED_DBT_MODELS.md', 'w') as f:
+                      f.write(dbt_docs)
+                  
+                  return True
+              
+              except Exception as e:
+                  print(f"Failed to sync dbt docs: {e}")
+                  return False
+          
+          def main():
+              """Main synchronization function."""
+              print("🔄 Starting documentation synchronization...")
+              
+              # Ensure docs directories exist
+              os.makedirs('docs/api', exist_ok=True)
+              os.makedirs('docs/data-engineering', exist_ok=True)
+              
+              success_count = 0
+              total_count = 3
+              
+              # Sync API documentation
+              print("📡 Syncing API documentation...")
+              if extract_fastapi_openapi():
+                  print("✅ API documentation synced successfully")
+                  success_count += 1
+              else:
+                  print("❌ Failed to sync API documentation")
+              
+              # Sync database schema documentation
+              print("🗃️  Syncing database schema documentation...")
+              if sync_database_schema_docs():
+                  print("✅ Database schema documentation synced successfully")
+                  success_count += 1
+              else:
+                  print("❌ Failed to sync database schema documentation")
+              
+              # Sync dbt documentation
+              print("📊 Syncing dbt documentation...")
+              if sync_dbt_docs():
+                  print("✅ dbt documentation synced successfully")
+                  success_count += 1
+              else:
+                  print("❌ Failed to sync dbt documentation")
+              
+              print(f"📈 Documentation sync completed: {success_count}/{total_count} successful")
+              
+              return success_count == total_count
+          
+          if __name__ == '__main__':
+              success = main()
+              sys.exit(0 if success else 1)
+          EOF
+
+      - name: Run documentation sync
+        run: python sync_api_docs.py
+
+      - name: Create code comment extraction script
+        run: |
+          cat > extract_code_comments.py << 'EOF'
+          #!/usr/bin/env python3
+          """
+          Code comment extraction for API documentation.
+          """
+          
+          import os
+          import ast
+          import re
+          from pathlib import Path
+          from datetime import datetime
+          
+          def extract_docstrings_from_file(file_path):
+              """Extract docstrings and comments from Python file."""
+              try:
+                  with open(file_path, 'r', encoding='utf-8') as f:
+                      content = f.read()
+              except (UnicodeDecodeError, IOError):
+                  return []
+              
+              docstrings = []
+              
+              try:
+                  tree = ast.parse(content)
+                  
+                  for node in ast.walk(tree):
+                      if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+                          if ast.get_docstring(node):
+                              docstrings.append({
+                                  'type': 'function' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class',
+                                  'name': node.name,
+                                  'docstring': ast.get_docstring(node),
+                                  'line': node.lineno
+                              })
+              except SyntaxError:
+                  pass
+              
+              return docstrings
+          
+          def generate_code_comments_doc():
+              """Generate documentation from code comments."""
+              doc_content = "# Code Documentation\n\n"
+              doc_content += f"> **Auto-generated from code comments and docstrings**  \n"
+              doc_content += f"> Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+              
+              # Process API files
+              api_files = list(Path('src/api').rglob('*.py')) if Path('src/api').exists() else []
+              
+              if api_files:
+                  doc_content += "## API Functions and Classes\n\n"
+                  
+                  for api_file in api_files:
+                      docstrings = extract_docstrings_from_file(api_file)
+                      
+                      if docstrings:
+                          relative_path = api_file.relative_to(Path('src'))
+                          doc_content += f"### {relative_path}\n\n"
+                          
+                          for docstring_info in docstrings:
+                              doc_content += f"#### {docstring_info['name']} ({docstring_info['type']})\n\n"
+                              doc_content += f"```python\n{docstring_info['docstring']}\n```\n\n"
+              
+              # Save code comments documentation
+              with open('docs/api/AUTO_GENERATED_CODE_COMMENTS.md', 'w') as f:
+                  f.write(doc_content)
+              
+              print("✅ Code comments documentation generated")
+          
+          if __name__ == '__main__':
+              generate_code_comments_doc()
+          EOF
+
+      - name: Extract code comments
+        run: python extract_code_comments.py
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit synchronized documentation
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add docs/
+          git commit -m "docs: Auto-sync documentation from code changes
+
+          - Updated API documentation from OpenAPI specs
+          - Synchronized database schema documentation
+          - Extracted code comments and docstrings
+          
+          🤖 Generated with [Claude Code](https://claude.ai/code)
+          
+          Co-Authored-By: Claude <noreply@anthropic.com>" || echo "No changes to commit"
+
+      - name: Push changes
+        if: steps.changes.outputs.changes == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+  sync-terraform-docs:
+    name: Sync Terraform Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: latest
+
+      - name: Install terraform-docs
+        run: |
+          curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/v0.16.0/terraform-docs-v0.16.0-$(uname)-amd64.tar.gz
+          tar -xzf terraform-docs.tar.gz
+          chmod +x terraform-docs
+          sudo mv terraform-docs /usr/local/bin/
+
+      - name: Generate Terraform documentation
+        run: |
+          echo "# Infrastructure Documentation" > docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          echo "" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          echo "> **Auto-generated from Terraform modules**" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          echo "> Last updated: $(date)" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          echo "" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          
+          # Generate docs for each Terraform module
+          find terraform -name "*.tf" -type f | xargs dirname | sort -u | while read dir; do
+            if [ -f "$dir/main.tf" ] || [ -f "$dir/variables.tf" ]; then
+              echo "## Module: $(basename $dir)" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+              echo "" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+              terraform-docs markdown "$dir" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+              echo "" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+              echo "---" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+              echo "" >> docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+            fi
+          done
+
+      - name: Check for Terraform doc changes
+        id: tf_changes
+        run: |
+          if git diff --quiet docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit Terraform documentation
+        if: steps.tf_changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add docs/operations/AUTO_GENERATED_TERRAFORM_DOCS.md
+          git commit -m "docs: Auto-sync Terraform documentation
+          
+          🤖 Generated with [Claude Code](https://claude.ai/code)
+          
+          Co-Authored-By: Claude <noreply@anthropic.com>" || echo "No changes to commit"
+
+      - name: Push Terraform doc changes
+        if: steps.tf_changes.outputs.changes == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}

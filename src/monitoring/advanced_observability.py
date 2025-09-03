@@ -3,18 +3,19 @@ Advanced Monitoring and Observability System
 Provides comprehensive distributed tracing, metrics collection, intelligent alerting,
 and real-time performance monitoring with ML-powered anomaly detection.
 """
+
 import asyncio
-import json
 import statistics
 import threading
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -31,6 +32,7 @@ from streaming.kafka_manager import KafkaManager
 
 class MetricType(Enum):
     """Types of metrics collected"""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -39,6 +41,7 @@ class MetricType(Enum):
 
 class AlertSeverity(Enum):
     """Alert severity levels"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -48,6 +51,7 @@ class AlertSeverity(Enum):
 @dataclass
 class MetricPoint:
     """Individual metric measurement"""
+
     name: str
     value: float
     timestamp: datetime
@@ -58,6 +62,7 @@ class MetricPoint:
 @dataclass
 class Alert:
     """Alert definition"""
+
     alert_id: str
     name: str
     description: str
@@ -66,8 +71,8 @@ class Alert:
     condition: str  # e.g., "> 100", "< 0.95"
     threshold: float
     duration_seconds: int = 60
-    labels: Dict[str, str] = field(default_factory=dict)
-    actions: List[str] = field(default_factory=list)  # email, slack, webhook
+    labels: dict[str, str] = field(default_factory=dict)
+    actions: list[str] = field(default_factory=list)  # email, slack, webhook
     created_at: datetime = field(default_factory=datetime.now)
     is_active: bool = True
 
@@ -75,18 +80,20 @@ class Alert:
 @dataclass
 class AlertInstance:
     """Active alert instance"""
+
     alert_id: str
     instance_id: str
     triggered_at: datetime
-    resolved_at: Optional[datetime] = None
+    resolved_at: datetime | None = None
     current_value: float = 0.0
     message: str = ""
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class PerformanceSnapshot:
     """Performance snapshot for trend analysis"""
+
     timestamp: datetime
     cpu_usage: float
     memory_usage: float
@@ -100,157 +107,157 @@ class PerformanceSnapshot:
 
 class AnomalyDetector:
     """ML-powered anomaly detection for metrics"""
-    
+
     def __init__(self, window_size: int = 100):
         self.window_size = window_size
-        self.metric_windows: Dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
-        self.baselines: Dict[str, Dict[str, float]] = {}
-        
+        self.metric_windows: dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
+        self.baselines: dict[str, dict[str, float]] = {}
+
     def add_metric(self, metric_name: str, value: float):
         """Add metric value for anomaly detection"""
         self.metric_windows[metric_name].append(value)
         self._update_baseline(metric_name)
-    
+
     def _update_baseline(self, metric_name: str):
         """Update baseline statistics for metric"""
         values = list(self.metric_windows[metric_name])
         if len(values) >= 10:  # Minimum samples for statistics
             self.baselines[metric_name] = {
-                'mean': statistics.mean(values),
-                'stdev': statistics.stdev(values) if len(values) > 1 else 0,
-                'median': statistics.median(values),
-                'p95': self._percentile(values, 95),
-                'p99': self._percentile(values, 99)
+                "mean": statistics.mean(values),
+                "stdev": statistics.stdev(values) if len(values) > 1 else 0,
+                "median": statistics.median(values),
+                "p95": self._percentile(values, 95),
+                "p99": self._percentile(values, 99),
             }
-    
-    def _percentile(self, values: List[float], percentile: int) -> float:
+
+    def _percentile(self, values: list[float], percentile: int) -> float:
         """Calculate percentile"""
         sorted_values = sorted(values)
         index = int((percentile / 100) * len(sorted_values))
         return sorted_values[min(index, len(sorted_values) - 1)]
-    
-    def detect_anomaly(self, metric_name: str, value: float) -> Dict[str, Any]:
+
+    def detect_anomaly(self, metric_name: str, value: float) -> dict[str, Any]:
         """Detect if metric value is anomalous"""
         if metric_name not in self.baselines:
-            return {'is_anomaly': False, 'confidence': 0.0}
-        
+            return {"is_anomaly": False, "confidence": 0.0}
+
         baseline = self.baselines[metric_name]
-        mean = baseline['mean']
-        stdev = baseline['stdev']
-        
+        mean = baseline["mean"]
+        stdev = baseline["stdev"]
+
         if stdev == 0:
-            return {'is_anomaly': False, 'confidence': 0.0}
-        
+            return {"is_anomaly": False, "confidence": 0.0}
+
         # Z-score based anomaly detection
         z_score = abs((value - mean) / stdev)
         is_anomaly = z_score > 3.0  # 3 standard deviations
         confidence = min(z_score / 3.0, 1.0)
-        
+
         return {
-            'is_anomaly': is_anomaly,
-            'confidence': confidence,
-            'z_score': z_score,
-            'baseline_mean': mean,
-            'baseline_stdev': stdev,
-            'current_value': value
+            "is_anomaly": is_anomaly,
+            "confidence": confidence,
+            "z_score": z_score,
+            "baseline_mean": mean,
+            "baseline_stdev": stdev,
+            "current_value": value,
         }
 
 
 class ObservabilityCollector:
     """Central collector for all observability data"""
-    
+
     def __init__(self):
         self.logger = get_logger(__name__)
         self.rabbitmq_manager = RabbitMQManager()
         self.kafka_manager = KafkaManager()
-        
+
         # Storage
-        self.metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
-        self.alerts: Dict[str, Alert] = {}
-        self.alert_instances: Dict[str, AlertInstance] = {}
+        self.metrics: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self.alerts: dict[str, Alert] = {}
+        self.alert_instances: dict[str, AlertInstance] = {}
         self.performance_snapshots: deque = deque(maxlen=1000)
-        
+
         # Advanced features
         self.anomaly_detector = AnomalyDetector()
-        self.alert_rules: List[Dict[str, Any]] = []
-        self.notification_handlers: Dict[str, Callable] = {}
-        
+        self.alert_rules: list[dict[str, Any]] = []
+        self.notification_handlers: dict[str, Callable] = {}
+
         # Background tasks
-        self._alert_processor_task: Optional[asyncio.Task] = None
-        self._metrics_aggregator_task: Optional[asyncio.Task] = None
-        
+        self._alert_processor_task: asyncio.Task | None = None
+        self._metrics_aggregator_task: asyncio.Task | None = None
+
         self._start_background_tasks()
-    
+
     def _start_background_tasks(self):
         """Start background processing tasks"""
         if not self._alert_processor_task or self._alert_processor_task.done():
             self._alert_processor_task = asyncio.create_task(self._process_alerts())
-        
+
         if not self._metrics_aggregator_task or self._metrics_aggregator_task.done():
             self._metrics_aggregator_task = asyncio.create_task(self._aggregate_metrics())
-    
+
     async def record_metric(self, metric: MetricPoint):
         """Record a metric point"""
         metric_key = f"{metric.name}:{':'.join(f'{k}={v}' for k, v in metric.labels.items())}"
         self.metrics[metric_key].append(metric)
-        
+
         # Add to anomaly detector
         self.anomaly_detector.add_metric(metric.name, metric.value)
-        
+
         # Check for anomalies
         anomaly_result = self.anomaly_detector.detect_anomaly(metric.name, metric.value)
-        if anomaly_result['is_anomaly']:
+        if anomaly_result["is_anomaly"]:
             await self._handle_anomaly(metric, anomaly_result)
-        
+
         # Publish to Kafka for real-time monitoring
         try:
             await self._publish_metric_to_kafka(metric)
         except Exception as e:
             self.logger.error(f"Failed to publish metric to Kafka: {e}")
-    
+
     async def _publish_metric_to_kafka(self, metric: MetricPoint):
         """Publish metric to Kafka"""
-        metric_data = {
-            'name': metric.name,
-            'value': metric.value,
-            'timestamp': metric.timestamp.isoformat(),
-            'labels': metric.labels,
-            'metric_type': metric.metric_type.value
+        {
+            "name": metric.name,
+            "value": metric.value,
+            "timestamp": metric.timestamp.isoformat(),
+            "labels": metric.labels,
+            "metric_type": metric.metric_type.value,
         }
-        
+
         self.kafka_manager.produce_metrics_event(
             metric_name=metric.name,
             metric_value=metric.value,
             labels=metric.labels,
-            timestamp=metric.timestamp.timestamp()
+            timestamp=metric.timestamp.timestamp(),
         )
-    
-    async def _handle_anomaly(self, metric: MetricPoint, anomaly_result: Dict[str, Any]):
+
+    async def _handle_anomaly(self, metric: MetricPoint, anomaly_result: dict[str, Any]):
         """Handle detected anomaly"""
         alert_id = f"anomaly_{metric.name}_{int(time.time())}"
-        
+
         alert_instance = AlertInstance(
             alert_id=alert_id,
             instance_id=str(uuid.uuid4()),
             triggered_at=datetime.now(),
             current_value=metric.value,
             message=f"Anomaly detected in {metric.name}: {anomaly_result['confidence']:.2%} confidence",
-            context=anomaly_result
+            context=anomaly_result,
         )
-        
+
         self.alert_instances[alert_instance.instance_id] = alert_instance
-        
+
         await self._send_alert_notification(alert_instance)
-    
+
     def add_alert_rule(self, alert: Alert):
         """Add alert rule"""
         self.alerts[alert.alert_id] = alert
         self.logger.info(f"Added alert rule: {alert.name}")
-    
+
     def register_notification_handler(self, action_type: str, handler: Callable):
         """Register notification handler"""
         self.notification_handlers[action_type] = handler
-    
+
     async def _process_alerts(self):
         """Background task to process alert rules"""
         while True:
@@ -258,13 +265,13 @@ class ObservabilityCollector:
                 for alert in self.alerts.values():
                     if alert.is_active:
                         await self._evaluate_alert(alert)
-                
+
                 await asyncio.sleep(10)  # Check every 10 seconds
-                
+
             except Exception as e:
                 self.logger.error(f"Alert processing error: {e}")
                 await asyncio.sleep(30)
-    
+
     async def _evaluate_alert(self, alert: Alert):
         """Evaluate alert condition"""
         # Get recent metrics for the alert
@@ -274,23 +281,24 @@ class ObservabilityCollector:
                 # Get metrics from the last duration_seconds
                 cutoff_time = datetime.now() - timedelta(seconds=alert.duration_seconds)
                 recent_metrics.extend([m for m in metrics if m.timestamp > cutoff_time])
-        
+
         if not recent_metrics:
             return
-        
+
         # Calculate aggregate value (average for now)
         current_value = statistics.mean([m.value for m in recent_metrics])
-        
+
         # Evaluate condition
         is_triggered = self._evaluate_condition(alert.condition, current_value, alert.threshold)
-        
+
         if is_triggered:
             # Check if alert is already active
             active_instances = [
-                inst for inst in self.alert_instances.values()
+                inst
+                for inst in self.alert_instances.values()
                 if inst.alert_id == alert.alert_id and inst.resolved_at is None
             ]
-            
+
             if not active_instances:  # Create new alert instance
                 alert_instance = AlertInstance(
                     alert_id=alert.alert_id,
@@ -298,41 +306,41 @@ class ObservabilityCollector:
                     triggered_at=datetime.now(),
                     current_value=current_value,
                     message=f"{alert.name}: {current_value} {alert.condition} {alert.threshold}",
-                    context={'alert_rule': asdict(alert)}
+                    context={"alert_rule": asdict(alert)},
                 )
-                
+
                 self.alert_instances[alert_instance.instance_id] = alert_instance
                 await self._send_alert_notification(alert_instance)
-    
+
     def _evaluate_condition(self, condition: str, current_value: float, threshold: float) -> bool:
         """Evaluate alert condition"""
-        if condition.startswith('>'):
+        if condition.startswith(">"):
             return current_value > threshold
-        elif condition.startswith('<'):
+        elif condition.startswith("<"):
             return current_value < threshold
-        elif condition.startswith('>='):
+        elif condition.startswith(">="):
             return current_value >= threshold
-        elif condition.startswith('<='):
+        elif condition.startswith("<="):
             return current_value <= threshold
-        elif condition.startswith('=='):
+        elif condition.startswith("=="):
             return current_value == threshold
-        elif condition.startswith('!='):
+        elif condition.startswith("!="):
             return current_value != threshold
         return False
-    
+
     async def _send_alert_notification(self, alert_instance: AlertInstance):
         """Send alert notification"""
         alert = self.alerts.get(alert_instance.alert_id)
         if not alert:
             return
-        
+
         for action in alert.actions:
             if action in self.notification_handlers:
                 try:
                     await self.notification_handlers[action](alert_instance, alert)
                 except Exception as e:
                     self.logger.error(f"Notification handler {action} failed: {e}")
-    
+
     async def _aggregate_metrics(self):
         """Background task to aggregate metrics"""
         while True:
@@ -340,42 +348,42 @@ class ObservabilityCollector:
                 # Create performance snapshot
                 snapshot = await self._create_performance_snapshot()
                 self.performance_snapshots.append(snapshot)
-                
+
                 # Clean up old data
                 await self._cleanup_old_data()
-                
+
                 await asyncio.sleep(60)  # Aggregate every minute
-                
+
             except Exception as e:
                 self.logger.error(f"Metrics aggregation error: {e}")
                 await asyncio.sleep(60)
-    
+
     async def _create_performance_snapshot(self) -> PerformanceSnapshot:
         """Create performance snapshot from current metrics"""
         now = datetime.now()
         cutoff = now - timedelta(minutes=5)
-        
+
         # Aggregate recent metrics
         cpu_values = []
         memory_values = []
         response_time_values = []
         error_counts = 0
         total_requests = 0
-        
+
         for metric_key, metrics in self.metrics.items():
             recent_metrics = [m for m in metrics if m.timestamp > cutoff]
-            
-            if 'cpu_usage' in metric_key:
+
+            if "cpu_usage" in metric_key:
                 cpu_values.extend([m.value for m in recent_metrics])
-            elif 'memory_usage' in metric_key:
+            elif "memory_usage" in metric_key:
                 memory_values.extend([m.value for m in recent_metrics])
-            elif 'response_time' in metric_key:
+            elif "response_time" in metric_key:
                 response_time_values.extend([m.value for m in recent_metrics])
-            elif 'error_count' in metric_key:
+            elif "error_count" in metric_key:
                 error_counts += sum([m.value for m in recent_metrics])
-            elif 'request_count' in metric_key:
+            elif "request_count" in metric_key:
                 total_requests += sum([m.value for m in recent_metrics])
-        
+
         return PerformanceSnapshot(
             timestamp=now,
             cpu_usage=statistics.mean(cpu_values) if cpu_values else 0.0,
@@ -383,45 +391,49 @@ class ObservabilityCollector:
             disk_usage=0.0,  # Would need system metrics
             network_io=0.0,  # Would need system metrics
             active_connections=0,  # Would need connection pool metrics
-            response_time_p95=self.anomaly_detector._percentile(response_time_values, 95) if response_time_values else 0.0,
+            response_time_p95=self.anomaly_detector._percentile(response_time_values, 95)
+            if response_time_values
+            else 0.0,
             error_rate=(error_counts / max(total_requests, 1)) * 100,
-            throughput_rps=total_requests / 300  # 5 minutes = 300 seconds
+            throughput_rps=total_requests / 300,  # 5 minutes = 300 seconds
         )
-    
+
     async def _cleanup_old_data(self):
         """Clean up old metrics and alerts"""
         cutoff_time = datetime.now() - timedelta(hours=24)
-        
+
         # Resolve old alert instances
-        for instance_id, instance in list(self.alert_instances.items()):
+        for _instance_id, instance in list(self.alert_instances.items()):
             if instance.triggered_at < cutoff_time and instance.resolved_at is None:
                 instance.resolved_at = datetime.now()
-    
-    async def get_metrics_summary(self) -> Dict[str, Any]:
+
+    async def get_metrics_summary(self) -> dict[str, Any]:
         """Get summary of collected metrics"""
         return {
-            'total_metrics': sum(len(metrics) for metrics in self.metrics.values()),
-            'unique_metrics': len(self.metrics),
-            'active_alerts': len([a for a in self.alerts.values() if a.is_active]),
-            'alert_instances': len([i for i in self.alert_instances.values() if i.resolved_at is None]),
-            'performance_snapshots': len(self.performance_snapshots),
-            'anomaly_baselines': len(self.anomaly_detector.baselines)
+            "total_metrics": sum(len(metrics) for metrics in self.metrics.values()),
+            "unique_metrics": len(self.metrics),
+            "active_alerts": len([a for a in self.alerts.values() if a.is_active]),
+            "alert_instances": len(
+                [i for i in self.alert_instances.values() if i.resolved_at is None]
+            ),
+            "performance_snapshots": len(self.performance_snapshots),
+            "anomaly_baselines": len(self.anomaly_detector.baselines),
         }
-    
-    async def get_performance_trends(self, hours: int = 24) -> List[PerformanceSnapshot]:
+
+    async def get_performance_trends(self, hours: int = 24) -> list[PerformanceSnapshot]:
         """Get performance trends over time"""
         cutoff_time = datetime.now() - timedelta(hours=hours)
         return [s for s in self.performance_snapshots if s.timestamp > cutoff_time]
-    
-    async def get_active_alerts(self) -> List[AlertInstance]:
+
+    async def get_active_alerts(self) -> list[AlertInstance]:
         """Get active alert instances"""
         return [i for i in self.alert_instances.values() if i.resolved_at is None]
-    
+
     async def close(self):
         """Clean up resources"""
         if self._alert_processor_task and not self._alert_processor_task.done():
             self._alert_processor_task.cancel()
-        
+
         if self._metrics_aggregator_task and not self._metrics_aggregator_task.done():
             self._metrics_aggregator_task.cancel()
 
@@ -429,6 +441,7 @@ class ObservabilityCollector:
 @dataclass
 class TraceSpan:
     """Distributed trace span information"""
+
     trace_id: str
     span_id: str
     parent_span_id: str | None
@@ -444,6 +457,7 @@ class TraceSpan:
 @dataclass
 class Alert:
     """System alert definition"""
+
     id: str
     name: str
     description: str
@@ -480,13 +494,13 @@ class PerformanceProfiler:
             memory_delta = end_memory - start_memory
 
             profile_data = {
-                'operation': operation_name,
-                'duration_ms': duration * 1000,
-                'memory_delta_mb': memory_delta,
-                'start_memory_mb': start_memory,
-                'end_memory_mb': end_memory,
-                'timestamp': datetime.now(),
-                'tags': tags
+                "operation": operation_name,
+                "duration_ms": duration * 1000,
+                "memory_delta_mb": memory_delta,
+                "start_memory_mb": start_memory,
+                "end_memory_mb": end_memory,
+                "timestamp": datetime.now(),
+                "tags": tags,
             }
 
             with self.lock:
@@ -502,6 +516,7 @@ class PerformanceProfiler:
         """Get current memory usage in MB"""
         try:
             import psutil
+
             process = psutil.Process()
             return process.memory_info().rss / 1024 / 1024
         except ImportError:
@@ -517,19 +532,19 @@ class PerformanceProfiler:
             if not profiles:
                 return {}
 
-            durations = [p['duration_ms'] for p in profiles]
-            memory_deltas = [p['memory_delta_mb'] for p in profiles]
+            durations = [p["duration_ms"] for p in profiles]
+            memory_deltas = [p["memory_delta_mb"] for p in profiles]
 
             return {
-                'count': len(profiles),
-                'avg_duration_ms': sum(durations) / len(durations),
-                'min_duration_ms': min(durations),
-                'max_duration_ms': max(durations),
-                'p95_duration_ms': self._percentile(durations, 95),
-                'p99_duration_ms': self._percentile(durations, 99),
-                'avg_memory_delta_mb': sum(memory_deltas) / len(memory_deltas),
-                'total_memory_allocated_mb': sum(max(0, delta) for delta in memory_deltas),
-                'last_execution': max(p['timestamp'] for p in profiles)
+                "count": len(profiles),
+                "avg_duration_ms": sum(durations) / len(durations),
+                "min_duration_ms": min(durations),
+                "max_duration_ms": max(durations),
+                "p95_duration_ms": self._percentile(durations, 95),
+                "p99_duration_ms": self._percentile(durations, 99),
+                "avg_memory_delta_mb": sum(memory_deltas) / len(memory_deltas),
+                "total_memory_allocated_mb": sum(max(0, delta) for delta in memory_deltas),
+                "last_execution": max(p["timestamp"] for p in profiles),
             }
 
     def _percentile(self, data: list[float], percentile: int) -> float:
@@ -567,10 +582,7 @@ class DistributedTracer:
 
         # OTLP exporter for production (Jaeger/Zipkin)
         try:
-            otlp_exporter = OTLPSpanExporter(
-                endpoint="http://localhost:4317",
-                insecure=True
-            )
+            otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
             otlp_processor = BatchSpanProcessor(otlp_exporter)
             self.tracer_provider.add_span_processor(otlp_processor)
         except Exception as e:
@@ -586,8 +598,8 @@ class DistributedTracer:
             for key, value in tags.items():
                 span.set_attribute(key, str(value))
 
-            trace_id = format(span.get_span_context().trace_id, '032x')
-            span_id = format(span.get_span_context().span_id, '016x')
+            trace_id = format(span.get_span_context().trace_id, "032x")
+            span_id = format(span.get_span_context().span_id, "016x")
 
             trace_span = TraceSpan(
                 trace_id=trace_id,
@@ -597,7 +609,7 @@ class DistributedTracer:
                 start_time=datetime.now(),
                 end_time=None,
                 duration_ms=None,
-                tags=tags
+                tags=tags,
             )
 
             try:
@@ -615,11 +627,9 @@ class DistributedTracer:
                 span.record_exception(e)
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                 trace_span.status = "ERROR"
-                trace_span.logs.append({
-                    'timestamp': datetime.now(),
-                    'level': 'error',
-                    'message': str(e)
-                })
+                trace_span.logs.append(
+                    {"timestamp": datetime.now(), "level": "error", "message": str(e)}
+                )
                 raise
 
             finally:
@@ -648,29 +658,30 @@ class DistributedTracer:
                 op_name = trace.operation_name
                 if op_name not in operation_stats:
                     operation_stats[op_name] = {
-                        'count': 0,
-                        'total_duration_ms': 0,
-                        'errors': 0,
-                        'avg_duration_ms': 0
+                        "count": 0,
+                        "total_duration_ms": 0,
+                        "errors": 0,
+                        "avg_duration_ms": 0,
                     }
 
                 stats = operation_stats[op_name]
-                stats['count'] += 1
-                stats['total_duration_ms'] += trace.duration_ms or 0
+                stats["count"] += 1
+                stats["total_duration_ms"] += trace.duration_ms or 0
                 if trace.status == "ERROR":
-                    stats['errors'] += 1
+                    stats["errors"] += 1
 
             # Calculate averages
             for stats in operation_stats.values():
-                if stats['count'] > 0:
-                    stats['avg_duration_ms'] = stats['total_duration_ms'] / stats['count']
-                    stats['error_rate'] = stats['errors'] / stats['count']
+                if stats["count"] > 0:
+                    stats["avg_duration_ms"] = stats["total_duration_ms"] / stats["count"]
+                    stats["error_rate"] = stats["errors"] / stats["count"]
 
             return {
-                'total_traces': len(self.completed_traces),
-                'active_spans': len(self.active_spans),
-                'operation_stats': operation_stats,
-                'overall_error_rate': sum(1 for t in self.completed_traces if t.status == "ERROR") / len(self.completed_traces)
+                "total_traces": len(self.completed_traces),
+                "active_spans": len(self.active_spans),
+                "operation_stats": operation_stats,
+                "overall_error_rate": sum(1 for t in self.completed_traces if t.status == "ERROR")
+                / len(self.completed_traces),
             }
 
 
@@ -692,45 +703,45 @@ class IntelligentAlerting:
         """Setup default alerting rules"""
         self.alert_rules = [
             {
-                'name': 'High Error Rate',
-                'metric': 'error_rate',
-                'condition': 'greater_than',
-                'threshold': 0.05,  # 5% error rate
-                'severity': AlertSeverity.ERROR,
-                'window_minutes': 5
+                "name": "High Error Rate",
+                "metric": "error_rate",
+                "condition": "greater_than",
+                "threshold": 0.05,  # 5% error rate
+                "severity": AlertSeverity.ERROR,
+                "window_minutes": 5,
             },
             {
-                'name': 'High Response Time',
-                'metric': 'avg_response_time_ms',
-                'condition': 'greater_than',
-                'threshold': 5000,  # 5 seconds
-                'severity': AlertSeverity.WARNING,
-                'window_minutes': 10
+                "name": "High Response Time",
+                "metric": "avg_response_time_ms",
+                "condition": "greater_than",
+                "threshold": 5000,  # 5 seconds
+                "severity": AlertSeverity.WARNING,
+                "window_minutes": 10,
             },
             {
-                'name': 'Low Throughput',
-                'metric': 'requests_per_minute',
-                'condition': 'less_than',
-                'threshold': 10,
-                'severity': AlertSeverity.WARNING,
-                'window_minutes': 15
+                "name": "Low Throughput",
+                "metric": "requests_per_minute",
+                "condition": "less_than",
+                "threshold": 10,
+                "severity": AlertSeverity.WARNING,
+                "window_minutes": 15,
             },
             {
-                'name': 'Memory Usage High',
-                'metric': 'memory_usage_percent',
-                'condition': 'greater_than',
-                'threshold': 85,
-                'severity': AlertSeverity.ERROR,
-                'window_minutes': 5
+                "name": "Memory Usage High",
+                "metric": "memory_usage_percent",
+                "condition": "greater_than",
+                "threshold": 85,
+                "severity": AlertSeverity.ERROR,
+                "window_minutes": 5,
             },
             {
-                'name': 'Disk Usage Critical',
-                'metric': 'disk_usage_percent',
-                'condition': 'greater_than',
-                'threshold': 95,
-                'severity': AlertSeverity.CRITICAL,
-                'window_minutes': 1
-            }
+                "name": "Disk Usage Critical",
+                "metric": "disk_usage_percent",
+                "condition": "greater_than",
+                "threshold": 95,
+                "severity": AlertSeverity.CRITICAL,
+                "window_minutes": 1,
+            },
         ]
 
     def record_metric(self, metric: MetricPoint):
@@ -744,8 +755,7 @@ class IntelligentAlerting:
             # Keep only last 24 hours of data
             cutoff_time = datetime.now() - timedelta(hours=24)
             self.metrics_history[metric.name] = [
-                m for m in self.metrics_history[metric.name]
-                if m.timestamp >= cutoff_time
+                m for m in self.metrics_history[metric.name] if m.timestamp >= cutoff_time
             ]
 
         # Check for alerts
@@ -754,30 +764,29 @@ class IntelligentAlerting:
     def _evaluate_alerts(self, metric: MetricPoint):
         """Evaluate alerting rules against new metric"""
         for rule in self.alert_rules:
-            if rule['metric'] != metric.name:
+            if rule["metric"] != metric.name:
                 continue
 
             # Get recent metrics for window
-            window_start = datetime.now() - timedelta(minutes=rule['window_minutes'])
+            window_start = datetime.now() - timedelta(minutes=rule["window_minutes"])
             recent_metrics = [
-                m for m in self.metrics_history[metric.name]
-                if m.timestamp >= window_start
+                m for m in self.metrics_history[metric.name] if m.timestamp >= window_start
             ]
 
             if not recent_metrics:
                 continue
 
             # Calculate aggregate value
-            if rule['condition'] in ['greater_than', 'less_than']:
+            if rule["condition"] in ["greater_than", "less_than"]:
                 aggregate_value = sum(m.value for m in recent_metrics) / len(recent_metrics)
             else:
                 aggregate_value = recent_metrics[-1].value
 
             # Check condition
             should_alert = False
-            if rule['condition'] == 'greater_than' and aggregate_value > rule['threshold']:
+            if rule["condition"] == "greater_than" and aggregate_value > rule["threshold"]:
                 should_alert = True
-            elif rule['condition'] == 'less_than' and aggregate_value < rule['threshold']:
+            elif rule["condition"] == "less_than" and aggregate_value < rule["threshold"]:
                 should_alert = True
 
             if should_alert:
@@ -787,9 +796,7 @@ class IntelligentAlerting:
         """Trigger an alert"""
         # Check if alert already active
         existing_alert = next(
-            (a for a in self.active_alerts
-             if a.name == rule['name'] and not a.resolved),
-            None
+            (a for a in self.active_alerts if a.name == rule["name"] and not a.resolved), None
         )
 
         if existing_alert:
@@ -798,13 +805,13 @@ class IntelligentAlerting:
 
         alert = Alert(
             id=str(uuid.uuid4()),
-            name=rule['name'],
+            name=rule["name"],
             description=f"{rule['metric']} is {current_value:.2f}, threshold is {rule['threshold']}",
-            severity=rule['severity'],
-            condition=rule['condition'],
-            threshold=rule['threshold'],
+            severity=rule["severity"],
+            condition=rule["condition"],
+            threshold=rule["threshold"],
             current_value=current_value,
-            triggered_at=datetime.now()
+            triggered_at=datetime.now(),
         )
 
         with self.lock:
@@ -826,7 +833,7 @@ class IntelligentAlerting:
             values = [m.value for m in metrics[-100:]]  # Last 100 points
             mean = sum(values) / len(values)
             variance = sum((x - mean) ** 2 for x in values) / len(values)
-            std_dev = variance ** 0.5
+            std_dev = variance**0.5
 
             # Find anomalies (values beyond sensitivity * std_dev)
             anomalies = []
@@ -835,13 +842,17 @@ class IntelligentAlerting:
 
             for metric in metrics[-20:]:  # Check last 20 points
                 if metric.value > threshold_upper or metric.value < threshold_lower:
-                    anomalies.append({
-                        'timestamp': metric.timestamp,
-                        'value': metric.value,
-                        'expected_range': [threshold_lower, threshold_upper],
-                        'severity': 'high' if abs(metric.value - mean) > 3 * std_dev else 'medium',
-                        'deviation_score': abs(metric.value - mean) / std_dev
-                    })
+                    anomalies.append(
+                        {
+                            "timestamp": metric.timestamp,
+                            "value": metric.value,
+                            "expected_range": [threshold_lower, threshold_upper],
+                            "severity": "high"
+                            if abs(metric.value - mean) > 3 * std_dev
+                            else "medium",
+                            "deviation_score": abs(metric.value - mean) / std_dev,
+                        }
+                    )
 
             return anomalies
 
@@ -892,29 +903,17 @@ class SystemHealthMonitor:
                     else:
                         result = check_func()
 
-                results[name] = {
-                    'healthy': result,
-                    'timestamp': datetime.now(),
-                    'error': None
-                }
+                results[name] = {"healthy": result, "timestamp": datetime.now(), "error": None}
 
                 if not result:
                     overall_healthy = False
 
             except Exception as e:
-                results[name] = {
-                    'healthy': False,
-                    'timestamp': datetime.now(),
-                    'error': str(e)
-                }
+                results[name] = {"healthy": False, "timestamp": datetime.now(), "error": str(e)}
                 overall_healthy = False
                 self.logger.error(f"Health check {name} failed: {e}")
 
-        return {
-            'overall_healthy': overall_healthy,
-            'checks': results,
-            'timestamp': datetime.now()
-        }
+        return {"overall_healthy": overall_healthy, "checks": results, "timestamp": datetime.now()}
 
     def collect_system_metrics(self) -> list[MetricPoint]:
         """Collect comprehensive system metrics"""
@@ -926,53 +925,65 @@ class SystemHealthMonitor:
 
             # CPU metrics
             cpu_percent = psutil.cpu_percent(interval=1)
-            metrics.append(MetricPoint(
-                name="cpu_usage_percent",
-                value=cpu_percent,
-                timestamp=timestamp,
-                labels={"system": "cpu"}
-            ))
+            metrics.append(
+                MetricPoint(
+                    name="cpu_usage_percent",
+                    value=cpu_percent,
+                    timestamp=timestamp,
+                    labels={"system": "cpu"},
+                )
+            )
 
             # Memory metrics
             memory = psutil.virtual_memory()
-            metrics.append(MetricPoint(
-                name="memory_usage_percent",
-                value=memory.percent,
-                timestamp=timestamp,
-                labels={"system": "memory"}
-            ))
+            metrics.append(
+                MetricPoint(
+                    name="memory_usage_percent",
+                    value=memory.percent,
+                    timestamp=timestamp,
+                    labels={"system": "memory"},
+                )
+            )
 
-            metrics.append(MetricPoint(
-                name="memory_available_mb",
-                value=memory.available / 1024 / 1024,
-                timestamp=timestamp,
-                labels={"system": "memory"}
-            ))
+            metrics.append(
+                MetricPoint(
+                    name="memory_available_mb",
+                    value=memory.available / 1024 / 1024,
+                    timestamp=timestamp,
+                    labels={"system": "memory"},
+                )
+            )
 
             # Disk metrics
-            disk = psutil.disk_usage('/')
-            metrics.append(MetricPoint(
-                name="disk_usage_percent",
-                value=disk.percent,
-                timestamp=timestamp,
-                labels={"system": "disk"}
-            ))
+            disk = psutil.disk_usage("/")
+            metrics.append(
+                MetricPoint(
+                    name="disk_usage_percent",
+                    value=disk.percent,
+                    timestamp=timestamp,
+                    labels={"system": "disk"},
+                )
+            )
 
             # Process metrics
             process = psutil.Process()
-            metrics.append(MetricPoint(
-                name="process_memory_mb",
-                value=process.memory_info().rss / 1024 / 1024,
-                timestamp=timestamp,
-                labels={"system": "process"}
-            ))
+            metrics.append(
+                MetricPoint(
+                    name="process_memory_mb",
+                    value=process.memory_info().rss / 1024 / 1024,
+                    timestamp=timestamp,
+                    labels={"system": "process"},
+                )
+            )
 
-            metrics.append(MetricPoint(
-                name="process_cpu_percent",
-                value=process.cpu_percent(),
-                timestamp=timestamp,
-                labels={"system": "process"}
-            ))
+            metrics.append(
+                MetricPoint(
+                    name="process_cpu_percent",
+                    value=process.cpu_percent(),
+                    timestamp=timestamp,
+                    labels={"system": "process"},
+                )
+            )
 
         except ImportError:
             self.logger.warning("psutil not available, system metrics collection limited")
@@ -988,17 +999,19 @@ class SystemHealthMonitor:
     def get_comprehensive_status(self) -> dict[str, Any]:
         """Get comprehensive system status"""
         return {
-            'timestamp': datetime.now(),
-            'profiler': {
-                'operations_tracked': len(self.profiler.profiles),
-                'total_profiles': sum(len(profiles) for profiles in self.profiler.profiles.values())
+            "timestamp": datetime.now(),
+            "profiler": {
+                "operations_tracked": len(self.profiler.profiles),
+                "total_profiles": sum(
+                    len(profiles) for profiles in self.profiler.profiles.values()
+                ),
             },
-            'tracing': self.tracer.get_trace_analytics(),
-            'alerting': {
-                'active_alerts': len([a for a in self.alerting.active_alerts if not a.resolved]),
-                'total_metrics_tracked': len(self.alerting.metrics_history)
+            "tracing": self.tracer.get_trace_analytics(),
+            "alerting": {
+                "active_alerts": len([a for a in self.alerting.active_alerts if not a.resolved]),
+                "total_metrics_tracked": len(self.alerting.metrics_history),
             },
-            'health_checks_registered': len(self.health_checks)
+            "health_checks_registered": len(self.health_checks),
         }
 
     def export_metrics_prometheus(self) -> str:
@@ -1011,14 +1024,14 @@ class SystemHealthMonitor:
                 continue
 
             latest_point = points[-1]
-            labels = ','.join(f'{k}="{v}"' for k, v in latest_point.labels.items())
+            labels = ",".join(f'{k}="{v}"' for k, v in latest_point.labels.items())
             label_str = f"{{{labels}}}" if labels else ""
 
             lines.append(f"# HELP {metric_name} System metric")
             lines.append(f"# TYPE {metric_name} gauge")
             lines.append(f"{metric_name}{label_str} {latest_point.value} {timestamp}")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
 
 # Global monitoring instance
@@ -1036,24 +1049,29 @@ def get_system_monitor() -> SystemHealthMonitor:
 # Decorators for easy monitoring
 def monitor_performance(operation_name: str = None, tags: dict[str, str] = None):
     """Decorator for performance monitoring"""
+
     def decorator(func):
         nonlocal operation_name
         if operation_name is None:
             operation_name = f"{func.__module__}.{func.__name__}"
 
         if asyncio.iscoroutinefunction(func):
+
             async def async_wrapper(*args, **kwargs):
                 monitor = get_system_monitor()
                 with monitor.profiler.profile_operation(operation_name, tags):
                     with monitor.tracer.trace_operation(operation_name, tags):
                         return await func(*args, **kwargs)
+
             return async_wrapper
         else:
+
             def sync_wrapper(*args, **kwargs):
                 monitor = get_system_monitor()
                 with monitor.profiler.profile_operation(operation_name, tags):
                     with monitor.tracer.trace_operation(operation_name, tags):
                         return func(*args, **kwargs)
+
             return sync_wrapper
 
     return decorator

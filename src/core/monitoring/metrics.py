@@ -2,6 +2,7 @@
 Metrics Collection and Reporting
 Provides comprehensive metrics collection for ETL pipeline monitoring.
 """
+
 from __future__ import annotations
 
 import threading
@@ -21,6 +22,7 @@ try:
         Summary,
         start_http_server,
     )
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -32,6 +34,7 @@ logger = get_logger(__name__)
 
 class MetricType(Enum):
     """Metric types for classification."""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -41,6 +44,7 @@ class MetricType(Enum):
 @dataclass
 class MetricPoint:
     """Single metric data point."""
+
     name: str
     value: float
     timestamp: datetime
@@ -51,6 +55,7 @@ class MetricPoint:
 @dataclass
 class ETLJobMetrics:
     """Metrics for ETL job execution."""
+
     job_name: str
     start_time: datetime
     end_time: datetime | None = None
@@ -92,7 +97,9 @@ class MetricsCollector:
         # Performance tracking
         self._performance_history: deque = deque(maxlen=1000)
 
-    def increment_counter(self, name: str, value: float = 1.0, labels: dict[str, str] | None = None):
+    def increment_counter(
+        self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
+    ):
         """Increment a counter metric."""
         with self._lock:
             key = self._build_metric_key(name, labels)
@@ -103,7 +110,7 @@ class MetricsCollector:
                 value=self._counters[key],
                 timestamp=datetime.utcnow(),
                 labels=labels or {},
-                metric_type=MetricType.COUNTER
+                metric_type=MetricType.COUNTER,
             )
             self._metrics[key].append(metric_point)
 
@@ -118,7 +125,7 @@ class MetricsCollector:
                 value=value,
                 timestamp=datetime.utcnow(),
                 labels=labels or {},
-                metric_type=MetricType.GAUGE
+                metric_type=MetricType.GAUGE,
             )
             self._metrics[key].append(metric_point)
 
@@ -132,17 +139,14 @@ class MetricsCollector:
                 value=value,
                 timestamp=datetime.utcnow(),
                 labels=labels or {},
-                metric_type=MetricType.HISTOGRAM
+                metric_type=MetricType.HISTOGRAM,
             )
             self._metrics[key].append(metric_point)
 
     def start_job_metrics(self, job_name: str) -> ETLJobMetrics:
         """Start collecting metrics for an ETL job."""
         with self._lock:
-            job_metrics = ETLJobMetrics(
-                job_name=job_name,
-                start_time=datetime.utcnow()
-            )
+            job_metrics = ETLJobMetrics(job_name=job_name, start_time=datetime.utcnow())
             self._job_metrics[job_name] = job_metrics
             return job_metrics
 
@@ -159,15 +163,27 @@ class MetricsCollector:
 
                 # Record job completion metrics
                 self.increment_counter("etl_jobs_total", labels={"job": job_name, "status": status})
-                self.record_histogram("etl_job_duration_seconds", job_metrics.duration_seconds,
-                                    labels={"job": job_name})
-                self.set_gauge("etl_job_records_processed", job_metrics.records_processed,
-                              labels={"job": job_name})
-                self.set_gauge("etl_job_success_rate", job_metrics.success_rate,
-                              labels={"job": job_name})
+                self.record_histogram(
+                    "etl_job_duration_seconds",
+                    job_metrics.duration_seconds,
+                    labels={"job": job_name},
+                )
+                self.set_gauge(
+                    "etl_job_records_processed",
+                    job_metrics.records_processed,
+                    labels={"job": job_name},
+                )
+                self.set_gauge(
+                    "etl_job_success_rate", job_metrics.success_rate, labels={"job": job_name}
+                )
 
-    def update_job_progress(self, job_name: str, records_processed: int = None,
-                           records_failed: int = None, error: str = None):
+    def update_job_progress(
+        self,
+        job_name: str,
+        records_processed: int = None,
+        records_failed: int = None,
+        error: str = None,
+    ):
         """Update job progress metrics."""
         with self._lock:
             if job_name in self._job_metrics:
@@ -192,8 +208,9 @@ class MetricsCollector:
         with self._lock:
             return self._job_metrics.copy()
 
-    def get_metric_history(self, name: str, labels: dict[str, str] | None = None,
-                          limit: int = 100) -> list[MetricPoint]:
+    def get_metric_history(
+        self, name: str, labels: dict[str, str] | None = None, limit: int = 100
+    ) -> list[MetricPoint]:
         """Get metric history."""
         with self._lock:
             key = self._build_metric_key(name, labels)
@@ -207,9 +224,11 @@ class MetricsCollector:
                 "timestamp": datetime.utcnow().isoformat(),
                 "counters": dict(self._counters),
                 "gauges": dict(self._gauges),
-                "active_jobs": len([j for j in self._job_metrics.values() if j.status == "running"]),
+                "active_jobs": len(
+                    [j for j in self._job_metrics.values() if j.status == "running"]
+                ),
                 "total_jobs": len(self._job_metrics),
-                "metrics_count": sum(len(m) for m in self._metrics.values())
+                "metrics_count": sum(len(m) for m in self._metrics.values()),
             }
 
     def cleanup_old_metrics(self, max_age: timedelta = timedelta(hours=24)):
@@ -217,15 +236,16 @@ class MetricsCollector:
         cutoff_time = datetime.utcnow() - max_age
 
         with self._lock:
-            for key, metrics in self._metrics.items():
+            for _key, metrics in self._metrics.items():
                 while metrics and metrics[0].timestamp < cutoff_time:
                     metrics.popleft()
 
             # Clean up completed jobs older than max_age
             completed_jobs_to_remove = [
-                job_name for job_name, job_metrics in self._job_metrics.items()
-                if job_metrics.status != "running" and
-                (job_metrics.end_time and job_metrics.end_time < cutoff_time)
+                job_name
+                for job_name, job_metrics in self._job_metrics.items()
+                if job_metrics.status != "running"
+                and (job_metrics.end_time and job_metrics.end_time < cutoff_time)
             ]
 
             for job_name in completed_jobs_to_remove:
@@ -250,7 +270,9 @@ class PrometheusExporter:
         self._prometheus_metrics: dict[str, Any] = {}
 
         if not PROMETHEUS_AVAILABLE:
-            logger.warning("Prometheus client not available. Install with: pip install prometheus_client")
+            logger.warning(
+                "Prometheus client not available. Install with: pip install prometheus_client"
+            )
 
     def start_server(self):
         """Start Prometheus metrics server."""
@@ -346,7 +368,7 @@ class MetricsReporter:
             "memory_usage_mb": job_metrics.memory_usage_mb,
             "cpu_usage_percent": job_metrics.cpu_usage_percent,
             "error_count": len(job_metrics.errors),
-            "errors": job_metrics.errors[-10:]  # Last 10 errors
+            "errors": job_metrics.errors[-10:],  # Last 10 errors
         }
 
     def generate_summary_report(self) -> dict[str, Any]:
@@ -369,13 +391,15 @@ class MetricsReporter:
                 "failed_jobs": len(failed_jobs),
                 "total_records_processed": total_records,
                 "total_record_failures": total_failures,
-                "overall_success_rate": (total_records / (total_records + total_failures)) if (total_records + total_failures) > 0 else 1.0
+                "overall_success_rate": (total_records / (total_records + total_failures))
+                if (total_records + total_failures) > 0
+                else 1.0,
             },
             "active_jobs": [
                 {
                     "name": job.job_name,
                     "duration": (datetime.utcnow() - job.start_time).total_seconds(),
-                    "records_processed": job.records_processed
+                    "records_processed": job.records_processed,
                 }
                 for job in running_jobs
             ],
@@ -384,14 +408,14 @@ class MetricsReporter:
                     "name": job.job_name,
                     "status": job.status,
                     "duration": job.duration_seconds,
-                    "success_rate": job.success_rate
+                    "success_rate": job.success_rate,
                 }
                 for job in sorted(
                     [j for j in all_jobs.values() if j.end_time],
                     key=lambda x: x.end_time,
-                    reverse=True
+                    reverse=True,
                 )[:10]
-            ]
+            ],
         }
 
     def check_alerts(self) -> list[dict[str, Any]]:
@@ -405,33 +429,41 @@ class MetricsReporter:
             if job.status == "running":
                 duration = datetime.utcnow() - job.start_time
                 if duration > long_running_threshold:
-                    alerts.append({
-                        "type": "long_running_job",
-                        "severity": "warning",
-                        "job_name": job.job_name,
-                        "duration_hours": duration.total_seconds() / 3600,
-                        "message": f"Job {job.job_name} has been running for {duration}"
-                    })
+                    alerts.append(
+                        {
+                            "type": "long_running_job",
+                            "severity": "warning",
+                            "job_name": job.job_name,
+                            "duration_hours": duration.total_seconds() / 3600,
+                            "message": f"Job {job.job_name} has been running for {duration}",
+                        }
+                    )
 
         # Check for high failure rates
         for job in all_jobs.values():
-            if job.records_processed + job.records_failed > 100:  # Only check jobs with significant volume
+            if (
+                job.records_processed + job.records_failed > 100
+            ):  # Only check jobs with significant volume
                 if job.success_rate < 0.9:  # Less than 90% success
-                    alerts.append({
-                        "type": "high_failure_rate",
-                        "severity": "error" if job.success_rate < 0.5 else "warning",
-                        "job_name": job.job_name,
-                        "success_rate": job.success_rate,
-                        "message": f"Job {job.job_name} has low success rate: {job.success_rate:.2%}"
-                    })
+                    alerts.append(
+                        {
+                            "type": "high_failure_rate",
+                            "severity": "error" if job.success_rate < 0.5 else "warning",
+                            "job_name": job.job_name,
+                            "success_rate": job.success_rate,
+                            "message": f"Job {job.job_name} has low success rate: {job.success_rate:.2%}",
+                        }
+                    )
 
         return alerts
 
 
 # Decorators for automatic metrics collection
 
+
 def track_execution_time(metric_name: str = None, labels: dict[str, str] | None = None):
     """Decorator to track function execution time."""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             name = metric_name or f"{func.__module__}.{func.__name__}_duration_seconds"
@@ -445,7 +477,7 @@ def track_execution_time(metric_name: str = None, labels: dict[str, str] | None 
                 default_collector.record_histogram(name, duration, labels)
                 default_collector.increment_counter(
                     f"{func.__module__}.{func.__name__}_calls_total",
-                    labels={**(labels or {}), "status": "success"}
+                    labels={**(labels or {}), "status": "success"},
                 )
 
                 return result
@@ -454,21 +486,24 @@ def track_execution_time(metric_name: str = None, labels: dict[str, str] | None 
                 duration = time.time() - start_time
 
                 # Record failure metric
-                default_collector.record_histogram(name, duration,
-                                                 labels={**(labels or {}), "status": "error"})
+                default_collector.record_histogram(
+                    name, duration, labels={**(labels or {}), "status": "error"}
+                )
                 default_collector.increment_counter(
                     f"{func.__module__}.{func.__name__}_calls_total",
-                    labels={**(labels or {}), "status": "error"}
+                    labels={**(labels or {}), "status": "error"},
                 )
 
                 raise
 
         return wrapper
+
     return decorator
 
 
 def track_async_execution_time(metric_name: str = None, labels: dict[str, str] | None = None):
     """Decorator to track async function execution time."""
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             name = metric_name or f"{func.__module__}.{func.__name__}_duration_seconds"
@@ -482,7 +517,7 @@ def track_async_execution_time(metric_name: str = None, labels: dict[str, str] |
                 default_collector.record_histogram(name, duration, labels)
                 default_collector.increment_counter(
                     f"{func.__module__}.{func.__name__}_calls_total",
-                    labels={**(labels or {}), "status": "success"}
+                    labels={**(labels or {}), "status": "success"},
                 )
 
                 return result
@@ -491,16 +526,18 @@ def track_async_execution_time(metric_name: str = None, labels: dict[str, str] |
                 duration = time.time() - start_time
 
                 # Record failure metric
-                default_collector.record_histogram(name, duration,
-                                                 labels={**(labels or {}), "status": "error"})
+                default_collector.record_histogram(
+                    name, duration, labels={**(labels or {}), "status": "error"}
+                )
                 default_collector.increment_counter(
                     f"{func.__module__}.{func.__name__}_calls_total",
-                    labels={**(labels or {}), "status": "error"}
+                    labels={**(labels or {}), "status": "error"},
                 )
 
                 raise
 
         return wrapper
+
     return decorator
 
 

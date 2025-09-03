@@ -2,6 +2,7 @@
 Secret Management Integration
 Provides secure secret management for production deployments.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,10 +16,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SecretConfig:
     """Configuration for secret management."""
+
     provider: str  # 'vault', 'aws', 'azure', 'gcp', 'env'
     vault_url: str | None = None
     vault_token: str | None = None
-    vault_mount_point: str = 'secret'
+    vault_mount_point: str = "secret"
     aws_region: str | None = None
     azure_vault_url: str | None = None
 
@@ -72,10 +74,8 @@ class HashiCorpVaultProvider(SecretProvider):
         if self._client is None:
             try:
                 import hvac
-                self._client = hvac.Client(
-                    url=self.config.vault_url,
-                    token=self.config.vault_token
-                )
+
+                self._client = hvac.Client(url=self.config.vault_url, token=self.config.vault_token)
                 if not self._client.is_authenticated():
                     raise ValueError("Vault authentication failed")
             except ImportError:
@@ -87,10 +87,9 @@ class HashiCorpVaultProvider(SecretProvider):
         try:
             client = await self._get_client()
             response = client.secrets.kv.v2.read_secret_version(
-                path=key,
-                mount_point=self.config.vault_mount_point
+                path=key, mount_point=self.config.vault_mount_point
             )
-            return response['data']['data'].get('value')
+            return response["data"]["data"].get("value")
         except Exception as e:
             logger.error(f"Error getting secret from Vault: {e}")
             return None
@@ -100,9 +99,7 @@ class HashiCorpVaultProvider(SecretProvider):
         try:
             client = await self._get_client()
             client.secrets.kv.v2.create_or_update_secret(
-                path=key,
-                secret={'value': value},
-                mount_point=self.config.vault_mount_point
+                path=key, secret={"value": value}, mount_point=self.config.vault_mount_point
             )
             return True
         except Exception as e:
@@ -114,8 +111,7 @@ class HashiCorpVaultProvider(SecretProvider):
         try:
             client = await self._get_client()
             client.secrets.kv.v2.delete_metadata_and_all_versions(
-                path=key,
-                mount_point=self.config.vault_mount_point
+                path=key, mount_point=self.config.vault_mount_point
             )
             return True
         except Exception as e:
@@ -135,10 +131,8 @@ class AWSSecretsManagerProvider(SecretProvider):
         if self._client is None:
             try:
                 import boto3
-                self._client = boto3.client(
-                    'secretsmanager',
-                    region_name=self.config.aws_region
-                )
+
+                self._client = boto3.client("secretsmanager", region_name=self.config.aws_region)
             except ImportError:
                 raise ImportError("boto3 package required for AWS Secrets Manager")
         return self._client
@@ -148,7 +142,7 @@ class AWSSecretsManagerProvider(SecretProvider):
         try:
             client = await self._get_client()
             response = client.get_secret_value(SecretId=key)
-            return response['SecretString']
+            return response["SecretString"]
         except Exception as e:
             logger.error(f"Error getting secret from AWS: {e}")
             return None
@@ -192,11 +186,11 @@ class SecretManager:
 
     def _create_provider(self) -> SecretProvider:
         """Create secret provider based on configuration."""
-        if self.config.provider == 'vault':
+        if self.config.provider == "vault":
             return HashiCorpVaultProvider(self.config)
-        elif self.config.provider == 'aws':
+        elif self.config.provider == "aws":
             return AWSSecretsManagerProvider(self.config)
-        elif self.config.provider == 'env':
+        elif self.config.provider == "env":
             return EnvironmentSecretProvider()
         else:
             raise ValueError(f"Unsupported secret provider: {self.config.provider}")
@@ -204,11 +198,11 @@ class SecretManager:
     async def get_secret(self, key: str, use_cache: bool = True) -> str | None:
         """
         Get secret with caching and fallback.
-        
+
         Args:
             key: Secret key
             use_cache: Whether to use cached value
-            
+
         Returns:
             Secret value or None if not found
         """
@@ -266,15 +260,15 @@ def get_secret_manager() -> SecretManager:
 
     if _secret_manager is None:
         # Create from environment configuration
-        provider = os.getenv('SECRET_PROVIDER', 'env')
+        provider = os.getenv("SECRET_PROVIDER", "env")
 
         config = SecretConfig(
             provider=provider,
-            vault_url=os.getenv('VAULT_URL'),
-            vault_token=os.getenv('VAULT_TOKEN'),
-            vault_mount_point=os.getenv('VAULT_MOUNT_POINT', 'secret'),
-            aws_region=os.getenv('AWS_REGION', 'us-east-1'),
-            azure_vault_url=os.getenv('AZURE_VAULT_URL')
+            vault_url=os.getenv("VAULT_URL"),
+            vault_token=os.getenv("VAULT_TOKEN"),
+            vault_mount_point=os.getenv("VAULT_MOUNT_POINT", "secret"),
+            aws_region=os.getenv("AWS_REGION", "us-east-1"),
+            azure_vault_url=os.getenv("AZURE_VAULT_URL"),
         )
 
         _secret_manager = SecretManager(config)
@@ -301,18 +295,20 @@ def generate_strong_password(length: int = 32) -> str:
     import string
 
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def generate_api_key() -> str:
     """Generate a secure API key."""
     import secrets
+
     return secrets.token_urlsafe(32)
 
 
 def generate_secret_key() -> str:
     """Generate a secure secret key for JWT/encryption."""
     import secrets
+
     return secrets.token_urlsafe(64)
 
 
@@ -325,13 +321,13 @@ async def initialize_production_secrets() -> dict[str, str]:
     manager = get_secret_manager()
 
     secrets_to_generate = {
-        'SECRET_KEY': generate_secret_key(),
-        'JWT_SECRET_KEY': generate_secret_key(),
-        'TYPESENSE_API_KEY': generate_api_key(),
-        'BASIC_AUTH_PASSWORD': generate_strong_password(),
-        'SPARK_AUTH_SECRET': generate_secret_key(),
-        'REDIS_PASSWORD': generate_strong_password(),
-        'GRAFANA_ADMIN_PASSWORD': generate_strong_password()
+        "SECRET_KEY": generate_secret_key(),
+        "JWT_SECRET_KEY": generate_secret_key(),
+        "TYPESENSE_API_KEY": generate_api_key(),
+        "BASIC_AUTH_PASSWORD": generate_strong_password(),
+        "SPARK_AUTH_SECRET": generate_secret_key(),
+        "REDIS_PASSWORD": generate_strong_password(),
+        "GRAFANA_ADMIN_PASSWORD": generate_strong_password(),
     }
 
     generated = {}

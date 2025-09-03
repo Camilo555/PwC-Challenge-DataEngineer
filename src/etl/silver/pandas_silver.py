@@ -2,6 +2,7 @@
 Windows-Compatible Silver Layer Implementation using Pandas
 Provides data cleaning and transformation without Spark/Hadoop dependencies
 """
+
 from __future__ import annotations
 
 import json
@@ -33,7 +34,9 @@ def _read_bronze_data() -> pd.DataFrame:
     bronze_path = settings.bronze_path / "sales"
 
     if not bronze_path.exists():
-        raise FileNotFoundError(f"Bronze dataset not found at {bronze_path}. Run Bronze ingest first.")
+        raise FileNotFoundError(
+            f"Bronze dataset not found at {bronze_path}. Run Bronze ingest first."
+        )
 
     # Read all Parquet files from Bronze layer
     parquet_files = list(bronze_path.rglob("*.parquet"))
@@ -80,23 +83,23 @@ def _cast_and_clean_types(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("Casting and cleaning data types...")
 
     # Convert timestamps
-    if 'invoice_timestamp' in df.columns:
-        df['invoice_timestamp'] = pd.to_datetime(df['invoice_timestamp'], errors='coerce')
+    if "invoice_timestamp" in df.columns:
+        df["invoice_timestamp"] = pd.to_datetime(df["invoice_timestamp"], errors="coerce")
 
     # Convert numeric columns
-    if 'quantity' in df.columns:
-        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').astype('Int64')
+    if "quantity" in df.columns:
+        df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").astype("Int64")
 
-    if 'unit_price' in df.columns:
-        df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
+    if "unit_price" in df.columns:
+        df["unit_price"] = pd.to_numeric(df["unit_price"], errors="coerce")
 
     # Clean string columns
-    string_columns = ['invoice_no', 'stock_code', 'description', 'customer_id', 'country']
+    string_columns = ["invoice_no", "stock_code", "description", "customer_id", "country"]
     for col in string_columns:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
             # Replace 'nan' strings with actual NaN
-            df[col] = df[col].replace(['nan', 'None', ''], np.nan)
+            df[col] = df[col].replace(["nan", "None", ""], np.nan)
 
     logger.info(f"Data types after cleaning: {df.dtypes.to_dict()}")
     return df
@@ -109,18 +112,18 @@ def _validate_business_rules(df: pd.DataFrame) -> pd.DataFrame:
     original_count = len(df)
 
     # Remove records with invalid quantities (negative or zero)
-    if 'quantity' in df.columns:
-        df = df[df['quantity'] > 0]
+    if "quantity" in df.columns:
+        df = df[df["quantity"] > 0]
         logger.info(f"Removed {original_count - len(df)} records with invalid quantities")
 
     # Remove records with invalid unit prices (negative)
-    if 'unit_price' in df.columns:
-        df = df[df['unit_price'] >= 0]
+    if "unit_price" in df.columns:
+        df = df[df["unit_price"] >= 0]
         logger.info(f"Removed {original_count - len(df)} records with invalid unit prices")
 
     # Remove records without invoice numbers
-    if 'invoice_no' in df.columns:
-        df = df[df['invoice_no'].notna()]
+    if "invoice_no" in df.columns:
+        df = df[df["invoice_no"].notna()]
         logger.info(f"Removed {original_count - len(df)} records without invoice numbers")
 
     return df
@@ -131,21 +134,21 @@ def _add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("Adding derived columns...")
 
     # Calculate total amount
-    if 'quantity' in df.columns and 'unit_price' in df.columns:
-        df['total_amount'] = df['quantity'] * df['unit_price']
+    if "quantity" in df.columns and "unit_price" in df.columns:
+        df["total_amount"] = df["quantity"] * df["unit_price"]
 
     # Add date components
-    if 'invoice_timestamp' in df.columns:
-        df['invoice_date'] = df['invoice_timestamp'].dt.date
-        df['invoice_year'] = df['invoice_timestamp'].dt.year
-        df['invoice_month'] = df['invoice_timestamp'].dt.month
-        df['invoice_quarter'] = df['invoice_timestamp'].dt.quarter
-        df['invoice_day_of_week'] = df['invoice_timestamp'].dt.day_name()
+    if "invoice_timestamp" in df.columns:
+        df["invoice_date"] = df["invoice_timestamp"].dt.date
+        df["invoice_year"] = df["invoice_timestamp"].dt.year
+        df["invoice_month"] = df["invoice_timestamp"].dt.month
+        df["invoice_quarter"] = df["invoice_timestamp"].dt.quarter
+        df["invoice_day_of_week"] = df["invoice_timestamp"].dt.day_name()
 
     # Add processing metadata
-    df['processed_timestamp'] = pd.Timestamp.now()
-    df['processing_engine'] = 'pandas'
-    df['platform'] = platform.system()
+    df["processed_timestamp"] = pd.Timestamp.now()
+    df["processing_engine"] = "pandas"
+    df["platform"] = platform.system()
 
     return df
 
@@ -157,11 +160,11 @@ def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     original_count = len(df)
 
     # Define business key columns for deduplication
-    business_key_columns = ['invoice_no', 'stock_code', 'customer_id']
+    business_key_columns = ["invoice_no", "stock_code", "customer_id"]
     available_columns = [col for col in business_key_columns if col in df.columns]
 
     if available_columns:
-        df = df.drop_duplicates(subset=available_columns, keep='first')
+        df = df.drop_duplicates(subset=available_columns, keep="first")
         duplicates_removed = original_count - len(df)
         logger.info(f"Removed {duplicates_removed} duplicate records")
     else:
@@ -214,10 +217,10 @@ def process_silver_layer() -> bool:
         silver_path.mkdir(parents=True, exist_ok=True)
 
         # Save as Parquet (partitioned by year if possible)
-        if 'invoice_year' in df.columns and df['invoice_year'].notna().any():
+        if "invoice_year" in df.columns and df["invoice_year"].notna().any():
             # Partition by year
-            for year in df['invoice_year'].dropna().unique():
-                year_df = df[df['invoice_year'] == year]
+            for year in df["invoice_year"].dropna().unique():
+                year_df = df[df["invoice_year"] == year]
                 year_path = silver_path / f"year={int(year)}"
                 year_path.mkdir(exist_ok=True)
 
@@ -232,7 +235,7 @@ def process_silver_layer() -> bool:
 
         # Save quality report
         report_file = silver_path / "quality_report.json"
-        with open(report_file, 'w') as f:
+        with open(report_file, "w") as f:
             json.dump(quality_report, f, indent=2, default=str)
         logger.info(f"Quality report saved to {report_file}")
 

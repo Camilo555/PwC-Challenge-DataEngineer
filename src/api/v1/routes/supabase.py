@@ -33,7 +33,7 @@ async def supabase_health() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -45,7 +45,7 @@ async def supabase_health() -> dict[str, Any]:
         logger.error(f"Supabase health check failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase health check failed: {e}"
+            detail=f"Supabase health check failed: {e}",
         ) from e
 
 
@@ -55,7 +55,7 @@ async def test_connection() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -67,8 +67,7 @@ async def test_connection() -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Supabase connection test failed: {e}")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Connection test failed: {e}"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Connection test failed: {e}"
         ) from e
 
 
@@ -78,7 +77,7 @@ async def get_statistics() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -89,14 +88,14 @@ async def get_statistics() -> dict[str, Any]:
             "tables": statistics,
             "total_tables": len(statistics),
             "database_type": "postgresql",
-            "integration": "supabase"
+            "integration": "supabase",
         }
 
     except Exception as e:
         logger.error(f"Failed to get statistics: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Statistics query failed: {e}"
+            detail=f"Statistics query failed: {e}",
         ) from e
 
 
@@ -113,7 +112,7 @@ async def validate_integrity() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -124,8 +123,7 @@ async def validate_integrity() -> dict[str, Any]:
         # Return appropriate HTTP status based on validation results
         if integrity_report["status"] == "failed":
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=integrity_report
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=integrity_report
             )
 
         return integrity_report
@@ -134,7 +132,7 @@ async def validate_integrity() -> dict[str, Any]:
         logger.error(f"Data integrity validation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Integrity validation failed: {e}"
+            detail=f"Integrity validation failed: {e}",
         ) from e
 
 
@@ -149,7 +147,7 @@ async def create_schema(schema_name: str = "retail_dwh") -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -160,14 +158,13 @@ async def create_schema(schema_name: str = "retail_dwh") -> dict[str, Any]:
         return {
             "schema_name": schema_name,
             "created": created,
-            "message": f"Schema '{schema_name}' is ready"
+            "message": f"Schema '{schema_name}' is ready",
         }
 
     except Exception as e:
         logger.error(f"Schema creation failed: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Schema creation failed: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Schema creation failed: {e}"
         ) from e
 
 
@@ -177,7 +174,7 @@ async def create_tables() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -192,14 +189,13 @@ async def create_tables() -> dict[str, Any]:
             "message": "All star schema tables created successfully",
             "tables": list(statistics.keys()),
             "table_count": len(statistics),
-            "includes_indexes": True
+            "includes_indexes": True,
         }
 
     except Exception as e:
         logger.error(f"Table creation failed: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Table creation failed: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Table creation failed: {e}"
         ) from e
 
 
@@ -213,12 +209,14 @@ async def get_config() -> dict[str, Any]:
     }
 
     if settings.is_supabase_enabled:
-        config.update({
-            "url": settings.supabase_url or "",
-            "schema": settings.supabase_schema,
-            "rls_enabled": settings.enable_supabase_rls,
-            "has_service_key": settings.supabase_service_key is not None,
-        })
+        config.update(
+            {
+                "url": settings.supabase_url or "",
+                "schema": settings.supabase_schema,
+                "rls_enabled": settings.enable_supabase_rls,
+                "has_service_key": settings.supabase_service_key is not None,
+            }
+        )
     else:
         config["reason"] = "Missing required configuration (url, key, or not using postgresql)"
 
@@ -231,7 +229,7 @@ async def create_backup(backup_dir: str = "backups/supabase") -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -243,14 +241,14 @@ async def create_backup(backup_dir: str = "backups/supabase") -> dict[str, Any]:
         return {
             "message": "Database backup completed",
             "backup_summary": backup_summary,
-            "backup_directory": backup_dir
+            "backup_directory": backup_dir,
         }
 
     except Exception as e:
         logger.error(f"Database backup failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Backup operation failed: {e}"
+            detail=f"Backup operation failed: {e}",
         ) from e
 
 
@@ -260,20 +258,20 @@ async def backup_table(table_name: str, backup_dir: str = "backups/supabase") ->
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
         from pathlib import Path
+
         client = get_supabase_client()
         backup_path = Path(backup_dir)
 
         backup_result = await client.backup_table_data(table_name, backup_path)
 
-        if backup_result['status'] == 'failed':
+        if backup_result["status"] == "failed":
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=backup_result['error']
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=backup_result["error"]
             )
 
         logger.info(f"Table backup completed: {table_name}")
@@ -282,8 +280,7 @@ async def backup_table(table_name: str, backup_dir: str = "backups/supabase") ->
     except Exception as e:
         logger.error(f"Table backup failed for {table_name}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Table backup failed: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Table backup failed: {e}"
         ) from e
 
 
@@ -293,7 +290,7 @@ async def monitor_connection() -> dict[str, Any]:
     if not settings.is_supabase_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase integration is not enabled"
+            detail="Supabase integration is not enabled",
         )
 
     try:
@@ -301,18 +298,20 @@ async def monitor_connection() -> dict[str, Any]:
 
         # Test with different retry scenarios
         connection_tests = {
-            'basic_connection': await client.test_connection(max_retries=1),
-            'resilience_test': await client.test_connection(max_retries=3)
+            "basic_connection": await client.test_connection(max_retries=1),
+            "resilience_test": await client.test_connection(max_retries=3),
         }
 
         # Get table statistics for monitoring
         table_stats = await client.get_table_statistics()
 
         monitoring_report = {
-            'connection_tests': connection_tests,
-            'table_statistics': table_stats,
-            'monitoring_timestamp': pd.Timestamp.now().isoformat(),
-            'connection_health': 'excellent' if connection_tests['basic_connection']['retry_count'] == 0 else 'good'
+            "connection_tests": connection_tests,
+            "table_statistics": table_stats,
+            "monitoring_timestamp": pd.Timestamp.now().isoformat(),
+            "connection_health": "excellent"
+            if connection_tests["basic_connection"]["retry_count"] == 0
+            else "good",
         }
 
         logger.info("Advanced connection monitoring completed")
@@ -322,5 +321,5 @@ async def monitor_connection() -> dict[str, Any]:
         logger.error(f"Connection monitoring failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Connection monitoring failed: {e}"
+            detail=f"Connection monitoring failed: {e}",
         ) from e

@@ -479,7 +479,7 @@ data "archive_file" "gcp_cost_optimizer_zip" {
   }
   
   source {
-    content = "google-cloud-compute==1.14.0\ngoogle-cloud-monitoring==2.15.1"
+    content = "google-cloud-compute==1.14.0\ngoogle-cloud-monitoring==2.15.1\ngoogle-cloud-billing==1.12.0"
     filename = "requirements.txt"
   }
 }
@@ -516,6 +516,541 @@ resource "random_string" "bucket_suffix" {
   length  = 8
   special = false
   upper   = false
+}
+
+# ============================================================================
+# INTELLIGENT RIGHTSIZING AND RESOURCE OPTIMIZATION
+# ============================================================================
+
+# AWS Systems Manager Parameter Store for optimization settings
+resource "aws_ssm_parameter" "optimization_config" {
+  count = var.deploy_to_aws ? 1 : 0
+  
+  name  = "/${local.name_prefix}/cost-optimization/config"
+  type  = "String"
+  value = jsonencode({
+    rightsizing_enabled = var.rightsizing_enabled
+    spot_instances_enabled = var.spot_instances_enabled
+    reserved_instances_recommendations = var.reserved_instances_enabled
+    lifecycle_policies_enabled = var.lifecycle_policies_enabled
+    auto_scaling_schedules = var.auto_scaling_schedules
+  })
+  
+  description = "Cost optimization configuration parameters"
+  tags = var.tags
+}
+
+# CloudWatch Dashboard for Cost Monitoring
+resource "aws_cloudwatch_dashboard" "cost_monitoring" {
+  count = var.deploy_to_aws ? 1 : 0
+  
+  dashboard_name = "${local.name_prefix}-cost-monitoring"
+  
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        
+        properties = {
+          metrics = [
+            ["AWS/Billing", "EstimatedCharges", "Currency", "USD"],
+            ["AWS/EC2", "CPUUtilization"],
+            ["AWS/RDS", "CPUUtilization"]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "Cost and Resource Utilization Overview"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        
+        properties = {
+          metrics = [
+            ["AWS/EC2", "NetworkIn"],
+            ["AWS/EC2", "NetworkOut"]
+          ]
+          view   = "timeSeries"
+          region = var.aws_region
+          title  = "Network Utilization"
+          period = 300
+        }
+      }
+    ]
+  })
+}
+
+# Advanced Auto Scaling Policy with Predictive Scaling
+resource "aws_autoscaling_policy" "predictive_scaling" {
+  count = var.deploy_to_aws && var.predictive_scaling_enabled ? 1 : 0
+  
+  name                   = "${local.name_prefix}-predictive-scaling"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown              = 300
+  autoscaling_group_name = var.asg_name
+  policy_type           = "PredictiveScaling"
+  
+  predictive_scaling_configuration {
+    metric_specification {
+      target_value = var.cpu_target_value
+      predefined_metric_specification {
+        predefined_metric_type = "ASGAverageCPUUtilization"
+      }
+    }
+    mode                         = "ForecastAndScale"
+    scheduling_buffer_time       = 300
+    max_capacity_breach_behavior = "HonorMaxCapacity"
+    max_capacity_buffer          = 10
+  }
+}
+
+# CloudWatch Alarms for Cost Anomalies
+resource "aws_cloudwatch_metric_alarm" "cost_anomaly" {
+  count = var.deploy_to_aws ? 1 : 0
+  
+  alarm_name          = "${local.name_prefix}-cost-anomaly"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "BlendedCost"
+  namespace           = "AWS/Billing"
+  period              = "86400"
+  statistic           = "Maximum"
+  threshold           = var.cost_anomaly_threshold
+  alarm_description   = "This metric monitors cost anomalies"
+  alarm_actions       = [aws_sns_topic.cost_alerts[0].arn]
+  
+  dimensions = {
+    Currency = "USD"
+  }
+  
+  tags = var.tags
+}
+
+# SNS Topic for Cost Alerts
+resource "aws_sns_topic" "cost_alerts" {
+  count = var.deploy_to_aws ? 1 : 0
+  
+  name = "${local.name_prefix}-cost-alerts"
+  
+  tags = var.tags
+}
+
+resource "aws_sns_topic_subscription" "cost_email_alerts" {
+  count = var.deploy_to_aws ? 1 : 0
+  
+  topic_arn = aws_sns_topic.cost_alerts[0].arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+# Lambda for Rightsizing Recommendations
+resource "aws_lambda_function" "rightsizing_analyzer" {
+  count = var.deploy_to_aws && var.rightsizing_enabled ? 1 : 0
+  
+  filename         = data.archive_file.rightsizing_zip[0].output_path
+  function_name    = "${local.name_prefix}-rightsizing-analyzer"
+  role            = aws_iam_role.rightsizing_role[0].arn
+  handler         = "index.lambda_handler"
+  runtime         = "python3.11"
+  timeout         = 900
+  memory_size     = 512
+  
+  environment {
+    variables = {
+      SNS_TOPIC_ARN     = aws_sns_topic.cost_alerts[0].arn
+      ENVIRONMENT       = var.environment
+      CPU_THRESHOLD     = var.cpu_threshold_low
+      MEMORY_THRESHOLD  = var.memory_threshold_low
+    }
+  }
+  
+  tags = var.tags
+}
+
+data "archive_file" "rightsizing_zip" {
+  count = var.deploy_to_aws && var.rightsizing_enabled ? 1 : 0
+  
+  type        = "zip"
+  output_path = "/tmp/rightsizing_analyzer.zip"
+  
+  source {
+    content = templatefile("${path.module}/templates/rightsizing_analyzer.py.tpl", {
+      environment = var.environment
+    })
+    filename = "index.py"
+  }
+}
+
+# IAM Role for Rightsizing Lambda
+resource "aws_iam_role" "rightsizing_role" {
+  count = var.deploy_to_aws && var.rightsizing_enabled ? 1 : 0
+  
+  name = "${local.name_prefix}-rightsizing-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+  
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "rightsizing_policy" {
+  count = var.deploy_to_aws && var.rightsizing_enabled ? 1 : 0
+  
+  name = "${local.name_prefix}-rightsizing-policy"
+  role = aws_iam_role.rightsizing_role[0].id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceTypes",
+          "cloudwatch:GetMetricStatistics",
+          "ce:GetRightsizingRecommendation",
+          "sns:Publish"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ============================================================================
+# STORAGE LIFECYCLE AND DATA TIERING
+# ============================================================================
+
+# S3 Intelligent Tiering Configuration
+resource "aws_s3_bucket_intelligent_tiering_configuration" "data_lake" {
+  count = var.deploy_to_aws && var.lifecycle_policies_enabled ? 1 : 0
+  
+  bucket = var.s3_bucket_name
+  name   = "${local.name_prefix}-intelligent-tiering"
+  
+  filter {
+    prefix = "data/"
+    tags = {
+      Environment = var.environment
+      AutoTiering = "enabled"
+    }
+  }
+  
+  tiering {
+    access_tier = "ARCHIVE_ACCESS"
+    days        = 90
+  }
+  
+  tiering {
+    access_tier = "DEEP_ARCHIVE_ACCESS"
+    days        = 180
+  }
+  
+  optional_fields = ["BucketKeyStatus", "ChecksumAlgorithm"]
+}
+
+# S3 Lifecycle Configuration
+resource "aws_s3_bucket_lifecycle_configuration" "data_retention" {
+  count = var.deploy_to_aws && var.lifecycle_policies_enabled ? 1 : 0
+  
+  bucket = var.s3_bucket_name
+  
+  rule {
+    id     = "data_lifecycle"
+    status = "Enabled"
+    
+    filter {
+      prefix = "logs/"
+    }
+    
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+    
+    transition {
+      days          = 60
+      storage_class = "GLACIER"
+    }
+    
+    transition {
+      days          = 365
+      storage_class = "DEEP_ARCHIVE"
+    }
+    
+    expiration {
+      days = var.data_retention_days
+    }
+  }
+  
+  rule {
+    id     = "incomplete_multipart_uploads"
+    status = "Enabled"
+    
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+# ============================================================================
+# SPOT INSTANCE MANAGEMENT
+# ============================================================================
+
+# Spot Fleet Request for Cost Optimization
+resource "aws_spot_fleet_request" "data_processing" {
+  count = var.deploy_to_aws && var.spot_instances_enabled ? 1 : 0
+  
+  iam_fleet_role      = aws_iam_role.spot_fleet[0].arn
+  allocation_strategy = "diversified"
+  target_capacity     = var.spot_fleet_target_capacity
+  valid_until        = timeadd(timestamp(), "24h")
+  
+  launch_specification {
+    image_id                    = var.ami_id
+    instance_type              = "c5.large"
+    subnet_id                  = var.subnet_id
+    vpc_security_group_ids     = [var.security_group_id]
+    key_name                   = var.key_pair_name
+    
+    user_data = base64encode(templatefile("${path.module}/templates/spot_instance_userdata.sh.tpl", {
+      environment = var.environment
+    }))
+    
+    tags = var.tags
+  }
+  
+  launch_specification {
+    image_id                    = var.ami_id
+    instance_type              = "c5.xlarge"
+    subnet_id                  = var.subnet_id
+    vpc_security_group_ids     = [var.security_group_id]
+    key_name                   = var.key_pair_name
+    
+    user_data = base64encode(templatefile("${path.module}/templates/spot_instance_userdata.sh.tpl", {
+      environment = var.environment
+    }))
+    
+    tags = var.tags
+  }
+  
+  tags = var.tags
+}
+
+# IAM Role for Spot Fleet
+resource "aws_iam_role" "spot_fleet" {
+  count = var.deploy_to_aws && var.spot_instances_enabled ? 1 : 0
+  
+  name = "${local.name_prefix}-spot-fleet-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "spotfleet.amazonaws.com"
+      }
+    }]
+  })
+  
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "spot_fleet" {
+  count = var.deploy_to_aws && var.spot_instances_enabled ? 1 : 0
+  
+  role       = aws_iam_role.spot_fleet[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
+}
+
+# ============================================================================
+# AZURE ENHANCED COST OPTIMIZATION
+# ============================================================================
+
+# Azure Logic App for Intelligent Cost Management
+resource "azurerm_logic_app_workflow" "cost_optimization" {
+  count = var.deploy_to_azure ? 1 : 0
+  
+  name                = "${local.name_prefix}-cost-optimization"
+  location            = var.azure_location
+  resource_group_name = var.azure_resource_group_name
+  
+  tags = merge(var.tags, local.cost_tags)
+}
+
+# Azure Monitor Action Group for Cost Alerts
+resource "azurerm_monitor_action_group" "cost_alerts" {
+  count = var.deploy_to_azure ? 1 : 0
+  
+  name                = "${local.name_prefix}-cost-alerts"
+  resource_group_name = var.azure_resource_group_name
+  short_name          = "costalert"
+  
+  email_receiver {
+    name          = "cost-admin"
+    email_address = var.alert_email
+  }
+  
+  tags = var.tags
+}
+
+# Azure Monitor Metric Alert for Cost Threshold
+resource "azurerm_monitor_metric_alert" "cost_threshold" {
+  count = var.deploy_to_azure ? 1 : 0
+  
+  name                = "${local.name_prefix}-cost-threshold"
+  resource_group_name = var.azure_resource_group_name
+  scopes              = ["/subscriptions/${data.azurerm_client_config.current[0].subscription_id}"]
+  description         = "Cost threshold exceeded alert"
+  
+  criteria {
+    metric_namespace = "Microsoft.Consumption/budgets"
+    metric_name      = "ActualCost"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = var.monthly_budget_limit * 0.8
+  }
+  
+  action {
+    action_group_id = azurerm_monitor_action_group.cost_alerts[0].id
+  }
+  
+  tags = var.tags
+}
+
+# ============================================================================
+# GCP ENHANCED COST OPTIMIZATION
+# ============================================================================
+
+# GCP Compute Engine Instance Group Manager for Preemptible Instances
+resource "google_compute_instance_group_manager" "cost_optimized" {
+  count = var.deploy_to_gcp && var.spot_instances_enabled ? 1 : 0
+  
+  name = "${local.name_prefix}-cost-optimized-igm"
+  zone = "${var.gcp_region}-a"
+  
+  version {
+    instance_template = google_compute_instance_template.cost_optimized[0].id
+  }
+  
+  base_instance_name = "${local.name_prefix}-cost-optimized"
+  target_size        = var.gcp_instance_group_size
+  
+  auto_healing_policies {
+    health_check      = google_compute_health_check.autohealing[0].id
+    initial_delay_sec = 300
+  }
+}
+
+# GCP Instance Template for Cost Optimization
+resource "google_compute_instance_template" "cost_optimized" {
+  count = var.deploy_to_gcp && var.spot_instances_enabled ? 1 : 0
+  
+  name_prefix  = "${local.name_prefix}-cost-optimized-"
+  machine_type = var.gcp_machine_type
+  region       = var.gcp_region
+  
+  disk {
+    source_image = var.gcp_source_image
+    auto_delete  = true
+    boot         = true
+    disk_size_gb = 20
+    disk_type    = "pd-standard"
+  }
+  
+  network_interface {
+    network = var.gcp_network_name
+    access_config {}
+  }
+  
+  scheduling {
+    preemptible                 = true
+    automatic_restart           = false
+    on_host_maintenance        = "TERMINATE"
+    provisioning_model         = "SPOT"
+    instance_termination_action = "STOP"
+  }
+  
+  metadata_startup_script = templatefile("${path.module}/templates/gcp_startup_script.sh.tpl", {
+    environment = var.environment
+  })
+  
+  labels = var.tags
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# GCP Health Check for Auto-healing
+resource "google_compute_health_check" "autohealing" {
+  count = var.deploy_to_gcp && var.spot_instances_enabled ? 1 : 0
+  
+  name = "${local.name_prefix}-autohealing-health-check"
+  
+  timeout_sec        = 5
+  check_interval_sec = 10
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+  
+  http_health_check {
+    request_path = "/health"
+    port         = "80"
+  }
+}
+
+# GCP Autoscaler for Dynamic Scaling
+resource "google_compute_autoscaler" "cost_optimized" {
+  count = var.deploy_to_gcp && var.spot_instances_enabled ? 1 : 0
+  
+  name   = "${local.name_prefix}-cost-optimized-autoscaler"
+  zone   = "${var.gcp_region}-a"
+  target = google_compute_instance_group_manager.cost_optimized[0].id
+  
+  autoscaling_policy {
+    max_replicas    = var.gcp_max_replicas
+    min_replicas    = var.gcp_min_replicas
+    cooldown_period = 300
+    
+    cpu_utilization {
+      target = var.cpu_target_value / 100
+    }
+    
+    metric {
+      name   = "compute.googleapis.com/instance/cpu/utilization"
+      target = var.cpu_target_value / 100
+      type   = "GAUGE"
+    }
+  }
 }
 
 # Data sources

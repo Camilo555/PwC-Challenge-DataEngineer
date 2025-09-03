@@ -15,5 +15,5 @@ __all__ = [
     "IndexManager",
     "create_performance_indexes",
     "DatabasePerformanceOptimizer",
-    "ConnectionPoolConfig"
+    "ConnectionPoolConfig",
 ]

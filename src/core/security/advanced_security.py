@@ -2,6 +2,7 @@
 Advanced Security Features: Audit Logging and Threat Detection
 Provides comprehensive security monitoring, audit trails, and threat detection capabilities.
 """
+
 import json
 import re
 import threading
@@ -25,6 +26,7 @@ from core.logging import get_logger
 
 class SecurityEventType(Enum):
     """Types of security events"""
+
     AUTHENTICATION_SUCCESS = "auth_success"
     AUTHENTICATION_FAILURE = "auth_failure"
     AUTHORIZATION_FAILURE = "authz_failure"
@@ -42,6 +44,7 @@ class SecurityEventType(Enum):
 
 class ThreatLevel(Enum):
     """Threat severity levels"""
+
     INFO = "info"
     LOW = "low"
     MEDIUM = "medium"
@@ -51,6 +54,7 @@ class ThreatLevel(Enum):
 
 class ActionType(Enum):
     """Types of user/system actions"""
+
     CREATE = "create"
     READ = "read"
     UPDATE = "update"
@@ -68,6 +72,7 @@ class ActionType(Enum):
 @dataclass
 class SecurityEvent:
     """Security event record"""
+
     event_id: str
     event_type: SecurityEventType
     threat_level: ThreatLevel
@@ -89,6 +94,7 @@ class SecurityEvent:
 @dataclass
 class AuditLogEntry:
     """Comprehensive audit log entry"""
+
     audit_id: str
     timestamp: datetime
     user_id: str | None
@@ -110,6 +116,7 @@ class AuditLogEntry:
 @dataclass
 class ThreatIndicator:
     """Threat indicator for detection"""
+
     indicator_id: str
     indicator_type: str  # ip, user_agent, pattern, etc.
     indicator_value: str
@@ -153,22 +160,26 @@ class GeoLocationService:
             # Skip private/local addresses
             if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
                 return {
-                    'country': 'Local',
-                    'city': 'Private Network',
-                    'region': 'N/A',
-                    'timezone': 'N/A'
+                    "country": "Local",
+                    "city": "Private Network",
+                    "region": "N/A",
+                    "timezone": "N/A",
                 }
 
             response = self.reader.city(ip_address)
 
             return {
-                'country': response.country.name or 'Unknown',
-                'country_code': response.country.iso_code or 'XX',
-                'city': response.city.name or 'Unknown',
-                'region': response.subdivisions.most_specific.name or 'Unknown',
-                'timezone': response.location.time_zone or 'Unknown',
-                'latitude': float(response.location.latitude) if response.location.latitude else 0.0,
-                'longitude': float(response.location.longitude) if response.location.longitude else 0.0
+                "country": response.country.name or "Unknown",
+                "country_code": response.country.iso_code or "XX",
+                "city": response.city.name or "Unknown",
+                "region": response.subdivisions.most_specific.name or "Unknown",
+                "timezone": response.location.time_zone or "Unknown",
+                "latitude": float(response.location.latitude)
+                if response.location.latitude
+                else 0.0,
+                "longitude": float(response.location.longitude)
+                if response.location.longitude
+                else 0.0,
             }
 
         except (geoip2.errors.AddressNotFoundError, Exception) as e:
@@ -205,7 +216,7 @@ class ThreatDetectionEngine:
             r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC)\b)",
             r"(\b(UNION|OR|AND)\s+\d+\s*=\s*\d+)",
             r"('|\"|;|--|\|\/\*)",
-            r"(\bxp_cmdshell\b|\bsp_executesql\b)"
+            r"(\bxp_cmdshell\b|\bsp_executesql\b)",
         ]
 
         for i, pattern in enumerate(sql_injection_patterns):
@@ -214,11 +225,11 @@ class ThreatDetectionEngine:
                 indicator_type="regex_pattern",
                 indicator_value=pattern,
                 threat_level=ThreatLevel.HIGH,
-                description=f"SQL injection pattern {i+1}",
+                description=f"SQL injection pattern {i + 1}",
                 created_at=datetime.now(),
                 expires_at=None,
                 source="built_in",
-                confidence_score=0.9
+                confidence_score=0.9,
             )
 
         # XSS patterns
@@ -226,7 +237,7 @@ class ThreatDetectionEngine:
             r"(<script[^>]*>.*?</script>)",
             r"(javascript:|vbscript:|onload=|onerror=)",
             r"(<iframe[^>]*>|<object[^>]*>|<embed[^>]*>)",
-            r"(eval\s*\(|setTimeout\s*\(|setInterval\s*\()"
+            r"(eval\s*\(|setTimeout\s*\(|setInterval\s*\()",
         ]
 
         for i, pattern in enumerate(xss_patterns):
@@ -235,17 +246,24 @@ class ThreatDetectionEngine:
                 indicator_type="regex_pattern",
                 indicator_value=pattern,
                 threat_level=ThreatLevel.MEDIUM,
-                description=f"XSS pattern {i+1}",
+                description=f"XSS pattern {i + 1}",
                 created_at=datetime.now(),
                 expires_at=None,
                 source="built_in",
-                confidence_score=0.8
+                confidence_score=0.8,
             )
 
         # Suspicious user agents
         suspicious_agents = [
-            "sqlmap", "havij", "nmap", "nikto", "burpsuite",
-            "w3af", "acunetix", "nessus", "openvas"
+            "sqlmap",
+            "havij",
+            "nmap",
+            "nikto",
+            "burpsuite",
+            "w3af",
+            "acunetix",
+            "nessus",
+            "openvas",
         ]
 
         for agent in suspicious_agents:
@@ -258,42 +276,38 @@ class ThreatDetectionEngine:
                 created_at=datetime.now(),
                 expires_at=None,
                 source="built_in",
-                confidence_score=0.95
+                confidence_score=0.95,
             )
 
     def analyze_request(
         self,
         request_data: dict[str, Any],
         user_id: str | None = None,
-        session_id: str | None = None
+        session_id: str | None = None,
     ) -> list[SecurityEvent]:
         """Analyze incoming request for threats"""
 
         events = []
-        source_ip = request_data.get('source_ip', 'unknown')
-        user_agent = request_data.get('user_agent', '')
-        url_path = request_data.get('path', '')
-        query_params = request_data.get('query_params', {})
-        body = request_data.get('body', '')
+        source_ip = request_data.get("source_ip", "unknown")
+        user_agent = request_data.get("user_agent", "")
+        url_path = request_data.get("path", "")
+        query_params = request_data.get("query_params", {})
+        body = request_data.get("body", "")
 
         # Check for SQL injection
         sql_events = self._detect_sql_injection(
-            source_ip, user_id, session_id, user_agent,
-            url_path, query_params, body
+            source_ip, user_id, session_id, user_agent, url_path, query_params, body
         )
         events.extend(sql_events)
 
         # Check for XSS
         xss_events = self._detect_xss(
-            source_ip, user_id, session_id, user_agent,
-            url_path, query_params, body
+            source_ip, user_id, session_id, user_agent, url_path, query_params, body
         )
         events.extend(xss_events)
 
         # Check user agent
-        ua_events = self._detect_suspicious_user_agent(
-            source_ip, user_id, session_id, user_agent
-        )
+        ua_events = self._detect_suspicious_user_agent(source_ip, user_id, session_id, user_agent)
         events.extend(ua_events)
 
         # Behavioral analysis
@@ -312,7 +326,7 @@ class ThreatDetectionEngine:
         user_agent: str,
         url_path: str,
         query_params: dict[str, Any],
-        body: str
+        body: str,
     ) -> list[SecurityEvent]:
         """Detect SQL injection attempts"""
 
@@ -337,12 +351,12 @@ class ThreatDetectionEngine:
                         action_performed=ActionType.READ,
                         success=False,
                         details={
-                            'pattern_matched': indicator.indicator_value,
-                            'input_analyzed': all_input[:500],  # Truncate for storage
-                            'indicator_id': indicator_id
+                            "pattern_matched": indicator.indicator_value,
+                            "input_analyzed": all_input[:500],  # Truncate for storage
+                            "indicator_id": indicator_id,
                         },
                         risk_score=indicator.confidence_score * 10,
-                        blocked=True
+                        blocked=True,
                     )
                     events.append(event)
 
@@ -356,7 +370,7 @@ class ThreatDetectionEngine:
         user_agent: str,
         url_path: str,
         query_params: dict[str, Any],
-        body: str
+        body: str,
     ) -> list[SecurityEvent]:
         """Detect XSS attempts"""
 
@@ -381,23 +395,19 @@ class ThreatDetectionEngine:
                         action_performed=ActionType.READ,
                         success=False,
                         details={
-                            'pattern_matched': indicator.indicator_value,
-                            'input_analyzed': all_input[:500],
-                            'indicator_id': indicator_id
+                            "pattern_matched": indicator.indicator_value,
+                            "input_analyzed": all_input[:500],
+                            "indicator_id": indicator_id,
                         },
                         risk_score=indicator.confidence_score * 8,
-                        blocked=True
+                        blocked=True,
                     )
                     events.append(event)
 
         return events
 
     def _detect_suspicious_user_agent(
-        self,
-        source_ip: str,
-        user_id: str | None,
-        session_id: str | None,
-        user_agent: str
+        self, source_ip: str, user_id: str | None, session_id: str | None, user_agent: str
     ) -> list[SecurityEvent]:
         """Detect suspicious user agents"""
 
@@ -419,12 +429,12 @@ class ThreatDetectionEngine:
                         action_performed=ActionType.LOGIN,
                         success=False,
                         details={
-                            'suspicious_agent': indicator.indicator_value,
-                            'full_user_agent': user_agent,
-                            'indicator_id': indicator_id
+                            "suspicious_agent": indicator.indicator_value,
+                            "full_user_agent": user_agent,
+                            "indicator_id": indicator_id,
                         },
                         risk_score=indicator.confidence_score * 9,
-                        blocked=True
+                        blocked=True,
                     )
                     events.append(event)
 
@@ -435,7 +445,7 @@ class ThreatDetectionEngine:
         source_ip: str,
         user_id: str | None,
         session_id: str | None,
-        request_data: dict[str, Any]
+        request_data: dict[str, Any],
     ) -> list[SecurityEvent]:
         """Analyze behavioral patterns for anomalies"""
 
@@ -446,11 +456,11 @@ class ThreatDetectionEngine:
         with self.lock:
             # Store request pattern
             pattern = {
-                'timestamp': now,
-                'path': request_data.get('path'),
-                'method': request_data.get('method'),
-                'user_agent': request_data.get('user_agent'),
-                'size': len(str(request_data))
+                "timestamp": now,
+                "path": request_data.get("path"),
+                "method": request_data.get("method"),
+                "user_agent": request_data.get("user_agent"),
+                "size": len(str(request_data)),
             }
 
             self.request_patterns[source_ip].append(pattern)
@@ -458,8 +468,7 @@ class ThreatDetectionEngine:
             # Keep only last hour of data
             cutoff_time = now - timedelta(hours=1)
             self.request_patterns[source_ip] = [
-                p for p in self.request_patterns[source_ip]
-                if p['timestamp'] >= cutoff_time
+                p for p in self.request_patterns[source_ip] if p["timestamp"] >= cutoff_time
             ]
 
         # Analyze patterns
@@ -475,22 +484,19 @@ class ThreatDetectionEngine:
                 source_ip=source_ip,
                 user_id=user_id,
                 session_id=session_id,
-                user_agent=request_data.get('user_agent'),
+                user_agent=request_data.get("user_agent"),
                 resource_accessed=None,
                 action_performed=ActionType.READ,
                 success=False,
-                details={
-                    'requests_per_hour': len(recent_requests),
-                    'threshold_exceeded': True
-                },
+                details={"requests_per_hour": len(recent_requests), "threshold_exceeded": True},
                 risk_score=6.0,
-                blocked=False
+                blocked=False,
             )
             events.append(event)
 
         # Check for scanning behavior (many different paths)
         if len(recent_requests) > 50:
-            unique_paths = len(set(r['path'] for r in recent_requests))
+            unique_paths = len({r["path"] for r in recent_requests})
             path_diversity = unique_paths / len(recent_requests)
 
             if path_diversity > 0.8:  # High path diversity suggests scanning
@@ -502,29 +508,25 @@ class ThreatDetectionEngine:
                     source_ip=source_ip,
                     user_id=user_id,
                     session_id=session_id,
-                    user_agent=request_data.get('user_agent'),
+                    user_agent=request_data.get("user_agent"),
                     resource_accessed=None,
                     action_performed=ActionType.READ,
                     success=False,
                     details={
-                        'total_requests': len(recent_requests),
-                        'unique_paths': unique_paths,
-                        'path_diversity': path_diversity,
-                        'scanning_detected': True
+                        "total_requests": len(recent_requests),
+                        "unique_paths": unique_paths,
+                        "path_diversity": path_diversity,
+                        "scanning_detected": True,
                     },
                     risk_score=7.0,
-                    blocked=False
+                    blocked=False,
                 )
                 events.append(event)
 
         return events
 
     def analyze_login_attempt(
-        self,
-        source_ip: str,
-        user_id: str | None,
-        success: bool,
-        user_agent: str | None = None
+        self, source_ip: str, user_id: str | None, success: bool, user_agent: str | None = None
     ) -> list[SecurityEvent]:
         """Analyze login attempts for suspicious patterns"""
 
@@ -545,19 +547,19 @@ class ThreatDetectionEngine:
             cutoff_time = now - timedelta(hours=24)
             for key in list(self.failed_attempts.keys()):
                 self.failed_attempts[key] = [
-                    attempt for attempt in self.failed_attempts[key]
-                    if attempt >= cutoff_time
+                    attempt for attempt in self.failed_attempts[key] if attempt >= cutoff_time
                 ]
 
             for key in list(self.login_attempts.keys()):
                 self.login_attempts[key] = [
-                    attempt for attempt in self.login_attempts[key]
-                    if attempt >= cutoff_time
+                    attempt for attempt in self.login_attempts[key] if attempt >= cutoff_time
                 ]
 
         # Check for brute force attempts
         recent_failures = len(self.failed_attempts.get(source_ip, []))
-        recent_user_failures = len(self.failed_attempts.get(f"user_{user_id}", [])) if user_id else 0
+        recent_user_failures = (
+            len(self.failed_attempts.get(f"user_{user_id}", [])) if user_id else 0
+        )
 
         if recent_failures >= 10 or recent_user_failures >= 5:
             event = SecurityEvent(
@@ -573,12 +575,12 @@ class ThreatDetectionEngine:
                 action_performed=ActionType.LOGIN,
                 success=success,
                 details={
-                    'failed_attempts_ip': recent_failures,
-                    'failed_attempts_user': recent_user_failures,
-                    'time_window': '24 hours'
+                    "failed_attempts_ip": recent_failures,
+                    "failed_attempts_user": recent_user_failures,
+                    "time_window": "24 hours",
                 },
                 risk_score=8.0,
-                blocked=True
+                blocked=True,
             )
             events.append(event)
 
@@ -612,7 +614,7 @@ class AuditLogger:
         error_message: str | None = None,
         request_id: str | None = None,
         correlation_id: str | None = None,
-        metadata: dict[str, Any] = None
+        metadata: dict[str, Any] = None,
     ) -> str:
         """Log an audit event"""
 
@@ -632,7 +634,7 @@ class AuditLogger:
             error_message=error_message,
             request_id=request_id,
             correlation_id=correlation_id,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Add to buffer
@@ -649,27 +651,27 @@ class AuditLogger:
         try:
             # Convert to JSON
             entry_dict = {
-                'audit_id': entry.audit_id,
-                'timestamp': entry.timestamp.isoformat(),
-                'user_id': entry.user_id,
-                'session_id': entry.session_id,
-                'source_ip': entry.source_ip,
-                'user_agent': entry.user_agent,
-                'action': entry.action.value,
-                'resource_type': entry.resource_type,
-                'resource_id': entry.resource_id,
-                'old_value': entry.old_value,
-                'new_value': entry.new_value,
-                'success': entry.success,
-                'error_message': entry.error_message,
-                'request_id': entry.request_id,
-                'correlation_id': entry.correlation_id,
-                'metadata': entry.metadata
+                "audit_id": entry.audit_id,
+                "timestamp": entry.timestamp.isoformat(),
+                "user_id": entry.user_id,
+                "session_id": entry.session_id,
+                "source_ip": entry.source_ip,
+                "user_agent": entry.user_agent,
+                "action": entry.action.value,
+                "resource_type": entry.resource_type,
+                "resource_id": entry.resource_id,
+                "old_value": entry.old_value,
+                "new_value": entry.new_value,
+                "success": entry.success,
+                "error_message": entry.error_message,
+                "request_id": entry.request_id,
+                "correlation_id": entry.correlation_id,
+                "metadata": entry.metadata,
             }
 
             # Write to file (JSONL format)
-            with open(self.log_file_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(entry_dict) + '\n')
+            with open(self.log_file_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry_dict) + "\n")
 
         except Exception as e:
             self.logger.error(f"Failed to write audit entry: {e}")
@@ -682,7 +684,7 @@ class AuditLogger:
         action: ActionType | None = None,
         resource_type: str | None = None,
         source_ip: str | None = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> list[AuditLogEntry]:
         """Search audit logs with filters"""
 
@@ -743,17 +745,17 @@ class AuditLogger:
         # Time range
         timestamps = [e.timestamp for e in entries]
         time_range = {
-            'earliest': min(timestamps).isoformat(),
-            'latest': max(timestamps).isoformat()
+            "earliest": min(timestamps).isoformat(),
+            "latest": max(timestamps).isoformat(),
         }
 
         return {
-            'total_entries': total_entries,
-            'success_rate': success_rate,
-            'time_range': time_range,
-            'action_distribution': dict(action_counts),
-            'top_users': dict(sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:10]),
-            'resource_access': dict(resource_access)
+            "total_entries": total_entries,
+            "success_rate": success_rate,
+            "time_range": time_range,
+            "action_distribution": dict(action_counts),
+            "top_users": dict(sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "resource_access": dict(resource_access),
         }
 
 
@@ -777,6 +779,7 @@ class SecurityEventManager:
 
     def _start_background_tasks(self):
         """Start background tasks for threat analysis"""
+
         def cleanup_task():
             while True:
                 try:
@@ -787,14 +790,12 @@ class SecurityEventManager:
                     self.logger.error(f"Background task error: {e}")
 
         import threading
+
         cleanup_thread = threading.Thread(target=cleanup_task, daemon=True)
         cleanup_thread.start()
 
     def process_request(
-        self,
-        request: Request,
-        user_id: str | None = None,
-        session_id: str | None = None
+        self, request: Request, user_id: str | None = None, session_id: str | None = None
     ) -> list[SecurityEvent]:
         """Process incoming request for security threats"""
 
@@ -803,12 +804,12 @@ class SecurityEventManager:
         user_agent = request.headers.get("user-agent", "")
 
         request_data = {
-            'source_ip': client_ip,
-            'user_agent': user_agent,
-            'method': request.method,
-            'path': str(request.url.path),
-            'query_params': dict(request.query_params),
-            'headers': dict(request.headers)
+            "source_ip": client_ip,
+            "user_agent": user_agent,
+            "method": request.method,
+            "path": str(request.url.path),
+            "query_params": dict(request.query_params),
+            "headers": dict(request.headers),
         }
 
         # Analyze for threats
@@ -833,7 +834,9 @@ class SecurityEventManager:
         # Log high-severity events
         for event in events:
             if event.threat_level in [ThreatLevel.HIGH, ThreatLevel.CRITICAL]:
-                self.logger.warning(f"Security threat detected: {event.event_type.value} from {event.source_ip}")
+                self.logger.warning(
+                    f"Security threat detected: {event.event_type.value} from {event.source_ip}"
+                )
 
         return events
 
@@ -844,7 +847,7 @@ class SecurityEventManager:
         source_ip: str,
         user_agent: str | None = None,
         session_id: str | None = None,
-        details: dict[str, Any] = None
+        details: dict[str, Any] = None,
     ) -> list[SecurityEvent]:
         """Log authentication event and analyze for threats"""
 
@@ -857,15 +860,12 @@ class SecurityEventManager:
             session_id=session_id,
             user_agent=user_agent,
             success=success,
-            metadata=details or {}
+            metadata=details or {},
         )
 
         # Analyze for threats
         events = self.threat_detector.analyze_login_attempt(
-            source_ip=source_ip,
-            user_id=user_id,
-            success=success,
-            user_agent=user_agent
+            source_ip=source_ip, user_id=user_id, success=success, user_agent=user_agent
         )
 
         # Add geolocation
@@ -904,7 +904,7 @@ class SecurityEventManager:
                     resource_id=ip_address,
                     old_value={"blocked": True},
                     new_value={"blocked": False},
-                    metadata={"reason": reason}
+                    metadata={"reason": reason},
                 )
 
                 return True
@@ -920,7 +920,7 @@ class SecurityEventManager:
             blocked_ips = set(self.blocked_ips)
 
         if not events:
-            return {'message': 'No security events recorded'}
+            return {"message": "No security events recorded"}
 
         # Calculate statistics
         now = datetime.now()
@@ -943,24 +943,26 @@ class SecurityEventManager:
             source_ips[event.source_ip] += 1
 
         return {
-            'total_events_24h': len(recent_events),
-            'active_threats': len(active_threats),
-            'blocked_ips': len(blocked_ips),
-            'threat_level_distribution': dict(threat_levels),
-            'event_type_distribution': dict(event_types),
-            'top_source_ips': dict(sorted(source_ips.items(), key=lambda x: x[1], reverse=True)[:10]),
-            'recent_high_severity_events': [
+            "total_events_24h": len(recent_events),
+            "active_threats": len(active_threats),
+            "blocked_ips": len(blocked_ips),
+            "threat_level_distribution": dict(threat_levels),
+            "event_type_distribution": dict(event_types),
+            "top_source_ips": dict(
+                sorted(source_ips.items(), key=lambda x: x[1], reverse=True)[:10]
+            ),
+            "recent_high_severity_events": [
                 {
-                    'event_id': e.event_id,
-                    'type': e.event_type.value,
-                    'threat_level': e.threat_level.value,
-                    'source_ip': e.source_ip,
-                    'timestamp': e.timestamp.isoformat(),
-                    'blocked': e.blocked
+                    "event_id": e.event_id,
+                    "type": e.event_type.value,
+                    "threat_level": e.threat_level.value,
+                    "source_ip": e.source_ip,
+                    "timestamp": e.timestamp.isoformat(),
+                    "blocked": e.blocked,
                 }
                 for e in recent_events
                 if e.threat_level in [ThreatLevel.HIGH, ThreatLevel.CRITICAL]
-            ][:20]
+            ][:20],
         }
 
     def _cleanup_old_events(self):
@@ -973,8 +975,7 @@ class SecurityEventManager:
             # Clean active threats
             for ip in list(self.active_threats.keys()):
                 self.active_threats[ip] = [
-                    event for event in self.active_threats[ip]
-                    if event.timestamp >= cutoff_time
+                    event for event in self.active_threats[ip] if event.timestamp >= cutoff_time
                 ]
                 if not self.active_threats[ip]:
                     del self.active_threats[ip]
@@ -1010,6 +1011,7 @@ def get_security_manager() -> SecurityEventManager:
     global _security_manager
     if _security_manager is None:
         from core.config.unified_config import get_unified_config
+
         config = get_unified_config()
         _security_manager = SecurityEventManager(config.security)
     return _security_manager
@@ -1021,19 +1023,20 @@ def audit_action(
     resource_type: str,
     extract_resource_id: Callable = None,
     log_args: bool = False,
-    log_result: bool = False
+    log_result: bool = False,
 ):
     """Decorator for automatic audit logging"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             # Extract context information
-            user_id = kwargs.get('user_id') or getattr(args[0], 'user_id', None) if args else None
+            user_id = kwargs.get("user_id") or getattr(args[0], "user_id", None) if args else None
             resource_id = extract_resource_id(*args, **kwargs) if extract_resource_id else None
 
             # Store old value for updates/deletes
             old_value = None
             if action in [ActionType.UPDATE, ActionType.DELETE] and log_args:
-                old_value = {'args': str(args)[:500], 'kwargs': str(kwargs)[:500]}
+                old_value = {"args": str(args)[:500], "kwargs": str(kwargs)[:500]}
 
             start_time = time.time()
             success = True
@@ -1053,9 +1056,9 @@ def audit_action(
 
                 new_value = None
                 if log_result and result:
-                    new_value = {'result': str(result)[:500]}
+                    new_value = {"result": str(result)[:500]}
                 elif log_args:
-                    new_value = {'args': str(args)[:500], 'kwargs': str(kwargs)[:500]}
+                    new_value = {"args": str(args)[:500], "kwargs": str(kwargs)[:500]}
 
                 audit_logger.log_audit_event(
                     user_id=user_id,
@@ -1067,10 +1070,11 @@ def audit_action(
                     success=success,
                     error_message=error_message,
                     metadata={
-                        'function': func.__name__,
-                        'execution_time_ms': (time.time() - start_time) * 1000
-                    }
+                        "function": func.__name__,
+                        "execution_time_ms": (time.time() - start_time) * 1000,
+                    },
                 )
 
         return wrapper
+
     return decorator

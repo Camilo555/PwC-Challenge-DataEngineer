@@ -1,0 +1,559 @@
+---
+# Horizontal Pod Autoscaler for API workloads
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-api-hpa
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: auto-scaling
+    tier: application
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-api
+    
+  minReplicas: 2
+  maxReplicas: 20
+  
+  # Advanced scaling metrics
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+        
+  # Memory-based scaling  
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+        
+  # Custom metrics for API-specific scaling
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+        
+  - type: Pods
+    pods:
+      metric:
+        name: response_time_95th_percentile
+      target:
+        type: AverageValue
+        averageValue: "500m"  # 500ms
+  
+  # External metrics for queue-based scaling
+  - type: External
+    external:
+      metric:
+        name: sqs_messages_visible
+        selector:
+          matchLabels:
+            queue_name: "pwc-data-processing"
+      target:
+        type: AverageValue
+        averageValue: "50"
+  
+  # Advanced scaling behavior
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60  # Fast scale up
+      policies:
+      - type: Percent
+        value: 100  # Double pods
+        periodSeconds: 60
+      - type: Pods
+        value: 4    # Add max 4 pods at once
+        periodSeconds: 60
+      selectPolicy: Max  # Use the policy that adds more pods
+      
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Slower scale down
+      policies:
+      - type: Percent
+        value: 10   # Remove 10% of pods
+        periodSeconds: 60
+      - type: Pods
+        value: 2    # Remove max 2 pods at once
+        periodSeconds: 60
+      selectPolicy: Min  # Use the policy that removes fewer pods
+
+---
+# Horizontal Pod Autoscaler for ETL workloads
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-etl-hpa
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-etl
+    component: auto-scaling
+    tier: processing
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-etl
+    
+  minReplicas: 1
+  maxReplicas: 10
+  
+  metrics:
+  # CPU-based scaling (higher threshold for batch workloads)
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 85
+        
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 90
+  
+  # Kafka lag-based scaling for streaming ETL
+  - type: External
+    external:
+      metric:
+        name: kafka_consumer_lag
+        selector:
+          matchLabels:
+            consumer_group: "pwc-etl-processors"
+            topic: "raw-data-stream"
+      target:
+        type: AverageValue
+        averageValue: "1000"  # Scale up if lag > 1000 messages
+  
+  # File processing queue depth
+  - type: External
+    external:
+      metric:
+        name: pending_files_count
+        selector:
+          matchLabels:
+            processing_type: "etl"
+      target:
+        type: AverageValue
+        averageValue: "10"
+  
+  # ETL-specific scaling behavior
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 180  # ETL jobs need time to warm up
+      policies:
+      - type: Percent
+        value: 50   # Increase by 50%
+        periodSeconds: 180
+      - type: Pods
+        value: 2    # Add max 2 pods at once
+        periodSeconds: 180
+      selectPolicy: Max
+      
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Very slow scale down for batch jobs
+      policies:
+      - type: Percent
+        value: 5    # Remove only 5% of pods
+        periodSeconds: 300
+      - type: Pods
+        value: 1    # Remove max 1 pod at once
+        periodSeconds: 300
+      selectPolicy: Min
+
+---
+# Horizontal Pod Autoscaler for Spark Executors
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: spark-executor-hpa
+  namespace: pwc-data-platform
+  labels:
+    app: spark-executor
+    component: auto-scaling
+    tier: processing
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: spark-executor
+    
+  minReplicas: 2
+  maxReplicas: 50  # Large scale for big data processing
+  
+  metrics:
+  # CPU utilization for Spark executors
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+        
+  # Memory utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  
+  # Spark-specific metrics
+  - type: Pods
+    pods:
+      metric:
+        name: spark_executor_task_queue_size
+      target:
+        type: AverageValue
+        averageValue: "5"
+        
+  - type: Pods
+    pods:
+      metric:
+        name: spark_executor_shuffle_read_bytes_rate
+      target:
+        type: AverageValue
+        averageValue: "100Mi"
+  
+  # Data processing volume-based scaling
+  - type: External
+    external:
+      metric:
+        name: data_volume_gb_per_hour
+        selector:
+          matchLabels:
+            processing_type: "spark"
+      target:
+        type: AverageValue
+        averageValue: "10"  # 10GB per executor per hour
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Percent
+        value: 200  # Can triple the number of executors quickly
+        periodSeconds: 120
+      - type: Pods
+        value: 10   # Add up to 10 executors at once
+        periodSeconds: 120
+      selectPolicy: Max
+      
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25   # Remove 25% of executors
+        periodSeconds: 300
+      - type: Pods
+        value: 5    # Remove max 5 executors at once
+        periodSeconds: 300
+      selectPolicy: Min
+
+---
+# Vertical Pod Autoscaler for API workloads
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: pwc-api-vpa
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: auto-scaling
+    tier: application
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-api
+    
+  updatePolicy:
+    updateMode: "Auto"  # Automatically apply recommendations
+    
+  resourcePolicy:
+    containerPolicies:
+    - containerName: api
+      maxAllowed:
+        cpu: "4"
+        memory: "8Gi"
+      minAllowed:
+        cpu: "100m"
+        memory: "128Mi"
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+      
+    - containerName: log-processor
+      maxAllowed:
+        cpu: "200m"
+        memory: "256Mi"
+      minAllowed:
+        cpu: "50m"
+        memory: "64Mi"
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsOnly
+
+---
+# Pod Disruption Budget for API high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pwc-api-pdb
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-api
+    component: availability
+spec:
+  minAvailable: 50%  # Always keep at least 50% of pods running
+  selector:
+    matchLabels:
+      app: pwc-api
+      
+---
+# Pod Disruption Budget for ETL processing
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pwc-etl-pdb
+  namespace: pwc-data-platform
+  labels:
+    app: pwc-etl
+    component: availability
+spec:
+  maxUnavailable: 25%  # Allow up to 25% of ETL pods to be unavailable
+  selector:
+    matchLabels:
+      app: pwc-etl
+
+---
+# Scheduled Scaling for predictable workloads
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-up-morning-peak
+  namespace: pwc-data-platform
+  labels:
+    component: scheduled-scaling
+spec:
+  schedule: "0 8 * * 1-5"  # Scale up at 8 AM on weekdays
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: scaling-service-account
+          containers:
+          - name: scaler
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Scale up API pods for morning peak
+              kubectl patch hpa pwc-api-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":5}}'
+              
+              # Scale up ETL processing for daily batch jobs
+              kubectl patch hpa pwc-etl-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":3}}'
+              
+              echo "Morning peak scaling applied"
+              
+          restartPolicy: OnFailure
+
+---
+# Scale down for evening
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-down-evening
+  namespace: pwc-data-platform
+  labels:
+    component: scheduled-scaling
+spec:
+  schedule: "0 20 * * 1-5"  # Scale down at 8 PM on weekdays
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: scaling-service-account
+          containers:
+          - name: scaler
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Scale down to minimum replicas
+              kubectl patch hpa pwc-api-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":2}}'
+              kubectl patch hpa pwc-etl-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":1}}'
+              
+              echo "Evening scale-down applied"
+              
+          restartPolicy: OnFailure
+
+---
+# Weekend minimal scaling
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekend-minimal-scaling
+  namespace: pwc-data-platform
+  labels:
+    component: scheduled-scaling
+spec:
+  schedule: "0 22 * * 5"  # Friday 10 PM - scale down for weekend
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: scaling-service-account
+          containers:
+          - name: scaler
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Minimal weekend scaling
+              kubectl patch hpa pwc-api-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":1}}'
+              kubectl patch hpa pwc-etl-hpa -n pwc-data-platform --type='merge' -p='{"spec":{"minReplicas":0}}'
+              
+              echo "Weekend minimal scaling applied"
+              
+          restartPolicy: OnFailure
+
+---
+# Service Account for scaling operations
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scaling-service-account
+  namespace: pwc-data-platform
+
+---
+# Role for scaling operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: scaling-role
+  namespace: pwc-data-platform
+rules:
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "patch", "update"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale"]
+  verbs: ["get", "list", "patch", "update"]
+
+---
+# Role Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scaling-role-binding
+  namespace: pwc-data-platform
+subjects:
+- kind: ServiceAccount
+  name: scaling-service-account
+  namespace: pwc-data-platform
+roleRef:
+  kind: Role
+  name: scaling-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Cost Optimization ConfigMap with advanced policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-optimization-policies
+  namespace: pwc-data-platform
+data:
+  scaling-policies.yaml: |
+    # Advanced scaling policies for cost optimization
+    costOptimization:
+      # Predictive scaling based on historical data
+      predictiveScaling:
+        enabled: true
+        lookbackPeriods: 7  # days
+        predictionHorizon: 2  # hours
+        confidenceThreshold: 0.8
+        
+      # Resource right-sizing recommendations
+      rightSizing:
+        enabled: true
+        analysisInterval: "24h"
+        recommendations:
+          cpu:
+            utilizationThreshold: 70
+            bufferPercentage: 20
+          memory:
+            utilizationThreshold: 80
+            bufferPercentage: 15
+            
+      # Spot instance optimization
+      spotInstances:
+        enabled: true
+        maxSpotPercentage: 70
+        fallbackStrategy: "on-demand"
+        gracefulTermination: 120  # seconds
+        
+      # Multi-zone balancing for cost
+      zoneBalancing:
+        enabled: true
+        preferredZones:
+          - "us-west-2a"  # Usually cheapest
+          - "us-west-2b"
+          - "us-west-2c"
+        costWeighting: 0.7  # 70% cost vs 30% performance
+        
+      # Storage optimization
+      storageOptimization:
+        enabled: true
+        autoTiering: true
+        compressionEnabled: true
+        deduplicationEnabled: true
+        
+  # Custom metrics for scaling decisions
+  custom-metrics.yaml: |
+    customMetrics:
+      # Business metrics
+      - name: "transactions_per_minute"
+        query: "sum(rate(api_requests_total[1m]) * 60)"
+        threshold: 1000
+        
+      - name: "data_processing_backlog"
+        query: "sum(pending_files_total)"
+        threshold: 100
+        
+      - name: "error_rate_5min"
+        query: "sum(rate(api_errors_total[5m])) / sum(rate(api_requests_total[5m]))"
+        threshold: 0.05  # 5% error rate
+        
+      # Infrastructure metrics
+      - name: "cluster_memory_pressure"
+        query: "1 - sum(node_memory_available_bytes) / sum(node_memory_total_bytes)"
+        threshold: 0.85
+        
+      - name: "network_bandwidth_utilization"
+        query: "sum(rate(node_network_transmit_bytes_total[5m]))"
+        threshold: 100000000  # 100MB/s
+        
+      # Cost metrics
+      - name: "hourly_compute_cost"
+        query: "sum(node_cost_per_hour)"
+        threshold: 50  # $50/hour threshold

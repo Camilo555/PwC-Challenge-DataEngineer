@@ -2,6 +2,7 @@
 Advanced Alerting System
 Provides multi-channel alerting with escalation policies and intelligent filtering
 """
+
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ import requests
 try:
     from email.mime.multipart import MimeMultipart
     from email.mime.text import MimeText
+
     EMAIL_AVAILABLE = True
 except ImportError:
     EMAIL_AVAILABLE = False
@@ -32,6 +34,7 @@ logger = get_logger(__name__)
 
 class AlertSeverity(Enum):
     """Alert severity levels."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -41,6 +44,7 @@ class AlertSeverity(Enum):
 
 class AlertChannel(Enum):
     """Alert delivery channels."""
+
     EMAIL = "email"
     SLACK = "slack"
     WEBHOOK = "webhook"
@@ -51,6 +55,7 @@ class AlertChannel(Enum):
 @dataclass
 class Alert:
     """Represents an alert."""
+
     id: str
     title: str
     description: str
@@ -68,6 +73,7 @@ class Alert:
 @dataclass
 class AlertRule:
     """Defines conditions for triggering alerts."""
+
     name: str
     condition: Callable[[dict[str, Any]], bool]
     severity: AlertSeverity
@@ -98,82 +104,95 @@ class AlertManager:
     def _get_smtp_config(self) -> dict[str, Any]:
         """Get SMTP configuration from settings."""
         return {
-            'host': getattr(settings, 'smtp_host', 'localhost'),
-            'port': getattr(settings, 'smtp_port', 587),
-            'user': getattr(settings, 'smtp_user', ''),
-            'password': getattr(settings, 'smtp_password', ''),
-            'from_email': getattr(settings, 'alert_email_from', 'alerts@example.com'),
-            'to_emails': getattr(settings, 'alert_email_to', [])
+            "host": getattr(settings, "smtp_host", "localhost"),
+            "port": getattr(settings, "smtp_port", 587),
+            "user": getattr(settings, "smtp_user", ""),
+            "password": getattr(settings, "smtp_password", ""),
+            "from_email": getattr(settings, "alert_email_from", "alerts@example.com"),
+            "to_emails": getattr(settings, "alert_email_to", []),
         }
 
     def _get_slack_config(self) -> dict[str, Any]:
         """Get Slack configuration from settings."""
         return {
-            'webhook_url': getattr(settings, 'slack_webhook_url', ''),
-            'channel': getattr(settings, 'slack_channel', '#alerts'),
-            'username': 'ETL Monitor',
-            'icon_emoji': ':warning:'
+            "webhook_url": getattr(settings, "slack_webhook_url", ""),
+            "channel": getattr(settings, "slack_channel", "#alerts"),
+            "username": "ETL Monitor",
+            "icon_emoji": ":warning:",
         }
 
     def _setup_default_rules(self):
         """Setup default alerting rules."""
         # System resource alerts
-        self.add_rule(AlertRule(
-            name="high_cpu_usage",
-            condition=lambda data: data.get('cpu_usage_percent', 0) > 90,
-            severity=AlertSeverity.HIGH,
-            channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
-            cooldown_minutes=15,
-            description="CPU usage above 90%"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="high_cpu_usage",
+                condition=lambda data: data.get("cpu_usage_percent", 0) > 90,
+                severity=AlertSeverity.HIGH,
+                channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
+                cooldown_minutes=15,
+                description="CPU usage above 90%",
+            )
+        )
 
-        self.add_rule(AlertRule(
-            name="high_memory_usage",
-            condition=lambda data: data.get('memory_usage_percent', 0) > 95,
-            severity=AlertSeverity.CRITICAL,
-            channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
-            cooldown_minutes=10,
-            description="Memory usage above 95%"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="high_memory_usage",
+                condition=lambda data: data.get("memory_usage_percent", 0) > 95,
+                severity=AlertSeverity.CRITICAL,
+                channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
+                cooldown_minutes=10,
+                description="Memory usage above 95%",
+            )
+        )
 
-        self.add_rule(AlertRule(
-            name="disk_space_critical",
-            condition=lambda data: data.get('disk_usage_percent', 0) > 95,
-            severity=AlertSeverity.CRITICAL,
-            channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
-            cooldown_minutes=30,
-            description="Disk usage above 95%"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="disk_space_critical",
+                condition=lambda data: data.get("disk_usage_percent", 0) > 95,
+                severity=AlertSeverity.CRITICAL,
+                channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
+                cooldown_minutes=30,
+                description="Disk usage above 95%",
+            )
+        )
 
         # ETL pipeline alerts
-        self.add_rule(AlertRule(
-            name="etl_failure_rate_high",
-            condition=lambda data: (
-                data.get('records_failed', 0) / max(data.get('records_processed', 1), 1)
-            ) > 0.1,
-            severity=AlertSeverity.HIGH,
-            channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
-            cooldown_minutes=20,
-            description="ETL failure rate above 10%"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="etl_failure_rate_high",
+                condition=lambda data: (
+                    data.get("records_failed", 0) / max(data.get("records_processed", 1), 1)
+                )
+                > 0.1,
+                severity=AlertSeverity.HIGH,
+                channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
+                cooldown_minutes=20,
+                description="ETL failure rate above 10%",
+            )
+        )
 
-        self.add_rule(AlertRule(
-            name="data_quality_low",
-            condition=lambda data: data.get('data_quality_score', 100) < 70,
-            severity=AlertSeverity.MEDIUM,
-            channels=[AlertChannel.EMAIL],
-            cooldown_minutes=60,
-            description="Data quality score below 70%"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="data_quality_low",
+                condition=lambda data: data.get("data_quality_score", 100) < 70,
+                severity=AlertSeverity.MEDIUM,
+                channels=[AlertChannel.EMAIL],
+                cooldown_minutes=60,
+                description="Data quality score below 70%",
+            )
+        )
 
-        self.add_rule(AlertRule(
-            name="processing_time_slow",
-            condition=lambda data: data.get('processing_time_seconds', 0) > 600,
-            severity=AlertSeverity.MEDIUM,
-            channels=[AlertChannel.SLACK],
-            cooldown_minutes=30,
-            description="Processing time over 10 minutes"
-        ))
+        self.add_rule(
+            AlertRule(
+                name="processing_time_slow",
+                condition=lambda data: data.get("processing_time_seconds", 0) > 600,
+                severity=AlertSeverity.MEDIUM,
+                channels=[AlertChannel.SLACK],
+                cooldown_minutes=30,
+                description="Processing time over 10 minutes",
+            )
+        )
 
     def start(self):
         """Start the alert manager."""
@@ -239,13 +258,13 @@ class AlertManager:
 
         # Extract relevant context from metrics
         context_info = []
-        if 'cpu_usage_percent' in metrics_data:
+        if "cpu_usage_percent" in metrics_data:
             context_info.append(f"CPU: {metrics_data['cpu_usage_percent']:.1f}%")
-        if 'memory_usage_percent' in metrics_data:
+        if "memory_usage_percent" in metrics_data:
             context_info.append(f"Memory: {metrics_data['memory_usage_percent']:.1f}%")
-        if 'processing_time_seconds' in metrics_data:
+        if "processing_time_seconds" in metrics_data:
             context_info.append(f"Processing time: {metrics_data['processing_time_seconds']:.1f}s")
-        if 'data_quality_score' in metrics_data:
+        if "data_quality_score" in metrics_data:
             context_info.append(f"Quality score: {metrics_data['data_quality_score']:.1f}")
 
         context = " | ".join(context_info)
@@ -260,7 +279,7 @@ class AlertManager:
             severity=rule.severity,
             source=source,
             timestamp=datetime.now(),
-            tags={"rule": rule.name, "source": source}
+            tags={"rule": rule.name, "source": source},
         )
 
         self.alerts[alert_id] = alert
@@ -270,7 +289,9 @@ class AlertManager:
         for channel in rule.channels:
             self.alert_queue.put((alert, channel))
 
-        logger.warning(f"ALERT TRIGGERED [{rule.severity.value.upper()}]: {alert.title} - {alert.description}")
+        logger.warning(
+            f"ALERT TRIGGERED [{rule.severity.value.upper()}]: {alert.title} - {alert.description}"
+        )
 
     def _notification_worker(self):
         """Background worker for sending notifications."""
@@ -319,16 +340,16 @@ class AlertManager:
             logger.warning("Email functionality not available")
             return False
 
-        if not self.smtp_config['to_emails']:
+        if not self.smtp_config["to_emails"]:
             logger.warning("No email recipients configured")
             return False
 
         try:
             # Create message
             msg = MimeMultipart()
-            msg['From'] = self.smtp_config['from_email']
-            msg['To'] = ', '.join(self.smtp_config['to_emails'])
-            msg['Subject'] = f"[{alert.severity.value.upper()}] {alert.title}"
+            msg["From"] = self.smtp_config["from_email"]
+            msg["To"] = ", ".join(self.smtp_config["to_emails"])
+            msg["Subject"] = f"[{alert.severity.value.upper()}] {alert.title}"
 
             # Email body
             body = f"""
@@ -337,7 +358,7 @@ Alert Details:
 Title: {alert.title}
 Severity: {alert.severity.value.upper()}
 Source: {alert.source}
-Time: {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+Time: {alert.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
 Description: {alert.description}
 
 Alert ID: {alert.id}
@@ -345,14 +366,14 @@ Alert ID: {alert.id}
 This is an automated alert from the ETL monitoring system.
 """
 
-            msg.attach(MimeText(body, 'plain'))
+            msg.attach(MimeText(body, "plain"))
 
             # Send email
-            server = smtplib.SMTP(self.smtp_config['host'], self.smtp_config['port'])
+            server = smtplib.SMTP(self.smtp_config["host"], self.smtp_config["port"])
 
-            if self.smtp_config['user'] and self.smtp_config['password']:
+            if self.smtp_config["user"] and self.smtp_config["password"]:
                 server.starttls()
-                server.login(self.smtp_config['user'], self.smtp_config['password'])
+                server.login(self.smtp_config["user"], self.smtp_config["password"])
 
             server.send_message(msg)
             server.quit()
@@ -365,7 +386,7 @@ This is an automated alert from the ETL monitoring system.
 
     def _send_slack_alert(self, alert: Alert) -> bool:
         """Send alert via Slack webhook."""
-        if not self.slack_config['webhook_url']:
+        if not self.slack_config["webhook_url"]:
             logger.warning("Slack webhook URL not configured")
             return False
 
@@ -376,34 +397,40 @@ This is an automated alert from the ETL monitoring system.
                 AlertSeverity.HIGH: "warning",
                 AlertSeverity.MEDIUM: "#ff9500",
                 AlertSeverity.LOW: "good",
-                AlertSeverity.INFO: "#439FE0"
+                AlertSeverity.INFO: "#439FE0",
             }
 
             # Create Slack message
             payload = {
-                "channel": self.slack_config['channel'],
-                "username": self.slack_config['username'],
-                "icon_emoji": self.slack_config['icon_emoji'],
-                "attachments": [{
-                    "color": colors.get(alert.severity, "warning"),
-                    "title": alert.title,
-                    "text": alert.description,
-                    "fields": [
-                        {"title": "Severity", "value": alert.severity.value.upper(), "short": True},
-                        {"title": "Source", "value": alert.source, "short": True},
-                        {"title": "Time", "value": alert.timestamp.strftime('%Y-%m-%d %H:%M:%S'), "short": True},
-                        {"title": "Alert ID", "value": alert.id, "short": True}
-                    ],
-                    "footer": "ETL Monitoring System",
-                    "ts": int(alert.timestamp.timestamp())
-                }]
+                "channel": self.slack_config["channel"],
+                "username": self.slack_config["username"],
+                "icon_emoji": self.slack_config["icon_emoji"],
+                "attachments": [
+                    {
+                        "color": colors.get(alert.severity, "warning"),
+                        "title": alert.title,
+                        "text": alert.description,
+                        "fields": [
+                            {
+                                "title": "Severity",
+                                "value": alert.severity.value.upper(),
+                                "short": True,
+                            },
+                            {"title": "Source", "value": alert.source, "short": True},
+                            {
+                                "title": "Time",
+                                "value": alert.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                                "short": True,
+                            },
+                            {"title": "Alert ID", "value": alert.id, "short": True},
+                        ],
+                        "footer": "ETL Monitoring System",
+                        "ts": int(alert.timestamp.timestamp()),
+                    }
+                ],
             }
 
-            response = requests.post(
-                self.slack_config['webhook_url'],
-                json=payload,
-                timeout=10
-            )
+            response = requests.post(self.slack_config["webhook_url"], json=payload, timeout=10)
 
             return response.status_code == 200
 
@@ -424,7 +451,7 @@ This is an automated alert from the ETL monitoring system.
             AlertSeverity.HIGH: "🟠",
             AlertSeverity.MEDIUM: "🟡",
             AlertSeverity.LOW: "🔵",
-            AlertSeverity.INFO: "ℹ️"
+            AlertSeverity.INFO: "ℹ️",
         }
 
         symbol = severity_symbols.get(alert.severity, "⚠️")
@@ -469,10 +496,7 @@ This is an automated alert from the ETL monitoring system.
         """Get alert summary for the last N hours."""
         cutoff_time = datetime.now() - timedelta(hours=hours)
 
-        recent_alerts = [
-            alert for alert in self.alerts.values()
-            if alert.timestamp > cutoff_time
-        ]
+        recent_alerts = [alert for alert in self.alerts.values() if alert.timestamp > cutoff_time]
 
         # Count by severity
         severity_counts = {}
@@ -487,13 +511,13 @@ This is an automated alert from the ETL monitoring system.
             source_counts[alert.source] = source_counts.get(alert.source, 0) + 1
 
         return {
-            'period_hours': hours,
-            'total_alerts': len(recent_alerts),
-            'active_alerts': len([a for a in recent_alerts if not a.resolved]),
-            'severity_breakdown': severity_counts,
-            'source_breakdown': source_counts,
-            'most_recent': recent_alerts[-1].title if recent_alerts else None,
-            'generated_at': datetime.now().isoformat()
+            "period_hours": hours,
+            "total_alerts": len(recent_alerts),
+            "active_alerts": len([a for a in recent_alerts if not a.resolved]),
+            "severity_breakdown": severity_counts,
+            "source_breakdown": source_counts,
+            "most_recent": recent_alerts[-1].title if recent_alerts else None,
+            "generated_at": datetime.now().isoformat(),
         }
 
     def export_alerts(self, output_file: Path, hours: int = 24) -> bool:
@@ -504,21 +528,20 @@ This is an automated alert from the ETL monitoring system.
             recent_alerts = [
                 {
                     **asdict(alert),
-                    'timestamp': alert.timestamp.isoformat(),
-                    'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None,
-                    'acknowledged_at': alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
-                    'severity': alert.severity.value
+                    "timestamp": alert.timestamp.isoformat(),
+                    "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
+                    "acknowledged_at": alert.acknowledged_at.isoformat()
+                    if alert.acknowledged_at
+                    else None,
+                    "severity": alert.severity.value,
                 }
                 for alert in self.alerts.values()
                 if alert.timestamp > cutoff_time
             ]
 
-            export_data = {
-                'summary': self.get_alert_summary(hours),
-                'alerts': recent_alerts
-            }
+            export_data = {"summary": self.get_alert_summary(hours), "alerts": recent_alerts}
 
-            with open(output_file, 'w') as f:
+            with open(output_file, "w") as f:
                 json.dump(export_data, f, indent=2)
 
             logger.info(f"Alerts exported to {output_file}")
@@ -541,8 +564,13 @@ def get_alert_manager() -> AlertManager:
     return _alert_manager
 
 
-def trigger_custom_alert(title: str, description: str, severity: AlertSeverity,
-                        source: str = "custom", tags: dict[str, str] | None = None):
+def trigger_custom_alert(
+    title: str,
+    description: str,
+    severity: AlertSeverity,
+    source: str = "custom",
+    tags: dict[str, str] | None = None,
+):
     """Trigger a custom alert."""
     manager = get_alert_manager()
 
@@ -554,7 +582,7 @@ def trigger_custom_alert(title: str, description: str, severity: AlertSeverity,
         severity=severity,
         source=source,
         timestamp=datetime.now(),
-        tags=tags or {}
+        tags=tags or {},
     )
 
     manager.alerts[alert_id] = alert

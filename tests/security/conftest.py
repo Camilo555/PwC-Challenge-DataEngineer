@@ -5,14 +5,12 @@ Provides common fixtures, utilities, and test data for security testing
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import secrets
 import tempfile
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,23 +18,27 @@ import pytest_asyncio
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
-from src.core.security.enterprise_dlp import (
-    EnterpriseDLPManager, SensitiveDataType, DataClassification, DLPAction
-)
+from src.api.main import app
+from src.core.security.advanced_security import AuditLogger, SecurityEvent
 from src.core.security.compliance_framework import (
-    ComplianceEngine, ComplianceFramework, ComplianceStatus, RiskLevel
+    ComplianceEngine,
+    ComplianceFramework,
+)
+from src.core.security.enterprise_dlp import (
+    EnterpriseDLPManager,
+    SensitiveDataType,
 )
 from src.core.security.rbac_abac import (
-    AuthenticationManager, User, Role, Permission, PermissionType, AuthenticationMethod
+    AuthenticationManager,
+    AuthenticationMethod,
+    User,
 )
-from src.core.security.advanced_security import AuditLogger, SecurityEvent, ThreatLevel
-from src.api.main import app
 
 
 # Test Data Classes and Constants
 class SecurityTestData:
     """Test data for security tests"""
-    
+
     # Sample PII data for DLP testing
     SAMPLE_PII_DATA = {
         "ssn": "123-45-6789",
@@ -47,7 +49,7 @@ class SecurityTestData:
         "medical_record": "MRN-12345678",
         "bank_account": "1234567890123456"
     }
-    
+
     # Sample sensitive data for classification testing
     SAMPLE_CLASSIFIED_DATA = {
         "public": "This is public information",
@@ -56,7 +58,7 @@ class SecurityTestData:
         "restricted": "Restricted data with SSN: 123-45-6789 and CC: 4532-1234-5678-9012",
         "top_secret": "Top secret data with multiple PII elements"
     }
-    
+
     # Attack payloads for penetration testing
     SQL_INJECTION_PAYLOADS = [
         "' OR '1'='1",
@@ -66,7 +68,7 @@ class SecurityTestData:
         "admin'--",
         "'; EXEC xp_cmdshell('dir'); --"
     ]
-    
+
     XSS_PAYLOADS = [
         "<script>alert('XSS')</script>",
         "<img src=x onerror=alert('XSS')>",
@@ -75,7 +77,7 @@ class SecurityTestData:
         "'><script>alert('XSS')</script>",
         "\"><img src=x onerror=alert('XSS')>"
     ]
-    
+
     # Common weak passwords for testing
     WEAK_PASSWORDS = [
         "password",
@@ -87,7 +89,7 @@ class SecurityTestData:
         "welcome",
         "monkey"
     ]
-    
+
     # Strong passwords for testing
     STRONG_PASSWORDS = [
         "MySecureP@ssw0rd!2024",
@@ -100,14 +102,14 @@ class SecurityTestData:
 
 class SecurityTestHelpers:
     """Helper utilities for security testing"""
-    
+
     @staticmethod
-    def generate_test_user(roles: List[str] = None, mfa_enabled: bool = False) -> User:
+    def generate_test_user(roles: list[str] = None, mfa_enabled: bool = False) -> User:
         """Generate a test user with specified roles"""
         user_id = f"test_user_{secrets.token_hex(4)}"
         username = f"testuser_{secrets.token_hex(4)}"
         email = f"{username}@testdomain.com"
-        
+
         user = User(
             id=user_id,
             username=username,
@@ -118,21 +120,21 @@ class SecurityTestHelpers:
             is_active=True,
             is_verified=True
         )
-        
+
         if mfa_enabled:
             user.mfa_secret = secrets.token_urlsafe(32)
             user.mfa_methods.add(AuthenticationMethod.MFA_TOTP)
-        
+
         return user
-    
+
     @staticmethod
-    def generate_test_data_with_pii(pii_types: List[SensitiveDataType] = None) -> str:
+    def generate_test_data_with_pii(pii_types: list[SensitiveDataType] = None) -> str:
         """Generate test data containing specified PII types"""
         if pii_types is None:
             pii_types = [SensitiveDataType.EMAIL, SensitiveDataType.PHONE]
-        
+
         data_parts = ["This is a sample document containing:"]
-        
+
         for pii_type in pii_types:
             if pii_type == SensitiveDataType.SSN:
                 data_parts.append(f"SSN: {SecurityTestData.SAMPLE_PII_DATA['ssn']}")
@@ -144,15 +146,15 @@ class SecurityTestHelpers:
                 data_parts.append(f"Phone: {SecurityTestData.SAMPLE_PII_DATA['phone']}")
             elif pii_type == SensitiveDataType.IP_ADDRESS:
                 data_parts.append(f"Server IP: {SecurityTestData.SAMPLE_PII_DATA['ip_address']}")
-        
+
         return " ".join(data_parts)
-    
+
     @staticmethod
-    def create_test_jwt_token(user_id: str, roles: List[str] = None, 
+    def create_test_jwt_token(user_id: str, roles: list[str] = None,
                             expired: bool = False) -> str:
         """Create a test JWT token"""
         import jwt
-        
+
         payload = {
             "user_id": user_id,
             "username": f"testuser_{user_id}",
@@ -160,9 +162,9 @@ class SecurityTestHelpers:
             "iat": datetime.utcnow(),
             "exp": datetime.utcnow() - timedelta(hours=1) if expired else datetime.utcnow() + timedelta(hours=1)
         }
-        
+
         return jwt.encode(payload, "test_secret", algorithm="HS256")
-    
+
     @staticmethod
     def create_malicious_payload(attack_type: str, payload_data: str = None) -> str:
         """Create a malicious payload for testing"""
@@ -176,10 +178,10 @@ class SecurityTestHelpers:
             return "test; ls -la"
         else:
             return payload_data or "malicious_input"
-    
+
     @staticmethod
-    def simulate_attack_context(attack_type: str, user_agent: str = None, 
-                              source_ip: str = None) -> Dict[str, Any]:
+    def simulate_attack_context(attack_type: str, user_agent: str = None,
+                              source_ip: str = None) -> dict[str, Any]:
         """Simulate attack context"""
         return {
             "attack_type": attack_type,
@@ -306,7 +308,7 @@ def test_client():
 def authenticated_client(test_client, security_helpers, test_user_admin):
     """Provide authenticated test client"""
     token = security_helpers.create_test_jwt_token(
-        test_user_admin.id, 
+        test_user_admin.id,
         list(test_user_admin.roles)
     )
     test_client.headers = {"Authorization": f"Bearer {token}"}
@@ -324,7 +326,7 @@ def audit_logger():
 def sample_security_events():
     """Provide sample security events for testing"""
     events = []
-    
+
     # Failed login event
     events.append(SecurityEvent(
         event_id=str(uuid.uuid4()),
@@ -340,7 +342,7 @@ def sample_security_events():
             "attempt_count": 3
         }
     ))
-    
+
     # Suspicious data access event
     events.append(SecurityEvent(
         event_id=str(uuid.uuid4()),
@@ -356,7 +358,7 @@ def sample_security_events():
             "data_volume": "10GB"
         }
     ))
-    
+
     return events
 
 
@@ -413,19 +415,19 @@ def mock_external_api():
          patch('requests.post') as mock_post, \
          patch('requests.put') as mock_put, \
          patch('requests.delete') as mock_delete:
-        
+
         # Configure default responses
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {"status": "ok"}
-        
+
         mock_post.return_value.status_code = 201
         mock_post.return_value.json.return_value = {"id": "12345"}
-        
+
         mock_put.return_value.status_code = 200
         mock_put.return_value.json.return_value = {"updated": True}
-        
+
         mock_delete.return_value.status_code = 204
-        
+
         yield {
             "get": mock_get,
             "post": mock_post,
@@ -437,12 +439,12 @@ def mock_external_api():
 @pytest.fixture
 def mock_database():
     """Mock database operations for security testing"""
-    with patch('sqlalchemy.create_engine') as mock_engine, \
+    with patch('sqlalchemy.create_engine'), \
          patch('sqlalchemy.orm.sessionmaker') as mock_sessionmaker:
-        
+
         mock_session = Mock()
         mock_sessionmaker.return_value = mock_session
-        
+
         yield mock_session
 
 
@@ -451,13 +453,13 @@ def mock_database():
 def setup_test_logging():
     """Setup test logging configuration"""
     import logging
-    
+
     # Configure test logging
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     # Suppress noisy loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)

@@ -2,6 +2,7 @@
 Sales Repository Interface
 Domain layer interface for sales data access operations.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -22,11 +23,11 @@ class ISalesRepository(ABC):
         country: str | None = None,
         page: int = 1,
         size: int = 20,
-        sort: str = "invoice_date:desc"
+        sort: str = "invoice_date:desc",
     ) -> tuple[list[Sale], int]:
         """
         Get sales with filtering and pagination.
-        
+
         Args:
             date_from: Start date filter
             date_to: End date filter
@@ -35,7 +36,7 @@ class ISalesRepository(ABC):
             page: Page number (1-based)
             size: Page size
             sort: Sort specification
-            
+
         Returns:
             Tuple of (sales_list, total_count)
         """

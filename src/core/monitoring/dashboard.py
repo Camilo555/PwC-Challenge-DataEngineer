@@ -2,6 +2,7 @@
 Monitoring Dashboard
 Provides web-based dashboard for system monitoring and observability.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +14,7 @@ try:
     from fastapi.responses import HTMLResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -28,10 +30,16 @@ logger = get_logger(__name__)
 class MonitoringDashboard:
     """Web-based monitoring dashboard."""
 
-    def __init__(self, title: str = "PwC Data Engineer Challenge - Monitoring",
-                 host: str = "localhost", port: int = 8080):
+    def __init__(
+        self,
+        title: str = "PwC Data Engineer Challenge - Monitoring",
+        host: str = "localhost",
+        port: int = 8080,
+    ):
         if not FASTAPI_AVAILABLE:
-            raise ImportError("FastAPI not available. Install with: pip install fastapi uvicorn jinja2")
+            raise ImportError(
+                "FastAPI not available. Install with: pip install fastapi uvicorn jinja2"
+            )
 
         self.title = title
         self.host = host
@@ -71,10 +79,10 @@ class MonitoringDashboard:
                             "status": result.status.value,
                             "message": result.message,
                             "response_time_ms": result.response_time_ms,
-                            "details": result.details or {}
+                            "details": result.details or {},
                         }
                         for name, result in health_results.items()
-                    }
+                    },
                 }
             except Exception as e:
                 logger.error(f"Error getting health status: {e}")
@@ -106,7 +114,7 @@ class MonitoringDashboard:
                         "records_failed": metrics.records_failed,
                         "success_rate": metrics.success_rate,
                         "throughput_per_second": metrics.throughput_per_second,
-                        "error_count": len(metrics.errors)
+                        "error_count": len(metrics.errors),
                     }
                     for name, metrics in job_metrics.items()
                 }
@@ -121,7 +129,7 @@ class MonitoringDashboard:
                 active_alerts = alert_manager.get_active_alerts()
                 return {
                     "active_alerts": [alert.to_dict() for alert in active_alerts],
-                    "summary": alert_manager.get_alert_summary()
+                    "summary": alert_manager.get_alert_summary(),
                 }
             except Exception as e:
                 logger.error(f"Error getting alerts: {e}")
@@ -177,7 +185,7 @@ class MonitoringDashboard:
                     {
                         "timestamp": point.timestamp.isoformat(),
                         "value": point.value,
-                        "labels": point.labels
+                        "labels": point.labels,
                     }
                     for point in history
                 ]
@@ -197,12 +205,12 @@ class MonitoringDashboard:
                     "queues": {
                         "task_queue": {"depth": 25, "consumers": 3, "rate": 12.5},
                         "result_queue": {"depth": 5, "consumers": 2, "rate": 8.2},
-                        "etl_queue": {"depth": 150, "consumers": 5, "rate": 45.3}
+                        "etl_queue": {"depth": 150, "consumers": 5, "rate": 45.3},
                     },
                     "connections": 8,
                     "channels": 15,
                     "memory_usage_mb": 125,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             except Exception as e:
                 logger.error(f"Error getting RabbitMQ metrics: {e}")
@@ -220,19 +228,19 @@ class MonitoringDashboard:
                     "topics": {
                         "retail-transactions": {"partitions": 3, "lag": 245},
                         "customer-events": {"partitions": 2, "lag": 12},
-                        "system-events": {"partitions": 1, "lag": 0}
+                        "system-events": {"partitions": 1, "lag": 0},
                     },
                     "total_consumer_lag": 257,
                     "messages_per_sec": 125.7,
                     "under_replicated_partitions": 0,
                     "offline_partitions": 0,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             except Exception as e:
                 logger.error(f"Error getting Kafka metrics: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @self.app.get("/api/messaging/health")  
+        @self.app.get("/api/messaging/health")
         async def get_messaging_health():
             """Get overall messaging system health."""
             try:
@@ -243,21 +251,17 @@ class MonitoringDashboard:
                             "status": "healthy",
                             "queues_healthy": 3,
                             "queues_warning": 1,
-                            "queues_critical": 0
+                            "queues_critical": 0,
                         },
                         "kafka": {
                             "status": "healthy",
                             "brokers_online": 3,
                             "topics_healthy": 8,
-                            "consumer_lag_critical": 0
-                        }
+                            "consumer_lag_critical": 0,
+                        },
                     },
-                    "alerts": {
-                        "active": 2,
-                        "critical": 0,
-                        "warning": 2
-                    },
-                    "timestamp": datetime.utcnow().isoformat()
+                    "alerts": {"active": 2, "critical": 0, "warning": 2},
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             except Exception as e:
                 logger.error(f"Error getting messaging health: {e}")
@@ -277,8 +281,8 @@ class MonitoringDashboard:
                     "python_version": platform.python_version(),
                     "cpu_count": psutil.cpu_count(),
                     "memory_total_gb": psutil.virtual_memory().total / (1024**3),
-                    "disk_total_gb": psutil.disk_usage('/').total / (1024**3),
-                    "uptime": datetime.utcnow().isoformat()  # App uptime would be tracked separately
+                    "disk_total_gb": psutil.disk_usage("/").total / (1024**3),
+                    "uptime": datetime.utcnow().isoformat(),  # App uptime would be tracked separately
                 }
             except Exception as e:
                 logger.error(f"Error getting system info: {e}")
@@ -286,13 +290,16 @@ class MonitoringDashboard:
 
     def _render_dashboard_html(self) -> str:
         """Render the main dashboard HTML."""
-        return """
+        return (
+            """
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>""" + self.title + """</title>
+            <title>"""
+            + self.title
+            + """</title>
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <style>
                 body {
@@ -301,7 +308,7 @@ class MonitoringDashboard:
                     padding: 20px;
                     background-color: #f5f5f5;
                 }
-                
+
                 .header {
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     color: white;
@@ -309,26 +316,26 @@ class MonitoringDashboard:
                     border-radius: 10px;
                     margin-bottom: 20px;
                 }
-                
+
                 .dashboard-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
                     gap: 20px;
                     margin-bottom: 20px;
                 }
-                
+
                 .card {
                     background: white;
                     padding: 20px;
                     border-radius: 10px;
                     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                 }
-                
+
                 .card h3 {
                     margin-top: 0;
                     color: #333;
                 }
-                
+
                 .status-indicator {
                     display: inline-block;
                     width: 12px;
@@ -336,18 +343,18 @@ class MonitoringDashboard:
                     border-radius: 50%;
                     margin-right: 8px;
                 }
-                
+
                 .status-healthy { background-color: #4CAF50; }
                 .status-degraded { background-color: #FF9800; }
                 .status-unhealthy { background-color: #F44336; }
                 .status-unknown { background-color: #9E9E9E; }
-                
+
                 .metric-value {
                     font-size: 2em;
                     font-weight: bold;
                     color: #2196F3;
                 }
-                
+
                 .alert-item {
                     padding: 10px;
                     margin: 5px 0;
@@ -355,12 +362,12 @@ class MonitoringDashboard:
                     border-radius: 4px;
                     background-color: #f9f9f9;
                 }
-                
+
                 .alert-critical { border-left-color: #9C27B0; }
                 .alert-error { border-left-color: #F44336; }
                 .alert-warning { border-left-color: #FF9800; }
                 .alert-info { border-left-color: #2196F3; }
-                
+
                 .job-status {
                     display: inline-block;
                     padding: 4px 8px;
@@ -368,11 +375,11 @@ class MonitoringDashboard:
                     color: white;
                     font-size: 0.8em;
                 }
-                
+
                 .job-running { background-color: #2196F3; }
                 .job-completed { background-color: #4CAF50; }
                 .job-failed { background-color: #F44336; }
-                
+
                 .refresh-btn {
                     background: #2196F3;
                     color: white;
@@ -382,28 +389,28 @@ class MonitoringDashboard:
                     cursor: pointer;
                     margin: 10px 0;
                 }
-                
+
                 .refresh-btn:hover {
                     background: #1976D2;
                 }
-                
+
                 .table {
                     width: 100%;
                     border-collapse: collapse;
                     margin-top: 10px;
                 }
-                
+
                 .table th, .table td {
                     padding: 8px 12px;
                     text-align: left;
                     border-bottom: 1px solid #ddd;
                 }
-                
+
                 .table th {
                     background-color: #f5f5f5;
                     font-weight: 600;
                 }
-                
+
                 #refreshIndicator {
                     position: fixed;
                     top: 20px;
@@ -418,14 +425,16 @@ class MonitoringDashboard:
         </head>
         <body>
             <div id="refreshIndicator">Updated ✓</div>
-            
+
             <div class="header">
-                <h1>""" + self.title + """</h1>
+                <h1>"""
+            + self.title
+            + """</h1>
                 <p>Real-time monitoring dashboard</p>
                 <button class="refresh-btn" onclick="refreshAll()">Refresh All</button>
                 <span id="lastUpdate"></span>
             </div>
-            
+
             <!-- Overall Status -->
             <div class="dashboard-grid">
                 <div class="card">
@@ -436,13 +445,13 @@ class MonitoringDashboard:
                     </div>
                     <div id="healthComponents"></div>
                 </div>
-                
+
                 <div class="card">
                     <h3>Active Alerts</h3>
                     <div class="metric-value" id="activeAlertCount">-</div>
                     <div id="alertSummary"></div>
                 </div>
-                
+
                 <div class="card">
                     <h3>ETL Jobs</h3>
                     <div id="jobsSummary">
@@ -451,51 +460,51 @@ class MonitoringDashboard:
                         <div>Failed: <span id="failedJobs">-</span></div>
                     </div>
                 </div>
-                
+
                 <div class="card">
                     <h3>System Resources</h3>
                     <div id="systemResources">Loading...</div>
                 </div>
-                
+
                 <div class="card">
                     <h3>RabbitMQ Status</h3>
                     <div id="rabbitmqStatus">Loading...</div>
                 </div>
-                
+
                 <div class="card">
                     <h3>Kafka Status</h3>
                     <div id="kafkaStatus">Loading...</div>
                 </div>
             </div>
-            
+
             <!-- Detailed Views -->
             <div class="dashboard-grid">
                 <div class="card">
                     <h3>Recent Jobs</h3>
                     <div id="recentJobs"></div>
                 </div>
-                
+
                 <div class="card">
                     <h3>Active Alerts</h3>
                     <div id="activeAlerts"></div>
                 </div>
             </div>
-            
+
             <div class="dashboard-grid">
                 <div class="card">
                     <h3>Health Check Details</h3>
                     <div id="healthDetails"></div>
                 </div>
-                
+
                 <div class="card">
                     <h3>System Information</h3>
                     <div id="systemInfo"></div>
                 </div>
             </div>
-            
+
             <script>
                 let refreshInterval;
-                
+
                 async function fetchAPI(endpoint) {
                     try {
                         const response = await fetch(`/api${endpoint}`);
@@ -506,7 +515,7 @@ class MonitoringDashboard:
                         return null;
                     }
                 }
-                
+
                 function showRefreshIndicator() {
                     const indicator = document.getElementById('refreshIndicator');
                     indicator.style.display = 'block';
@@ -514,21 +523,21 @@ class MonitoringDashboard:
                         indicator.style.display = 'none';
                     }, 1500);
                 }
-                
+
                 async function updateHealth() {
                     const health = await fetchAPI('/health');
                     if (!health) return;
-                    
+
                     const overallElement = document.getElementById('overallHealth');
                     const statusClass = `status-${health.overall_status}`;
                     overallElement.innerHTML = `
                         <div class="status-indicator ${statusClass}"></div>
                         System Status: ${health.overall_status.toUpperCase()}
                     `;
-                    
+
                     const componentsElement = document.getElementById('healthComponents');
                     let componentsHtml = '<div class="table-container"><table class="table"><thead><tr><th>Component</th><th>Status</th><th>Response Time</th></tr></thead><tbody>';
-                    
+
                     Object.entries(health.components).forEach(([name, component]) => {
                         const statusClass = `status-${component.status}`;
                         componentsHtml += `
@@ -539,10 +548,10 @@ class MonitoringDashboard:
                             </tr>
                         `;
                     });
-                    
+
                     componentsHtml += '</tbody></table></div>';
                     componentsElement.innerHTML = componentsHtml;
-                    
+
                     // Update detailed health view
                     const detailsElement = document.getElementById('healthDetails');
                     let detailsHtml = '';
@@ -557,13 +566,13 @@ class MonitoringDashboard:
                     });
                     detailsElement.innerHTML = detailsHtml;
                 }
-                
+
                 async function updateAlerts() {
                     const alerts = await fetchAPI('/alerts');
                     if (!alerts) return;
-                    
+
                     document.getElementById('activeAlertCount').textContent = alerts.active_alerts.length;
-                    
+
                     const summaryElement = document.getElementById('alertSummary');
                     const summary = alerts.summary.active_by_severity;
                     summaryElement.innerHTML = `
@@ -572,7 +581,7 @@ class MonitoringDashboard:
                         <div>Warning: ${summary.warning || 0}</div>
                         <div>Info: ${summary.info || 0}</div>
                     `;
-                    
+
                     const activeAlertsElement = document.getElementById('activeAlerts');
                     if (alerts.active_alerts.length === 0) {
                         activeAlertsElement.innerHTML = '<p>No active alerts ✓</p>';
@@ -590,26 +599,26 @@ class MonitoringDashboard:
                         activeAlertsElement.innerHTML = alertsHtml;
                     }
                 }
-                
+
                 async function updateJobs() {
                     const jobs = await fetchAPI('/metrics/jobs');
                     if (!jobs) return;
-                    
+
                     const jobsArray = Object.values(jobs);
                     const running = jobsArray.filter(j => j.status === 'running').length;
                     const completed = jobsArray.filter(j => j.status === 'completed').length;
                     const failed = jobsArray.filter(j => j.status === 'failed').length;
-                    
+
                     document.getElementById('runningJobs').textContent = running;
                     document.getElementById('completedJobs').textContent = completed;
                     document.getElementById('failedJobs').textContent = failed;
-                    
+
                     const recentJobsElement = document.getElementById('recentJobs');
                     if (jobsArray.length === 0) {
                         recentJobsElement.innerHTML = '<p>No job data available</p>';
                     } else {
                         let jobsHtml = '<table class="table"><thead><tr><th>Job</th><th>Status</th><th>Records</th><th>Success Rate</th></tr></thead><tbody>';
-                        
+
                         jobsArray.slice(-10).forEach(job => {
                             jobsHtml += `
                                 <tr>
@@ -620,16 +629,16 @@ class MonitoringDashboard:
                                 </tr>
                             `;
                         });
-                        
+
                         jobsHtml += '</tbody></table>';
                         recentJobsElement.innerHTML = jobsHtml;
                     }
                 }
-                
+
                 async function updateSystemInfo() {
                     const systemInfo = await fetchAPI('/system/info');
                     if (!systemInfo) return;
-                    
+
                     const infoElement = document.getElementById('systemInfo');
                     infoElement.innerHTML = `
                         <div><strong>Platform:</strong> ${systemInfo.platform}</div>
@@ -639,16 +648,16 @@ class MonitoringDashboard:
                         <div><strong>Disk:</strong> ${systemInfo.disk_total_gb.toFixed(1)} GB</div>
                     `;
                 }
-                
+
                 async function updateRabbitMQ() {
                     const rabbitmq = await fetchAPI('/messaging/rabbitmq');
                     if (!rabbitmq) return;
-                    
+
                     const statusElement = document.getElementById('rabbitmqStatus');
                     const statusClass = `status-${rabbitmq.status}`;
-                    
+
                     let queuesHtml = '<div class="table-container"><table class="table"><thead><tr><th>Queue</th><th>Depth</th><th>Consumers</th><th>Rate</th></tr></thead><tbody>';
-                    
+
                     Object.entries(rabbitmq.queues).forEach(([name, stats]) => {
                         queuesHtml += `
                             <tr>
@@ -659,9 +668,9 @@ class MonitoringDashboard:
                             </tr>
                         `;
                     });
-                    
+
                     queuesHtml += '</tbody></table></div>';
-                    
+
                     statusElement.innerHTML = `
                         <div><span class="status-indicator ${statusClass}"></span>${rabbitmq.status}</div>
                         <div><strong>Connections:</strong> ${rabbitmq.connections}</div>
@@ -670,16 +679,16 @@ class MonitoringDashboard:
                         ${queuesHtml}
                     `;
                 }
-                
+
                 async function updateKafka() {
                     const kafka = await fetchAPI('/messaging/kafka');
                     if (!kafka) return;
-                    
+
                     const statusElement = document.getElementById('kafkaStatus');
                     const statusClass = `status-${kafka.status}`;
-                    
+
                     let topicsHtml = '<div class="table-container"><table class="table"><thead><tr><th>Topic</th><th>Partitions</th><th>Lag</th></tr></thead><tbody>';
-                    
+
                     Object.entries(kafka.topics).forEach(([name, stats]) => {
                         topicsHtml += `
                             <tr>
@@ -689,9 +698,9 @@ class MonitoringDashboard:
                             </tr>
                         `;
                     });
-                    
+
                     topicsHtml += '</tbody></table></div>';
-                    
+
                     statusElement.innerHTML = `
                         <div><span class="status-indicator ${statusClass}"></span>${kafka.status}</div>
                         <div><strong>Brokers:</strong> ${kafka.brokers}</div>
@@ -702,30 +711,30 @@ class MonitoringDashboard:
                         ${topicsHtml}
                     `;
                 }
-                
+
                 async function refreshAll() {
                     await Promise.all([
                         updateHealth(),
-                        updateAlerts(), 
+                        updateAlerts(),
                         updateJobs(),
                         updateSystemInfo(),
                         updateRabbitMQ(),
                         updateKafka()
                     ]);
-                    
-                    document.getElementById('lastUpdate').textContent = 
+
+                    document.getElementById('lastUpdate').textContent =
                         `Last updated: ${new Date().toLocaleTimeString()}`;
                     showRefreshIndicator();
                 }
-                
+
                 // Initialize dashboard
                 document.addEventListener('DOMContentLoaded', function() {
                     refreshAll();
-                    
+
                     // Auto-refresh every 30 seconds
                     refreshInterval = setInterval(refreshAll, 30000);
                 });
-                
+
                 // Stop auto-refresh when page is not visible
                 document.addEventListener('visibilitychange', function() {
                     if (document.hidden) {
@@ -741,9 +750,11 @@ class MonitoringDashboard:
         </body>
         </html>
         """
+        )
 
     def start_background_monitoring(self):
         """Start background monitoring tasks."""
+
         async def monitoring_loop():
             while True:
                 try:
@@ -767,7 +778,7 @@ class MonitoringDashboard:
             # System resource metrics
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
 
             # Update metrics collector
             default_collector.set_gauge("system_cpu_percent", cpu_percent)
@@ -789,12 +800,7 @@ class MonitoringDashboard:
         self.start_background_monitoring()
 
         try:
-            config = uvicorn.Config(
-                self.app,
-                host=self.host,
-                port=self.port,
-                log_level="info"
-            )
+            config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="info")
             server = uvicorn.Server(config)
             await server.serve()
 
@@ -813,20 +819,23 @@ class MonitoringDashboard:
 
 # Utility functions for dashboard setup
 
-def create_monitoring_dashboard(title: str = "System Monitoring Dashboard",
-                              host: str = "localhost",
-                              port: int = 8080) -> MonitoringDashboard:
+
+def create_monitoring_dashboard(
+    title: str = "System Monitoring Dashboard", host: str = "localhost", port: int = 8080
+) -> MonitoringDashboard:
     """Create and configure monitoring dashboard."""
     dashboard = MonitoringDashboard(title=title, host=host, port=port)
     logger.info(f"Monitoring dashboard created at http://{host}:{port}")
     return dashboard
 
 
-async def setup_monitoring_stack(database_url: str | None = None,
-                                rabbitmq_host: str | None = None,
-                                kafka_servers: list[str] | None = None,
-                                enable_dashboard: bool = True,
-                                dashboard_port: int = 8080):
+async def setup_monitoring_stack(
+    database_url: str | None = None,
+    rabbitmq_host: str | None = None,
+    kafka_servers: list[str] | None = None,
+    enable_dashboard: bool = True,
+    dashboard_port: int = 8080,
+):
     """Setup complete monitoring stack."""
     from core.monitoring.alerting import (
         LogAlertChannel,
@@ -840,7 +849,7 @@ async def setup_monitoring_stack(database_url: str | None = None,
         database_url=database_url,
         rabbitmq_host=rabbitmq_host,
         kafka_servers=kafka_servers,
-        file_paths=["/tmp", "/var/log"] if database_url else None
+        file_paths=["/tmp", "/var/log"] if database_url else None,
     )
 
     # Setup basic alert rules
@@ -855,7 +864,12 @@ async def setup_monitoring_stack(database_url: str | None = None,
     alert_manager.add_channel(log_channel)
 
     # Route all alerts to log channel
-    for severity in [AlertSeverity.INFO, AlertSeverity.WARNING, AlertSeverity.ERROR, AlertSeverity.CRITICAL]:
+    for severity in [
+        AlertSeverity.INFO,
+        AlertSeverity.WARNING,
+        AlertSeverity.ERROR,
+        AlertSeverity.CRITICAL,
+    ]:
         alert_manager.set_channel_routing(severity, ["system_log"])
 
     # Start dashboard if requested
@@ -864,7 +878,7 @@ async def setup_monitoring_stack(database_url: str | None = None,
         dashboard = create_monitoring_dashboard(port=dashboard_port)
 
         # Start dashboard in background
-        dashboard_task = asyncio.create_task(dashboard.run())
+        asyncio.create_task(dashboard.run())
         logger.info(f"Monitoring dashboard available at http://localhost:{dashboard_port}")
 
     logger.info("Monitoring stack setup complete")

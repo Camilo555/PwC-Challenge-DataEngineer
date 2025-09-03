@@ -2,6 +2,7 @@
 Advanced Configuration Management System
 Provides hierarchical configuration, environment management, and validation.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -20,11 +21,12 @@ import yaml
 
 from core.logging import get_logger
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ConfigFormat(Enum):
     """Supported configuration formats"""
+
     JSON = "json"
     YAML = "yaml"
     ENV = "env"
@@ -33,6 +35,7 @@ class ConfigFormat(Enum):
 
 class Environment(Enum):
     """Deployment environments"""
+
     DEVELOPMENT = "development"
     TESTING = "testing"
     STAGING = "staging"
@@ -43,6 +46,7 @@ class Environment(Enum):
 @dataclass
 class ConfigMetadata:
     """Metadata about configuration"""
+
     name: str
     version: str
     description: str
@@ -81,6 +85,7 @@ class SchemaValidator(ConfigValidator):
 
         try:
             import jsonschema
+
             jsonschema.validate(config, self.schema)
             return True
         except ImportError:
@@ -130,7 +135,9 @@ class ConfigLoader:
     def __init__(self):
         self.logger = get_logger(self.__class__.__name__)
 
-    def load_file(self, file_path: str | Path, format: ConfigFormat | None = None) -> dict[str, Any]:
+    def load_file(
+        self, file_path: str | Path, format: ConfigFormat | None = None
+    ) -> dict[str, Any]:
         """Load configuration from file"""
         file_path = Path(file_path)
 
@@ -143,7 +150,7 @@ class ConfigLoader:
 
         self.logger.info(f"Loading configuration from {file_path} (format: {format.value})")
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             if format == ConfigFormat.JSON:
                 return json.load(f)
             elif format == ConfigFormat.YAML:
@@ -160,7 +167,7 @@ class ConfigLoader:
 
         for key, value in os.environ.items():
             if not prefix or key.startswith(prefix):
-                config_key = key[len(prefix):] if prefix else key
+                config_key = key[len(prefix) :] if prefix else key
                 config[config_key.lower()] = self._convert_env_value(value)
 
         return config
@@ -169,11 +176,11 @@ class ConfigLoader:
         """Auto-detect configuration format from file extension"""
         suffix = file_path.suffix.lower()
 
-        if suffix in ['.json']:
+        if suffix in [".json"]:
             return ConfigFormat.JSON
-        elif suffix in ['.yaml', '.yml']:
+        elif suffix in [".yaml", ".yml"]:
             return ConfigFormat.YAML
-        elif suffix in ['.py']:
+        elif suffix in [".py"]:
             return ConfigFormat.PYTHON
         else:
             raise ValueError(f"Cannot detect format for file: {file_path}")
@@ -189,7 +196,7 @@ class ConfigLoader:
         # Extract variables that don't start with underscore
         config = {}
         for name in dir(module):
-            if not name.startswith('_'):
+            if not name.startswith("_"):
                 value = getattr(module, name)
                 if not callable(value) and not isinstance(value, type):
                     config[name.lower()] = value
@@ -205,8 +212,8 @@ class ConfigLoader:
             pass
 
         # Try boolean
-        if value.lower() in ('true', 'false'):
-            return value.lower() == 'true'
+        if value.lower() in ("true", "false"):
+            return value.lower() == "true"
 
         # Try integer
         try:
@@ -301,11 +308,12 @@ class ConfigCache:
 class AdvancedConfigManager:
     """Advanced configuration manager with hierarchical loading and validation"""
 
-    def __init__(self,
-                 config_dir: str | Path = "./config",
-                 environment: Environment | None = None,
-                 cache_enabled: bool = True):
-
+    def __init__(
+        self,
+        config_dir: str | Path = "./config",
+        environment: Environment | None = None,
+        cache_enabled: bool = True,
+    ):
         self.config_dir = Path(config_dir)
         self.environment = environment or self._detect_environment()
         self.cache_enabled = cache_enabled
@@ -322,7 +330,7 @@ class AdvancedConfigManager:
 
     def _detect_environment(self) -> Environment:
         """Auto-detect current environment"""
-        env = os.getenv('ENVIRONMENT', os.getenv('ENV', 'development')).lower()
+        env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
 
         try:
             return Environment(env)
@@ -336,11 +344,13 @@ class AdvancedConfigManager:
             self.validators[config_name] = []
         self.validators[config_name].append(validator)
 
-    def load_config(self,
-                   config_name: str,
-                   config_class: type[T] | None = None,
-                   validate: bool = True,
-                   use_cache: bool = True) -> dict[str, Any] | T:
+    def load_config(
+        self,
+        config_name: str,
+        config_class: type[T] | None = None,
+        validate: bool = True,
+        use_cache: bool = True,
+    ) -> dict[str, Any] | T:
         """Load configuration with hierarchical merging"""
 
         cache_key = f"{config_name}_{self.environment.value}"
@@ -397,7 +407,9 @@ class AdvancedConfigManager:
             try:
                 result = config_class(**merged_config)
             except TypeError as e:
-                raise ValueError(f"Failed to create {config_class.__name__} from configuration: {e}")
+                raise ValueError(
+                    f"Failed to create {config_class.__name__} from configuration: {e}"
+                )
         else:
             result = merged_config
 
@@ -406,7 +418,9 @@ class AdvancedConfigManager:
             checksum = self._calculate_checksum(config_name)
             self.cache.set(cache_key, result, checksum)
 
-        self.logger.info(f"Loaded configuration '{config_name}' for environment '{self.environment.value}'")
+        self.logger.info(
+            f"Loaded configuration '{config_name}' for environment '{self.environment.value}'"
+        )
 
         return result
 
@@ -422,7 +436,9 @@ class AdvancedConfigManager:
                 all_errors.extend(validator.get_errors())
 
         if all_errors:
-            error_msg = f"Configuration validation failed for '{config_name}':\n" + "\n".join(f"  - {error}" for error in all_errors)
+            error_msg = f"Configuration validation failed for '{config_name}':\n" + "\n".join(
+                f"  - {error}" for error in all_errors
+            )
             raise ValueError(error_msg)
 
     def _calculate_checksum(self, config_name: str) -> str:
@@ -433,7 +449,7 @@ class AdvancedConfigManager:
         config_files = [
             self.config_dir / f"{config_name}.yaml",
             self.config_dir / f"{config_name}.{self.environment.value}.yaml",
-            self.config_dir / f"{config_name}.local.yaml"
+            self.config_dir / f"{config_name}.local.yaml",
         ]
 
         for config_file in config_files:
@@ -447,11 +463,13 @@ class AdvancedConfigManager:
 
         return hasher.hexdigest()
 
-    def save_config(self,
-                   config_name: str,
-                   config: dict[str, Any] | Any,
-                   environment: Environment | None = None,
-                   format: ConfigFormat = ConfigFormat.YAML) -> None:
+    def save_config(
+        self,
+        config_name: str,
+        config: dict[str, Any] | Any,
+        environment: Environment | None = None,
+        format: ConfigFormat = ConfigFormat.YAML,
+    ) -> None:
         """Save configuration to file"""
 
         env = environment or self.environment
@@ -460,7 +478,7 @@ class AdvancedConfigManager:
             raise ValueError("Cannot save configuration in production environment")
 
         # Convert dataclass to dict if needed
-        if hasattr(config, '__dataclass_fields__'):
+        if hasattr(config, "__dataclass_fields__"):
             config_dict = {field.name: getattr(config, field.name) for field in fields(config)}
         else:
             config_dict = config
@@ -472,7 +490,7 @@ class AdvancedConfigManager:
             output_file = self.config_dir / f"{config_name}.{env.value}.yaml"
 
         # Save configuration
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             if format == ConfigFormat.YAML:
                 yaml.dump(config_dict, f, default_flow_style=False, indent=2)
             elif format == ConfigFormat.JSON:
@@ -497,7 +515,7 @@ class AdvancedConfigManager:
         config_files = [
             self.config_dir / f"{config_name}.yaml",
             self.config_dir / f"{config_name}.{self.environment.value}.yaml",
-            self.config_dir / f"{config_name}.local.yaml"
+            self.config_dir / f"{config_name}.local.yaml",
         ]
 
         for config_file in config_files:
@@ -516,7 +534,7 @@ class AdvancedConfigManager:
             created_at=last_modified,
             last_modified=last_modified,
             checksum=checksum,
-            source_files=source_files
+            source_files=source_files,
         )
 
     def list_configurations(self) -> list[str]:
@@ -530,14 +548,14 @@ class AdvancedConfigManager:
             # Remove environment suffixes
             for env in Environment:
                 if name.endswith(f".{env.value}"):
-                    name = name[:-len(f".{env.value}")]
+                    name = name[: -len(f".{env.value}")]
                     break
             if name.endswith(".local"):
                 name = name[:-6]  # Remove .local
 
             config_names.add(name)
 
-        return sorted(list(config_names))
+        return sorted(config_names)
 
     def reload_config(self, config_name: str) -> None:
         """Force reload configuration (clear cache)"""
@@ -553,8 +571,7 @@ _global_config_manager: AdvancedConfigManager | None = None
 
 
 def get_config_manager(
-    config_dir: str | Path = "./config",
-    environment: Environment | None = None
+    config_dir: str | Path = "./config", environment: Environment | None = None
 ) -> AdvancedConfigManager:
     """Get the global configuration manager instance"""
     global _global_config_manager
@@ -567,9 +584,7 @@ def get_config_manager(
 
 @lru_cache(maxsize=32)
 def load_config(
-    config_name: str,
-    config_class: type[T] | None = None,
-    validate: bool = True
+    config_name: str, config_class: type[T] | None = None, validate: bool = True
 ) -> dict[str, Any] | T:
     """Convenience function to load configuration"""
     manager = get_config_manager()

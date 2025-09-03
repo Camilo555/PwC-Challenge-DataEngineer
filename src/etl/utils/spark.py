@@ -19,6 +19,7 @@ def get_spark(app_name: str | None = None) -> SparkSession:
     if platform.system() == "Windows":
         try:
             from etl.utils.windows_spark import create_windows_spark_session
+
             logger.info("Using Windows-optimized Spark configuration")
             return create_windows_spark_session(app)
         except ImportError:
@@ -29,10 +30,7 @@ def get_spark(app_name: str | None = None) -> SparkSession:
     # Standard Spark configuration
     logger.info("Using standard Spark configuration")
 
-    builder = (
-        SparkSession.builder.appName(app)
-        .master(settings.spark_master)
-    )
+    builder = SparkSession.builder.appName(app).master(settings.spark_master)
 
     # Apply base configuration
     spark_config = settings.spark_config

@@ -2,6 +2,7 @@
 Correlation ID and Context Management
 Provides correlation ID generation, propagation, and context management for distributed tracing.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -16,23 +17,23 @@ logger = get_logger(__name__)
 
 # Context variables for correlation data
 correlation_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'correlation_id', default=None
+    "correlation_id", default=None
 )
 
 trace_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'trace_id', default=None
+    "trace_id", default=None
 )
 
 user_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'user_id', default=None
+    "user_id", default=None
 )
 
 request_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'request_id', default=None
+    "request_id", default=None
 )
 
 operation_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'operation', default=None
+    "operation", default=None
 )
 
 
@@ -49,7 +50,7 @@ class CorrelationContext:
         user_id: str | None = None,
         request_id: str | None = None,
         operation: str | None = None,
-        **additional_context
+        **additional_context,
     ):
         self.correlation_id = correlation_id or generate_correlation_id()
         self.trace_id = trace_id
@@ -65,11 +66,11 @@ class CorrelationContext:
         """Enter correlation context."""
         # Store original values
         self._original_values = {
-            'correlation_id': correlation_id_context.get(None),
-            'trace_id': trace_id_context.get(None),
-            'user_id': user_id_context.get(None),
-            'request_id': request_id_context.get(None),
-            'operation': operation_context.get(None)
+            "correlation_id": correlation_id_context.get(None),
+            "trace_id": trace_id_context.get(None),
+            "user_id": user_id_context.get(None),
+            "request_id": request_id_context.get(None),
+            "operation": operation_context.get(None),
         }
 
         # Set new values
@@ -91,16 +92,17 @@ class CorrelationContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit correlation context and restore original values."""
         # Restore original values
-        correlation_id_context.set(self._original_values['correlation_id'])
-        trace_id_context.set(self._original_values['trace_id'])
-        user_id_context.set(self._original_values['user_id'])
-        request_id_context.set(self._original_values['request_id'])
-        operation_context.set(self._original_values['operation'])
+        correlation_id_context.set(self._original_values["correlation_id"])
+        trace_id_context.set(self._original_values["trace_id"])
+        user_id_context.set(self._original_values["user_id"])
+        request_id_context.set(self._original_values["request_id"])
+        operation_context.set(self._original_values["operation"])
 
     def _add_to_current_span(self):
         """Add correlation data to current OpenTelemetry span."""
         try:
             from .tracer import get_tracer
+
             tracer = get_tracer()
 
             if tracer.is_available():
@@ -124,34 +126,28 @@ class CorrelationContext:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert correlation context to dictionary."""
-        data = {
-            'correlation_id': self.correlation_id,
-            'request_id': self.request_id
-        }
+        data = {"correlation_id": self.correlation_id, "request_id": self.request_id}
 
         if self.trace_id:
-            data['trace_id'] = self.trace_id
+            data["trace_id"] = self.trace_id
         if self.user_id:
-            data['user_id'] = self.user_id
+            data["user_id"] = self.user_id
         if self.operation:
-            data['operation'] = self.operation
+            data["operation"] = self.operation
 
         data.update(self.additional_context)
         return data
 
     def to_headers(self) -> dict[str, str]:
         """Convert correlation context to HTTP headers."""
-        headers = {
-            'X-Correlation-ID': self.correlation_id,
-            'X-Request-ID': self.request_id
-        }
+        headers = {"X-Correlation-ID": self.correlation_id, "X-Request-ID": self.request_id}
 
         if self.trace_id:
-            headers['X-Trace-ID'] = self.trace_id
+            headers["X-Trace-ID"] = self.trace_id
         if self.user_id:
-            headers['X-User-ID'] = self.user_id
+            headers["X-User-ID"] = self.user_id
         if self.operation:
-            headers['X-Operation'] = self.operation
+            headers["X-Operation"] = self.operation
 
         return headers
 
@@ -159,11 +155,11 @@ class CorrelationContext:
     def from_headers(cls, headers: dict[str, str]) -> CorrelationContext:
         """Create correlation context from HTTP headers."""
         return cls(
-            correlation_id=headers.get('X-Correlation-ID') or headers.get('x-correlation-id'),
-            trace_id=headers.get('X-Trace-ID') or headers.get('x-trace-id'),
-            user_id=headers.get('X-User-ID') or headers.get('x-user-id'),
-            request_id=headers.get('X-Request-ID') or headers.get('x-request-id'),
-            operation=headers.get('X-Operation') or headers.get('x-operation')
+            correlation_id=headers.get("X-Correlation-ID") or headers.get("x-correlation-id"),
+            trace_id=headers.get("X-Trace-ID") or headers.get("x-trace-id"),
+            user_id=headers.get("X-User-ID") or headers.get("x-user-id"),
+            request_id=headers.get("X-Request-ID") or headers.get("x-request-id"),
+            operation=headers.get("X-Operation") or headers.get("x-operation"),
         )
 
 
@@ -195,6 +191,7 @@ def get_trace_id() -> str | None:
         # Try to get from OpenTelemetry
         try:
             from .tracer import get_tracer
+
             tracer = get_tracer()
             trace_id = tracer.get_current_trace_id()
             if trace_id:
@@ -242,16 +239,16 @@ def set_operation(operation: str) -> None:
 def get_correlation_context() -> dict[str, str | None]:
     """
     Get all correlation context data.
-    
+
     Returns:
         Dictionary with correlation data
     """
     return {
-        'correlation_id': get_correlation_id(),
-        'trace_id': get_trace_id(),
-        'user_id': get_user_id(),
-        'request_id': get_request_id(),
-        'operation': get_operation()
+        "correlation_id": get_correlation_id(),
+        "trace_id": get_trace_id(),
+        "user_id": get_user_id(),
+        "request_id": get_request_id(),
+        "operation": get_operation(),
     }
 
 
@@ -262,11 +259,11 @@ def correlation_context(
     user_id: str | None = None,
     request_id: str | None = None,
     operation: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> Generator[CorrelationContext, None, None]:
     """
     Context manager for correlation data.
-    
+
     Args:
         correlation_id: Correlation ID
         trace_id: Trace ID
@@ -281,7 +278,7 @@ def correlation_context(
         user_id=user_id,
         request_id=request_id,
         operation=operation,
-        **kwargs
+        **kwargs,
     )
 
     with context:
@@ -291,27 +288,28 @@ def correlation_context(
 def propagate_context() -> dict[str, str]:
     """
     Get correlation context as propagation headers.
-    
+
     Returns:
         Dictionary of headers for context propagation
     """
     context = get_correlation_context()
     headers = {}
 
-    if context['correlation_id']:
-        headers['X-Correlation-ID'] = context['correlation_id']
-    if context['trace_id']:
-        headers['X-Trace-ID'] = context['trace_id']
-    if context['user_id']:
-        headers['X-User-ID'] = context['user_id']
-    if context['request_id']:
-        headers['X-Request-ID'] = context['request_id']
-    if context['operation']:
-        headers['X-Operation'] = context['operation']
+    if context["correlation_id"]:
+        headers["X-Correlation-ID"] = context["correlation_id"]
+    if context["trace_id"]:
+        headers["X-Trace-ID"] = context["trace_id"]
+    if context["user_id"]:
+        headers["X-User-ID"] = context["user_id"]
+    if context["request_id"]:
+        headers["X-Request-ID"] = context["request_id"]
+    if context["operation"]:
+        headers["X-Operation"] = context["operation"]
 
     # Add OpenTelemetry trace context if available
     try:
         from .tracer import get_trace_context
+
         otel_headers = get_trace_context()
         headers.update(otel_headers)
     except ImportError:
@@ -323,10 +321,10 @@ def propagate_context() -> dict[str, str]:
 def extract_context_from_headers(headers: dict[str, str]) -> CorrelationContext:
     """
     Extract correlation context from HTTP headers.
-    
+
     Args:
         headers: HTTP headers dictionary
-        
+
     Returns:
         CorrelationContext instance
     """
@@ -337,7 +335,7 @@ def extract_context_from_headers(headers: dict[str, str]) -> CorrelationContext:
 def get_correlation_fields() -> dict[str, Any]:
     """
     Get correlation fields for structured logging.
-    
+
     Returns:
         Dictionary of correlation fields
     """
@@ -345,22 +343,22 @@ def get_correlation_fields() -> dict[str, Any]:
 
     correlation_id = get_correlation_id()
     if correlation_id:
-        fields['correlation_id'] = correlation_id
+        fields["correlation_id"] = correlation_id
 
     trace_id = get_trace_id()
     if trace_id:
-        fields['trace_id'] = trace_id
+        fields["trace_id"] = trace_id
 
     user_id = get_user_id()
     if user_id:
-        fields['user_id'] = user_id
+        fields["user_id"] = user_id
 
     request_id = get_request_id()
     if request_id:
-        fields['request_id'] = request_id
+        fields["request_id"] = request_id
 
     operation = get_operation()
     if operation:
-        fields['operation'] = operation
+        fields["operation"] = operation
 
     return fields

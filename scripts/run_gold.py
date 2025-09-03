@@ -4,7 +4,7 @@ Run the Gold ETL build to load the SQLite/Postgres warehouse from Silver sales d
 
 Usage:
   poetry run python scripts/run_gold.py
-  
+
 Environment variables:
   USE_SPARK=true   - Use Spark-based Gold layer processing
   USE_SPARK=false  - Use pandas-based Gold layer processing (default)

@@ -1,0 +1,793 @@
+{
+  "sales_transactions_bronze": [
+    {
+      "version": "v1.0.0_20250902_202433",
+      "schema": {
+        "columns": [
+          {
+            "name": "transaction_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "product_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "quantity",
+            "type": "integer",
+            "nullable": "False",
+            "original_type": "int64",
+            "null_count": "0"
+          },
+          {
+            "name": "unit_price",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          },
+          {
+            "name": "transaction_date",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          }
+        ],
+        "row_count": 3,
+        "metadata": {
+          "layer": "bronze",
+          "inferred_at": "2025-09-02T20:24:33.215535",
+          "column_count": 6
+        }
+      },
+      "timestamp": "2025-09-02T20:24:33.215535",
+      "description": "Initial schema for sales_transactions_bronze from e_commerce_api",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "c6782e832f188a628d69930b026fea2e"
+    },
+    {
+      "version": "v1.0.1_20250902_202502",
+      "schema": {
+        "columns": [
+          {
+            "name": "transaction_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "product_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "quantity",
+            "type": "integer",
+            "nullable": "False",
+            "original_type": "int64",
+            "null_count": "0"
+          },
+          {
+            "name": "unit_price",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          },
+          {
+            "name": "transaction_date",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          }
+        ],
+        "row_count": 3,
+        "metadata": {
+          "layer": "bronze",
+          "inferred_at": "2025-09-02T20:25:02.897521",
+          "column_count": 6
+        }
+      },
+      "timestamp": "2025-09-02T20:25:02.898568",
+      "description": "Schema evolution from e_commerce_api",
+      "compatibility_level": "backward_compatible",
+      "changes": [
+        {
+          "type": "column_nullable_changed",
+          "column": "product_id",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        },
+        {
+          "type": "column_nullable_changed",
+          "column": "transaction_date",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        },
+        {
+          "type": "column_nullable_changed",
+          "column": "customer_id",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        },
+        {
+          "type": "column_nullable_changed",
+          "column": "quantity",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        },
+        {
+          "type": "column_nullable_changed",
+          "column": "transaction_id",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        },
+        {
+          "type": "column_nullable_changed",
+          "column": "unit_price",
+          "old_nullable": "False",
+          "new_nullable": "False"
+        }
+      ],
+      "checksum": "adfc6ae305c820308afcb8c940aa5ce8"
+    },
+    {
+      "version": "v1.1.0_20250902_202502",
+      "schema": {
+        "columns": [
+          {
+            "name": "transaction_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "product_id",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "quantity",
+            "type": "integer",
+            "nullable": "False",
+            "original_type": "int64",
+            "null_count": "0"
+          },
+          {
+            "name": "unit_price",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          },
+          {
+            "name": "transaction_date",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "discount_amount",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          },
+          {
+            "name": "payment_method",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          },
+          {
+            "name": "shipping_cost",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          }
+        ],
+        "row_count": 2,
+        "metadata": {
+          "layer": "bronze",
+          "inferred_at": "2025-09-02T20:25:02.903217",
+          "column_count": 9
+        }
+      },
+      "timestamp": "2025-09-02T20:25:02.904223",
+      "description": "Schema evolution from e_commerce_api_v2",
+      "compatibility_level": "backward_compatible",
+      "changes": [
+        {
+          "type": "column_added",
+          "column": "discount_amount",
+          "details": {
+            "name": "discount_amount",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          }
+        },
+        {
+          "type": "column_added",
+          "column": "payment_method",
+          "details": {
+            "name": "payment_method",
+            "type": "string",
+            "nullable": "False",
+            "original_type": "object",
+            "null_count": "0"
+          }
+        },
+        {
+          "type": "column_added",
+          "column": "shipping_cost",
+          "details": {
+            "name": "shipping_cost",
+            "type": "float",
+            "nullable": "False",
+            "original_type": "float64",
+            "null_count": "0"
+          }
+        }
+      ],
+      "checksum": "e701073215e9abc074dfa5e3da0201d9"
+    }
+  ],
+  "sales_transactions_silver": [
+    {
+      "version": "v1.0.0_20250902_202502",
+      "schema": {
+        "columns": [
+          {
+            "name": "transaction_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 5,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 4,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "product_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 3,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "quantity",
+            "type": "integer",
+            "nullable": false,
+            "unique_count": 3,
+            "null_percentage": 0.0,
+            "min_value": 1,
+            "max_value": 100
+          },
+          {
+            "name": "unit_price",
+            "type": "float",
+            "nullable": false,
+            "unique_count": 3,
+            "null_percentage": 0.0,
+            "min_value": 0.01
+          },
+          {
+            "name": "total_amount",
+            "type": "float",
+            "nullable": false,
+            "unique_count": 4,
+            "null_percentage": 0.0,
+            "min_value": 0.01
+          },
+          {
+            "name": "transaction_date",
+            "type": "timestamp",
+            "nullable": "False",
+            "unique_count": 3,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "discount_amount",
+            "type": "float",
+            "nullable": true,
+            "unique_count": 2,
+            "null_percentage": 0.0,
+            "min_value": 0.0
+          },
+          {
+            "name": "net_amount",
+            "type": "float",
+            "nullable": "False",
+            "unique_count": 4,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "is_discounted",
+            "type": "boolean",
+            "nullable": "False",
+            "unique_count": 2,
+            "null_percentage": 0.0
+          }
+        ],
+        "row_count": 5,
+        "metadata": {
+          "layer": "silver",
+          "inferred_at": "2025-09-02T20:25:02.912803",
+          "column_count": 10
+        }
+      },
+      "timestamp": "2025-09-02T20:25:02.912803",
+      "description": "Initial silver schema for sales_transactions_silver",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "b0e0773a9580d32fed0d08690a2625e3"
+    },
+    {
+      "version": "v1.1.0_20250902_202502",
+      "schema": {
+        "columns": [
+          {
+            "name": "transaction_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 5,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 4,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "product_id",
+            "type": "string",
+            "nullable": "False",
+            "unique_count": 3,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "quantity",
+            "type": "integer",
+            "nullable": false,
+            "unique_count": 3,
+            "null_percentage": 0.0,
+            "min_value": 1,
+            "max_value": 100
+          },
+          {
+            "name": "unit_price",
+            "type": "float",
+            "nullable": false,
+            "unique_count": 3,
+            "null_percentage": 0.0,
+            "min_value": 0.01
+          },
+          {
+            "name": "total_amount",
+            "type": "float",
+            "nullable": false,
+            "unique_count": 4,
+            "null_percentage": 0.0,
+            "min_value": 0.01
+          },
+          {
+            "name": "transaction_date",
+            "type": "timestamp",
+            "nullable": "False",
+            "unique_count": 3,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "discount_amount",
+            "type": "float",
+            "nullable": true,
+            "unique_count": 2,
+            "null_percentage": 0.0,
+            "min_value": 0.0
+          },
+          {
+            "name": "net_amount",
+            "type": "float",
+            "nullable": "False",
+            "unique_count": 4,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "is_discounted",
+            "type": "boolean",
+            "nullable": "False",
+            "unique_count": 2,
+            "null_percentage": 0.0
+          },
+          {
+            "name": "customer_segment",
+            "type": "string",
+            "nullable": false,
+            "unique_count": 2,
+            "null_percentage": 0.0,
+            "allowed_values": [
+              "Premium",
+              "Standard",
+              "Gold"
+            ]
+          },
+          {
+            "name": "lifetime_value",
+            "type": "float",
+            "nullable": true,
+            "unique_count": 4,
+            "null_percentage": 0.0,
+            "min_value": 0.0
+          }
+        ],
+        "row_count": 5,
+        "metadata": {
+          "layer": "silver",
+          "inferred_at": "2025-09-02T20:25:02.918837",
+          "column_count": 12
+        }
+      },
+      "timestamp": "2025-09-02T20:25:02.918837",
+      "description": "Schema evolution with 2 changes",
+      "compatibility_level": "backward_compatible",
+      "changes": [
+        {
+          "type": "column_added",
+          "column": "customer_segment",
+          "details": {
+            "name": "customer_segment",
+            "type": "string",
+            "nullable": false,
+            "unique_count": 2,
+            "null_percentage": 0.0,
+            "allowed_values": [
+              "Premium",
+              "Standard",
+              "Gold"
+            ]
+          }
+        },
+        {
+          "type": "column_added",
+          "column": "lifetime_value",
+          "details": {
+            "name": "lifetime_value",
+            "type": "float",
+            "nullable": true,
+            "unique_count": 4,
+            "null_percentage": 0.0,
+            "min_value": 0.0
+          }
+        }
+      ],
+      "checksum": "7cb63c461f1fa595d4354ff6e364348a"
+    }
+  ],
+  "daily_sales_summary_gold": [
+    {
+      "version": "v1.0.0_20250902_202502",
+      "schema": {
+        "columns": [
+          {
+            "name": "date_key",
+            "type": "string",
+            "nullable": "False",
+            "business_definition": "temporal",
+            "aggregation_type": "first"
+          },
+          {
+            "name": "total_transactions",
+            "type": "integer",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "total_revenue",
+            "type": "float",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "total_quantity",
+            "type": "integer",
+            "nullable": "False",
+            "business_definition": "numeric_measure",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "avg_order_value",
+            "type": "float",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "average"
+          },
+          {
+            "name": "unique_customers",
+            "type": "integer",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "total_discount",
+            "type": "float",
+            "nullable": "False",
+            "business_definition": "numeric_measure",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "premium_customers",
+            "type": "integer",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "sum"
+          },
+          {
+            "name": "standard_customers",
+            "type": "integer",
+            "nullable": "False",
+            "business_definition": "unknown",
+            "aggregation_type": "sum"
+          }
+        ],
+        "row_count": 3,
+        "metadata": {
+          "layer": "gold",
+          "inferred_at": "2025-09-02T20:25:02.925349",
+          "column_count": 9
+        }
+      },
+      "timestamp": "2025-09-02T20:25:02.925349",
+      "description": "Initial gold schema for daily_sales_summary_gold",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "6decfab458e8b04957dc713e71f66cc0"
+    }
+  ],
+  "test_table_bronze": [
+    {
+      "version": "v1.0.0",
+      "schema": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp",
+            "nullable": false
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T20:25:02.937390",
+      "description": "",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "51dffb6f5f3d8167b31c9c3bc37b2717"
+    }
+  ],
+  "test_table_silver": [
+    {
+      "version": "v1.0.0",
+      "schema": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp",
+            "nullable": false
+          },
+          {
+            "name": "processed_at",
+            "type": "timestamp",
+            "nullable": false
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T20:25:02.939392",
+      "description": "",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "d52b1964641d138d7a7bb375b72e9385"
+    }
+  ],
+  "test_table_gold": [
+    {
+      "version": "v1.0.0",
+      "schema": {
+        "columns": [
+          {
+            "name": "date_key",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "total_records",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "avg_value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "min_value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "max_value",
+            "type": "float",
+            "nullable": true
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T20:25:02.940392",
+      "description": "",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "965121ec861f6864439429f9102d764f"
+    }
+  ],
+  "users_test": [
+    {
+      "version": "v1.0.0",
+      "schema": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "age",
+            "type": "integer",
+            "nullable": true
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T20:25:02.951912",
+      "description": "",
+      "compatibility_level": "backward_compatible",
+      "changes": [],
+      "checksum": "fc216de158185c15511baacc1985da4f"
+    },
+    {
+      "version": "v1.1.0",
+      "schema": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "age",
+            "type": "integer",
+            "nullable": true
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "department",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "timestamp": "2025-09-02T20:25:02.954913",
+      "description": "",
+      "compatibility_level": "backward_compatible",
+      "changes": [
+        {
+          "type": "column_added",
+          "column": "email",
+          "details": {
+            "name": "email",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        {
+          "type": "column_added",
+          "column": "department",
+          "details": {
+            "name": "department",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      ],
+      "checksum": "9d6536a2f7411d25564948012aba39d9"
+    }
+  ]
+}

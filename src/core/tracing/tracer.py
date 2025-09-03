@@ -2,6 +2,7 @@
 OpenTelemetry Tracer Wrapper
 Provides simplified interface for creating and managing traces and spans.
 """
+
 from __future__ import annotations
 
 import functools
@@ -14,6 +15,7 @@ try:
     from opentelemetry.baggage.propagation import W3CBaggagePropagator
     from opentelemetry.trace import Span, SpanKind, Status, StatusCode
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -27,8 +29,8 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar('T')
-F = TypeVar('F', bound=Callable[..., Any])
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class TracerWrapper:
@@ -51,15 +53,10 @@ class TracerWrapper:
         return OTEL_AVAILABLE and self._tracer is not None
 
     @contextmanager
-    def span(
-        self,
-        name: str,
-        kind: str | None = None,
-        attributes: dict[str, Any] | None = None
-    ):
+    def span(self, name: str, kind: str | None = None, attributes: dict[str, Any] | None = None):
         """
         Create a span context manager.
-        
+
         Args:
             name: Span name
             kind: Span kind (client, server, internal, producer, consumer)
@@ -79,14 +76,11 @@ class TracerWrapper:
 
     @asynccontextmanager
     async def async_span(
-        self,
-        name: str,
-        kind: str | None = None,
-        attributes: dict[str, Any] | None = None
+        self, name: str, kind: str | None = None, attributes: dict[str, Any] | None = None
     ):
         """
         Create an async span context manager.
-        
+
         Args:
             name: Span name
             kind: Span kind
@@ -110,11 +104,11 @@ class TracerWrapper:
             return None
 
         kind_mapping = {
-            'client': SpanKind.CLIENT,
-            'server': SpanKind.SERVER,
-            'internal': SpanKind.INTERNAL,
-            'producer': SpanKind.PRODUCER,
-            'consumer': SpanKind.CONSUMER
+            "client": SpanKind.CLIENT,
+            "server": SpanKind.SERVER,
+            "internal": SpanKind.INTERNAL,
+            "producer": SpanKind.PRODUCER,
+            "consumer": SpanKind.CONSUMER,
         }
 
         return kind_mapping.get(kind.lower(), SpanKind.INTERNAL)
@@ -129,14 +123,14 @@ class TracerWrapper:
         """Get the current trace ID as a string."""
         span = self.get_current_span()
         if span and span.get_span_context().is_valid:
-            return format(span.get_span_context().trace_id, '032x')
+            return format(span.get_span_context().trace_id, "032x")
         return None
 
     def get_current_span_id(self) -> str | None:
         """Get the current span ID as a string."""
         span = self.get_current_span()
         if span and span.get_span_context().is_valid:
-            return format(span.get_span_context().span_id, '016x')
+            return format(span.get_span_context().span_id, "016x")
         return None
 
     def set_span_attribute(self, key: str, value: Any) -> None:
@@ -149,7 +143,7 @@ class TracerWrapper:
         """Set the status of the current span."""
         span = self.get_current_span()
         if span and OTEL_AVAILABLE:
-            status_code = StatusCode.OK if status.lower() == 'ok' else StatusCode.ERROR
+            status_code = StatusCode.OK if status.lower() == "ok" else StatusCode.ERROR
             span.set_status(Status(status_code, description))
 
     def add_span_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
@@ -163,7 +157,7 @@ class TracerWrapper:
         span = self.get_current_span()
         if span:
             span.record_exception(exception)
-            self.set_span_status('error', str(exception))
+            self.set_span_status("error", str(exception))
 
 
 # Global tracer instance
@@ -173,10 +167,10 @@ _tracer: TracerWrapper | None = None
 def get_tracer(service_name: str | None = None) -> TracerWrapper:
     """
     Get or create global tracer instance.
-    
+
     Args:
         service_name: Service name for the tracer
-        
+
     Returns:
         TracerWrapper instance
     """
@@ -191,7 +185,7 @@ def get_tracer(service_name: str | None = None) -> TracerWrapper:
 def get_trace_context() -> dict[str, str]:
     """
     Get current trace context as propagation headers.
-    
+
     Returns:
         Dictionary of trace context headers
     """
@@ -205,14 +199,10 @@ def get_trace_context() -> dict[str, str]:
     return carrier
 
 
-def create_span(
-    name: str,
-    kind: str | None = None,
-    attributes: dict[str, Any] | None = None
-):
+def create_span(name: str, kind: str | None = None, attributes: dict[str, Any] | None = None):
     """
     Create a span context manager.
-    
+
     Args:
         name: Span name
         kind: Span kind
@@ -237,30 +227,26 @@ def set_span_status(status: str, description: str | None = None) -> None:
 def get_current_span_context() -> dict[str, str | None]:
     """
     Get current span context information.
-    
+
     Returns:
         Dictionary with trace_id and span_id
     """
     tracer = get_tracer()
-    return {
-        'trace_id': tracer.get_current_trace_id(),
-        'span_id': tracer.get_current_span_id()
-    }
+    return {"trace_id": tracer.get_current_trace_id(), "span_id": tracer.get_current_span_id()}
 
 
 def trace_function(
-    name: str | None = None,
-    kind: str = "internal",
-    attributes: dict[str, Any] | None = None
+    name: str | None = None, kind: str = "internal", attributes: dict[str, Any] | None = None
 ):
     """
     Decorator to trace function execution.
-    
+
     Args:
         name: Span name (defaults to function name)
         kind: Span kind
         attributes: Additional attributes
     """
+
     def decorator(func: F) -> F:
         span_name = name or f"{func.__module__}.{func.__name__}"
 
@@ -293,22 +279,22 @@ def trace_function(
                     raise
 
         return wrapper
+
     return decorator
 
 
 def trace_async_function(
-    name: str | None = None,
-    kind: str = "internal",
-    attributes: dict[str, Any] | None = None
+    name: str | None = None, kind: str = "internal", attributes: dict[str, Any] | None = None
 ):
     """
     Decorator to trace async function execution.
-    
+
     Args:
         name: Span name (defaults to function name)
         kind: Span kind
         attributes: Additional attributes
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         span_name = name or f"{func.__module__}.{func.__name__}"
 
@@ -338,10 +324,11 @@ def trace_async_function(
                 except Exception as e:
                     if span:
                         span.record_exception(e)
-                        tracer.set_span_status('error', str(e))
+                        tracer.set_span_status("error", str(e))
                     raise
 
         return wrapper
+
     return decorator
 
 
@@ -351,11 +338,7 @@ def trace_etl_operation(operation_name: str, stage: str = "unknown"):
     return trace_function(
         name=f"etl.{stage}.{operation_name}",
         kind="internal",
-        attributes={
-            "etl.operation": operation_name,
-            "etl.stage": stage,
-            "etl.type": "batch"
-        }
+        attributes={"etl.operation": operation_name, "etl.stage": stage, "etl.type": "batch"},
     )
 
 
@@ -364,25 +347,14 @@ def trace_api_request(endpoint: str, method: str = "GET"):
     return trace_function(
         name=f"api.{method.lower()}.{endpoint}",
         kind="server",
-        attributes={
-            "http.method": method,
-            "http.endpoint": endpoint,
-            "component": "api"
-        }
+        attributes={"http.method": method, "http.endpoint": endpoint, "component": "api"},
     )
 
 
 def trace_database_operation(operation: str, table: str | None = None):
     """Decorator for tracing database operations."""
-    attributes = {
-        "db.operation": operation,
-        "component": "database"
-    }
+    attributes = {"db.operation": operation, "component": "database"}
     if table:
         attributes["db.table"] = table
 
-    return trace_function(
-        name=f"db.{operation}",
-        kind="client",
-        attributes=attributes
-    )
+    return trace_function(name=f"db.{operation}", kind="client", attributes=attributes)

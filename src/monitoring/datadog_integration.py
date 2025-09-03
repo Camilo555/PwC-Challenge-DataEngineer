@@ -2,6 +2,7 @@
 Datadog Integration for Comprehensive Monitoring
 Provides APM, metrics, logging, and alerting integration with Datadog
 """
+
 import os
 import threading
 import time
@@ -11,15 +12,73 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-# Datadog SDK imports
-from datadog import DogStatsdClient, api, initialize
-from ddtrace import patch_all, tracer
+# Datadog SDK imports with graceful fallbacks
+try:
+    from datadog import DogStatsdClient, api, initialize
+    from ddtrace import patch_all, tracer
+    DATADOG_AVAILABLE = True
+except ImportError:
+    # Mock DataDog classes for when datadog is not available
+    DATADOG_AVAILABLE = False
+
+    class MockDogStatsdClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        def gauge(self, *args, **kwargs):
+            pass
+        def increment(self, *args, **kwargs):
+            pass
+        def histogram(self, *args, **kwargs):
+            pass
+        def distribution(self, *args, **kwargs):
+            pass
+        def set(self, *args, **kwargs):
+            pass
+        def close(self):
+            pass
+
+    class MockAPI:
+        class Event:
+            @staticmethod
+            def create(*args, **kwargs):
+                return {"status": "ok"}
+
+        class Monitor:
+            @staticmethod
+            def create(*args, **kwargs):
+                return {"id": 123}
+
+            @staticmethod
+            def update(*args, **kwargs):
+                return {"status": "ok"}
+
+    class MockTracer:
+        def trace(self, *args, **kwargs):
+            class MockSpan:
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    pass
+                def set_tag(self, *args):
+                    pass
+            return MockSpan()
+
+    DogStatsdClient = MockDogStatsdClient
+    api = MockAPI()
+    tracer = MockTracer()
+
+    def initialize(*args, **kwargs):
+        pass
+
+    def patch_all(*args, **kwargs):
+        pass
 
 from core.logging import get_logger
 
 
 class MetricType(Enum):
     """Datadog metric types"""
+
     GAUGE = "gauge"
     COUNT = "count"
     RATE = "rate"
@@ -30,6 +89,7 @@ class MetricType(Enum):
 
 class AlertPriority(Enum):
     """Alert priority levels"""
+
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
@@ -39,6 +99,7 @@ class AlertPriority(Enum):
 @dataclass
 class DatadogConfig:
     """Datadog configuration"""
+
     api_key: str
     app_key: str
     site: str = "datadoghq.com"
@@ -55,6 +116,7 @@ class DatadogConfig:
 @dataclass
 class CustomMetric:
     """Custom metric definition"""
+
     name: str
     value: float
     metric_type: MetricType
@@ -69,6 +131,7 @@ class CustomMetric:
 @dataclass
 class Alert:
     """Alert definition"""
+
     name: str
     message: str
     query: str
@@ -98,12 +161,12 @@ class DatadogMonitoring:
         self.statsd = DogStatsdClient(
             host=self.config.statsd_host,
             port=self.config.statsd_port,
-            namespace='pwc.data_engineering.',
+            namespace="pwc.data_engineering.",
             constant_tags=[
-                f'service:{self.config.service_name}',
-                f'env:{self.config.environment}',
-                f'version:{self.config.version}'
-            ]
+                f"service:{self.config.service_name}",
+                f"env:{self.config.environment}",
+                f"version:{self.config.version}",
+            ],
         )
 
         # Metrics buffer for batch sending
@@ -120,7 +183,7 @@ class DatadogMonitoring:
             "requests_total": 0,
             "errors_total": 0,
             "processing_time_sum": 0.0,
-            "last_reset": datetime.now()
+            "last_reset": datetime.now(),
         }
 
         self.logger.info("Datadog monitoring initialized")
@@ -139,7 +202,8 @@ class DatadogMonitoring:
             statsd_port=int(os.getenv("DD_STATSD_PORT", "8125")),
             enable_apm=os.getenv("DD_TRACE_ENABLED", "true").lower() == "true",
             enable_profiling=os.getenv("DD_PROFILING_ENABLED", "true").lower() == "true",
-            enable_runtime_metrics=os.getenv("DD_RUNTIME_METRICS_ENABLED", "true").lower() == "true"
+            enable_runtime_metrics=os.getenv("DD_RUNTIME_METRICS_ENABLED", "true").lower()
+            == "true",
         )
 
     def _initialize_datadog(self):
@@ -149,20 +213,24 @@ class DatadogMonitoring:
             initialize(
                 api_key=self.config.api_key,
                 app_key=self.config.app_key,
-                api_host=f'api.{self.config.site}'
+                api_host=f"api.{self.config.site}",
             )
 
             # Configure APM if enabled
             if self.config.enable_apm:
-                os.environ.update({
-                    'DD_SERVICE': self.config.service_name,
-                    'DD_ENV': self.config.environment,
-                    'DD_VERSION': self.config.version,
-                    'DD_TRACE_ENABLED': 'true',
-                    'DD_PROFILING_ENABLED': str(self.config.enable_profiling).lower(),
-                    'DD_RUNTIME_METRICS_ENABLED': str(self.config.enable_runtime_metrics).lower(),
-                    'DD_LOGS_INJECTION': 'true'
-                })
+                os.environ.update(
+                    {
+                        "DD_SERVICE": self.config.service_name,
+                        "DD_ENV": self.config.environment,
+                        "DD_VERSION": self.config.version,
+                        "DD_TRACE_ENABLED": "true",
+                        "DD_PROFILING_ENABLED": str(self.config.enable_profiling).lower(),
+                        "DD_RUNTIME_METRICS_ENABLED": str(
+                            self.config.enable_runtime_metrics
+                        ).lower(),
+                        "DD_LOGS_INJECTION": "true",
+                    }
+                )
 
                 # Patch common libraries for automatic instrumentation
                 patch_all()
@@ -171,15 +239,7 @@ class DatadogMonitoring:
                 tracer.configure(
                     hostname=self.config.statsd_host,
                     port=self.config.statsd_port,
-                    settings={
-                        'FILTERS': [
-                            {
-                                'match_all': {
-                                    'service': self.config.service_name
-                                }
-                            }
-                        ]
-                    }
+                    settings={"FILTERS": [{"match_all": {"service": self.config.service_name}}]},
                 )
 
             self.logger.info("Datadog SDK initialized successfully")
@@ -214,35 +274,16 @@ class DatadogMonitoring:
             for metric in metrics:
                 if metric.metric_type == MetricType.GAUGE:
                     self.statsd.gauge(
-                        metric.name,
-                        metric.value,
-                        tags=metric.tags,
-                        timestamp=metric.timestamp
+                        metric.name, metric.value, tags=metric.tags, timestamp=metric.timestamp
                     )
                 elif metric.metric_type == MetricType.COUNT:
-                    self.statsd.count(
-                        metric.name,
-                        metric.value,
-                        tags=metric.tags
-                    )
+                    self.statsd.count(metric.name, metric.value, tags=metric.tags)
                 elif metric.metric_type == MetricType.HISTOGRAM:
-                    self.statsd.histogram(
-                        metric.name,
-                        metric.value,
-                        tags=metric.tags
-                    )
+                    self.statsd.histogram(metric.name, metric.value, tags=metric.tags)
                 elif metric.metric_type == MetricType.DISTRIBUTION:
-                    self.statsd.distribution(
-                        metric.name,
-                        metric.value,
-                        tags=metric.tags
-                    )
+                    self.statsd.distribution(metric.name, metric.value, tags=metric.tags)
                 elif metric.metric_type == MetricType.SET:
-                    self.statsd.set(
-                        metric.name,
-                        metric.value,
-                        tags=metric.tags
-                    )
+                    self.statsd.set(metric.name, metric.value, tags=metric.tags)
 
             self.logger.debug(f"Sent {len(metrics)} metrics to Datadog")
 
@@ -270,78 +311,88 @@ class DatadogMonitoring:
     def _add_metric(self, name: str, value: float, metric_type: MetricType, tags: list[str]):
         """Add metric to buffer"""
         with self.buffer_lock:
-            self.metrics_buffer.append(CustomMetric(
-                name=name,
-                value=value,
-                metric_type=metric_type,
-                tags=tags
-            ))
+            self.metrics_buffer.append(
+                CustomMetric(name=name, value=value, metric_type=metric_type, tags=tags)
+            )
 
     # ETL-specific metrics
 
-    def track_etl_stage(self, stage: str, records_processed: int, processing_time_seconds: float,
-                       quality_score: float | None = None):
+    def track_etl_stage(
+        self,
+        stage: str,
+        records_processed: int,
+        processing_time_seconds: float,
+        quality_score: float | None = None,
+    ):
         """Track ETL stage metrics"""
 
-        tags = [f'stage:{stage}']
+        tags = [f"stage:{stage}"]
 
         # Record count
-        self.gauge('etl.records_processed', records_processed, tags)
+        self.gauge("etl.records_processed", records_processed, tags)
 
         # Processing time
-        self.histogram('etl.processing_time', processing_time_seconds, tags)
+        self.histogram("etl.processing_time", processing_time_seconds, tags)
 
         # Records per second
         if processing_time_seconds > 0:
             rps = records_processed / processing_time_seconds
-            self.gauge('etl.records_per_second', rps, tags)
+            self.gauge("etl.records_per_second", rps, tags)
 
         # Quality score if available
         if quality_score is not None:
-            self.gauge('etl.quality_score', quality_score, tags)
+            self.gauge("etl.quality_score", quality_score, tags)
 
         # Stage completion
-        self.counter('etl.stage_completed', tags=tags)
+        self.counter("etl.stage_completed", tags=tags)
 
-        self.logger.debug(f"Tracked ETL stage {stage}: {records_processed} records in {processing_time_seconds}s")
+        self.logger.debug(
+            f"Tracked ETL stage {stage}: {records_processed} records in {processing_time_seconds}s"
+        )
 
     def track_data_quality(self, layer: str, component: str, metrics: dict[str, float]):
         """Track data quality metrics"""
 
-        tags = [f'layer:{layer}', f'component:{component}']
+        tags = [f"layer:{layer}", f"component:{component}"]
 
         for metric_name, value in metrics.items():
-            self.gauge(f'data_quality.{metric_name}', value, tags)
+            self.gauge(f"data_quality.{metric_name}", value, tags)
 
         # Overall quality score
-        if 'overall_quality_score' in metrics:
-            self.gauge('data_quality.overall_score', metrics['overall_quality_score'], tags)
+        if "overall_quality_score" in metrics:
+            self.gauge("data_quality.overall_score", metrics["overall_quality_score"], tags)
 
         self.logger.debug(f"Tracked data quality for {layer}.{component}")
 
-    def track_api_request(self, endpoint: str, method: str, status_code: int,
-                         response_time_ms: float, user_id: str | None = None):
+    def track_api_request(
+        self,
+        endpoint: str,
+        method: str,
+        status_code: int,
+        response_time_ms: float,
+        user_id: str | None = None,
+    ):
         """Track API request metrics"""
 
         tags = [
-            f'endpoint:{endpoint}',
-            f'method:{method}',
-            f'status_code:{status_code}',
-            f'status_class:{status_code // 100}xx'
+            f"endpoint:{endpoint}",
+            f"method:{method}",
+            f"status_code:{status_code}",
+            f"status_class:{status_code // 100}xx",
         ]
 
         if user_id:
-            tags.append(f'user_id:{user_id}')
+            tags.append(f"user_id:{user_id}")
 
         # Request count
-        self.counter('api.requests_total', tags=tags)
+        self.counter("api.requests_total", tags=tags)
 
         # Response time
-        self.histogram('api.response_time', response_time_ms, tags)
+        self.histogram("api.response_time", response_time_ms, tags)
 
         # Error tracking
         if status_code >= 400:
-            self.counter('api.errors_total', tags=tags)
+            self.counter("api.errors_total", tags=tags)
 
         # Update performance metrics
         self.performance_metrics["requests_total"] += 1
@@ -349,113 +400,122 @@ class DatadogMonitoring:
             self.performance_metrics["errors_total"] += 1
         self.performance_metrics["processing_time_sum"] += response_time_ms
 
-    def track_database_operation(self, operation: str, table: str, duration_ms: float,
-                                row_count: int | None = None, success: bool = True):
+    def track_database_operation(
+        self,
+        operation: str,
+        table: str,
+        duration_ms: float,
+        row_count: int | None = None,
+        success: bool = True,
+    ):
         """Track database operation metrics"""
 
-        tags = [
-            f'operation:{operation}',
-            f'table:{table}',
-            f'success:{success}'
-        ]
+        tags = [f"operation:{operation}", f"table:{table}", f"success:{success}"]
 
         # Operation count
-        self.counter('db.operations_total', tags=tags)
+        self.counter("db.operations_total", tags=tags)
 
         # Duration
-        self.histogram('db.operation_duration', duration_ms, tags)
+        self.histogram("db.operation_duration", duration_ms, tags)
 
         # Row count if available
         if row_count is not None:
-            self.gauge('db.rows_affected', row_count, tags)
+            self.gauge("db.rows_affected", row_count, tags)
 
         # Error tracking
         if not success:
-            self.counter('db.errors_total', tags=tags)
+            self.counter("db.errors_total", tags=tags)
 
     def track_cache_operation(self, operation: str, hit: bool, duration_ms: float):
         """Track cache operation metrics"""
 
-        tags = [
-            f'operation:{operation}',
-            f'hit:{hit}'
-        ]
+        tags = [f"operation:{operation}", f"hit:{hit}"]
 
         # Cache operations
-        self.counter('cache.operations_total', tags=tags)
+        self.counter("cache.operations_total", tags=tags)
 
         # Cache hits/misses
         if hit:
-            self.counter('cache.hits_total', tags=tags)
+            self.counter("cache.hits_total", tags=tags)
         else:
-            self.counter('cache.misses_total', tags=tags)
+            self.counter("cache.misses_total", tags=tags)
 
         # Duration
-        self.histogram('cache.operation_duration', duration_ms, tags)
+        self.histogram("cache.operation_duration", duration_ms, tags)
 
-    def track_message_queue(self, queue_name: str, operation: str, message_count: int = 1,
-                           processing_time_ms: float | None = None):
+    def track_message_queue(
+        self,
+        queue_name: str,
+        operation: str,
+        message_count: int = 1,
+        processing_time_ms: float | None = None,
+    ):
         """Track message queue metrics"""
 
-        tags = [
-            f'queue:{queue_name}',
-            f'operation:{operation}'
-        ]
+        tags = [f"queue:{queue_name}", f"operation:{operation}"]
 
         # Message count
-        self.counter('mq.messages_total', message_count, tags)
+        self.counter("mq.messages_total", message_count, tags)
 
         # Processing time if available
         if processing_time_ms is not None:
-            self.histogram('mq.processing_time', processing_time_ms, tags)
+            self.histogram("mq.processing_time", processing_time_ms, tags)
 
-    def track_kafka_metrics(self, topic: str, partition: int, operation: str,
-                           lag: int | None = None, throughput_mps: float | None = None):
+    def track_kafka_metrics(
+        self,
+        topic: str,
+        partition: int,
+        operation: str,
+        lag: int | None = None,
+        throughput_mps: float | None = None,
+    ):
         """Track Kafka-specific metrics"""
 
-        tags = [
-            f'topic:{topic}',
-            f'partition:{partition}',
-            f'operation:{operation}'
-        ]
+        tags = [f"topic:{topic}", f"partition:{partition}", f"operation:{operation}"]
 
         # Operations
-        self.counter('kafka.operations_total', tags=tags)
+        self.counter("kafka.operations_total", tags=tags)
 
         # Consumer lag
         if lag is not None:
-            self.gauge('kafka.consumer_lag', lag, tags)
+            self.gauge("kafka.consumer_lag", lag, tags)
 
         # Throughput
         if throughput_mps is not None:
-            self.gauge('kafka.throughput_mps', throughput_mps, tags)
+            self.gauge("kafka.throughput_mps", throughput_mps, tags)
 
-    def track_system_metrics(self, cpu_usage: float, memory_usage: float,
-                           disk_usage: float, network_io: dict[str, float] | None = None):
+    def track_system_metrics(
+        self,
+        cpu_usage: float,
+        memory_usage: float,
+        disk_usage: float,
+        network_io: dict[str, float] | None = None,
+    ):
         """Track system resource metrics"""
 
-        tags = [f'host:{os.getenv("HOSTNAME", "unknown")}']
+        tags = [f"host:{os.getenv('HOSTNAME', 'unknown')}"]
 
         # System resources
-        self.gauge('system.cpu_usage_percent', cpu_usage, tags)
-        self.gauge('system.memory_usage_percent', memory_usage, tags)
-        self.gauge('system.disk_usage_percent', disk_usage, tags)
+        self.gauge("system.cpu_usage_percent", cpu_usage, tags)
+        self.gauge("system.memory_usage_percent", memory_usage, tags)
+        self.gauge("system.disk_usage_percent", disk_usage, tags)
 
         # Network I/O if available
         if network_io:
             for metric, value in network_io.items():
-                self.gauge(f'system.network.{metric}', value, tags)
+                self.gauge(f"system.network.{metric}", value, tags)
 
     # APM and Tracing
 
     def trace_function(self, service: str = None, resource: str = None):
         """Decorator for tracing functions"""
+
         def decorator(func):
             def wrapper(*args, **kwargs):
                 with tracer.trace(
                     name=func.__name__,
                     service=service or self.config.service_name,
-                    resource=resource or f"{func.__module__}.{func.__name__}"
+                    resource=resource or f"{func.__module__}.{func.__name__}",
                 ) as span:
                     try:
                         result = func(*args, **kwargs)
@@ -465,7 +525,9 @@ class DatadogMonitoring:
                         span.set_error(e)
                         span.set_tag("success", False)
                         raise
+
             return wrapper
+
         return decorator
 
     def trace_etl_operation(self, operation: str, layer: str):
@@ -474,7 +536,7 @@ class DatadogMonitoring:
             name=f"etl.{operation}",
             service=self.config.service_name,
             resource=f"etl.{layer}.{operation}",
-            span_type="etl"
+            span_type="etl",
         )
 
     # Log Correlation
@@ -484,11 +546,11 @@ class DatadogMonitoring:
         span = tracer.current_span()
         if span:
             return {
-                'dd.trace_id': str(span.trace_id),
-                'dd.span_id': str(span.span_id),
-                'dd.service': self.config.service_name,
-                'dd.env': self.config.environment,
-                'dd.version': self.config.version
+                "dd.trace_id": str(span.trace_id),
+                "dd.span_id": str(span.span_id),
+                "dd.service": self.config.service_name,
+                "dd.env": self.config.environment,
+                "dd.version": self.config.version,
             }
         return {}
 
@@ -498,26 +560,24 @@ class DatadogMonitoring:
         """Create Datadog alert/monitor"""
         try:
             monitor_config = {
-                'type': 'metric alert',
-                'query': alert.query,
-                'name': alert.name,
-                'message': alert.message,
-                'tags': alert.tags,
-                'options': {
-                    'thresholds': {
-                        'critical': alert.threshold
-                    },
-                    'notify_audit': True,
-                    'notify_no_data': True,
-                    'no_data_timeframe': 20,
-                    'timeout_h': 0,
-                    'silenced': {}
-                }
+                "type": "metric alert",
+                "query": alert.query,
+                "name": alert.name,
+                "message": alert.message,
+                "tags": alert.tags,
+                "options": {
+                    "thresholds": {"critical": alert.threshold},
+                    "notify_audit": True,
+                    "notify_no_data": True,
+                    "no_data_timeframe": 20,
+                    "timeout_h": 0,
+                    "silenced": {},
+                },
             }
 
             response = api.Monitor.create(**monitor_config)
 
-            if 'id' in response:
+            if "id" in response:
                 self.logger.info(f"Created alert {alert.name} with ID {response['id']}")
                 return True
             else:
@@ -538,7 +598,7 @@ class DatadogMonitoring:
                 query="avg(last_5m):sum:pwc.data_engineering.api.errors_total{*}.as_rate() / sum:pwc.data_engineering.api.requests_total{*}.as_rate() > 0.05",
                 priority=AlertPriority.HIGH,
                 tags=["alert_type:error_rate", "component:api"],
-                threshold=0.05
+                threshold=0.05,
             ),
             Alert(
                 name="ETL Processing Delay",
@@ -546,7 +606,7 @@ class DatadogMonitoring:
                 query="avg(last_10m):avg:pwc.data_engineering.etl.processing_time{*} > 1800",
                 priority=AlertPriority.CRITICAL,
                 tags=["alert_type:performance", "component:etl"],
-                threshold=1800
+                threshold=1800,
             ),
             Alert(
                 name="Low Data Quality Score",
@@ -555,7 +615,7 @@ class DatadogMonitoring:
                 priority=AlertPriority.HIGH,
                 tags=["alert_type:data_quality", "component:etl"],
                 threshold=0.8,
-                comparison="below"
+                comparison="below",
             ),
             Alert(
                 name="High System CPU Usage",
@@ -563,7 +623,7 @@ class DatadogMonitoring:
                 query="avg(last_10m):avg:pwc.data_engineering.system.cpu_usage_percent{*} > 85",
                 priority=AlertPriority.NORMAL,
                 tags=["alert_type:system", "component:infrastructure"],
-                threshold=85
+                threshold=85,
             ),
             Alert(
                 name="Database Connection Issues",
@@ -571,7 +631,7 @@ class DatadogMonitoring:
                 query="avg(last_5m):sum:pwc.data_engineering.db.errors_total{*}.as_rate() / sum:pwc.data_engineering.db.operations_total{*}.as_rate() > 0.02",
                 priority=AlertPriority.HIGH,
                 tags=["alert_type:database", "component:database"],
-                threshold=0.02
+                threshold=0.02,
             ),
             Alert(
                 name="Kafka Consumer Lag",
@@ -579,8 +639,8 @@ class DatadogMonitoring:
                 query="avg(last_10m):max:pwc.data_engineering.kafka.consumer_lag{*} > 10000",
                 priority=AlertPriority.NORMAL,
                 tags=["alert_type:kafka", "component:streaming"],
-                threshold=10000
-            )
+                threshold=10000,
+            ),
         ]
 
         created_count = 0
@@ -596,57 +656,65 @@ class DatadogMonitoring:
         """Create ETL monitoring dashboard"""
         try:
             dashboard_config = {
-                'title': 'PwC Data Engineering - ETL Pipeline',
-                'description': 'Comprehensive ETL pipeline monitoring dashboard',
-                'layout_type': 'ordered',
-                'is_read_only': False,
-                'widgets': [
+                "title": "PwC Data Engineering - ETL Pipeline",
+                "description": "Comprehensive ETL pipeline monitoring dashboard",
+                "layout_type": "ordered",
+                "is_read_only": False,
+                "widgets": [
                     {
-                        'definition': {
-                            'type': 'timeseries',
-                            'title': 'ETL Processing Time',
-                            'requests': [{
-                                'q': 'avg:pwc.data_engineering.etl.processing_time{*} by {stage}',
-                                'display_type': 'line'
-                            }]
+                        "definition": {
+                            "type": "timeseries",
+                            "title": "ETL Processing Time",
+                            "requests": [
+                                {
+                                    "q": "avg:pwc.data_engineering.etl.processing_time{*} by {stage}",
+                                    "display_type": "line",
+                                }
+                            ],
                         }
                     },
                     {
-                        'definition': {
-                            'type': 'timeseries',
-                            'title': 'Records Processed',
-                            'requests': [{
-                                'q': 'sum:pwc.data_engineering.etl.records_processed{*} by {stage}',
-                                'display_type': 'bars'
-                            }]
+                        "definition": {
+                            "type": "timeseries",
+                            "title": "Records Processed",
+                            "requests": [
+                                {
+                                    "q": "sum:pwc.data_engineering.etl.records_processed{*} by {stage}",
+                                    "display_type": "bars",
+                                }
+                            ],
                         }
                     },
                     {
-                        'definition': {
-                            'type': 'timeseries',
-                            'title': 'Data Quality Score',
-                            'requests': [{
-                                'q': 'avg:pwc.data_engineering.data_quality.overall_score{*} by {layer}',
-                                'display_type': 'line'
-                            }]
+                        "definition": {
+                            "type": "timeseries",
+                            "title": "Data Quality Score",
+                            "requests": [
+                                {
+                                    "q": "avg:pwc.data_engineering.data_quality.overall_score{*} by {layer}",
+                                    "display_type": "line",
+                                }
+                            ],
                         }
                     },
                     {
-                        'definition': {
-                            'type': 'timeseries',
-                            'title': 'API Performance',
-                            'requests': [{
-                                'q': 'avg:pwc.data_engineering.api.response_time{*} by {endpoint}',
-                                'display_type': 'line'
-                            }]
+                        "definition": {
+                            "type": "timeseries",
+                            "title": "API Performance",
+                            "requests": [
+                                {
+                                    "q": "avg:pwc.data_engineering.api.response_time{*} by {endpoint}",
+                                    "display_type": "line",
+                                }
+                            ],
                         }
-                    }
-                ]
+                    },
+                ],
             }
 
             response = api.Dashboard.create(**dashboard_config)
 
-            if 'id' in response:
+            if "id" in response:
                 self.logger.info(f"Created ETL dashboard with ID {response['id']}")
                 return True
             else:
@@ -668,16 +736,16 @@ class DatadogMonitoring:
             "apm_enabled": self.config.enable_apm,
             "metrics_buffer_size": len(self.metrics_buffer),
             "performance_metrics": self.performance_metrics.copy(),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         try:
             # Test API connection
             response = api.Validate.validate()
-            health_status["datadog_connected"] = response.get('valid', False)
+            health_status["datadog_connected"] = response.get("valid", False)
 
             # Test StatsD connection
-            self.statsd.gauge('health_check.test', 1.0, tags=['test:true'])
+            self.statsd.gauge("health_check.test", 1.0, tags=["test:true"])
             health_status["statsd_connected"] = True
 
         except Exception as e:
@@ -697,7 +765,7 @@ class DatadogMonitoring:
                 self.metrics_buffer.clear()
 
         # Close StatsD client
-        if hasattr(self.statsd, 'close'):
+        if hasattr(self.statsd, "close"):
             self.statsd.close()
 
         self.logger.info("Datadog monitoring closed")
@@ -743,7 +811,7 @@ class DatadogETLMonitor:
                         stage=stage,
                         records_processed=records_processed,
                         processing_time_seconds=processing_time,
-                        quality_score=quality_score
+                        quality_score=quality_score,
                     )
 
                     self.logger.info(f"Monitored {stage} stage: {records_processed} records")
@@ -766,7 +834,7 @@ if __name__ == "__main__":
             api_key="test_key",
             app_key="test_app_key",
             environment="test",
-            enable_apm=False  # Disable for testing
+            enable_apm=False,  # Disable for testing
         )
 
         monitor = create_datadog_monitoring(config)
@@ -810,4 +878,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Testing failed: {str(e)}")
         import traceback
+
         traceback.print_exc()

@@ -1,0 +1,717 @@
+# Kong API Gateway Configuration for enterprise traffic management
+# Provides advanced routing, rate limiting, authentication, and plugin ecosystem
+
+---
+# Kong Gateway Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kong-system
+  labels:
+    name: kong-system
+    component: api-gateway
+    istio-injection: enabled
+
+---
+# Kong Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-gateway
+  namespace: kong-system
+  labels:
+    app: kong-gateway
+    component: api-gateway
+spec:
+  replicas: 3  # High availability
+  selector:
+    matchLabels:
+      app: kong-gateway
+      
+  template:
+    metadata:
+      labels:
+        app: kong-gateway
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+        
+    spec:
+      serviceAccountName: kong-gateway
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        
+      containers:
+      - name: kong-gateway
+        image: kong:3.4-ubuntu
+        
+        env:
+        # Database configuration (PostgreSQL)
+        - name: KONG_DATABASE
+          value: "postgres"
+        - name: KONG_POSTGRES_HOST
+          value: "postgresql.kong-system.svc.cluster.local"
+        - name: KONG_POSTGRES_PORT
+          value: "5432"
+        - name: KONG_POSTGRES_DATABASE
+          value: "kong"
+        - name: KONG_POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: kong-postgres-secret
+              key: username
+        - name: KONG_POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kong-postgres-secret
+              key: password
+              
+        # Kong configuration
+        - name: KONG_PROXY_LISTEN
+          value: "0.0.0.0:8000 http2, 0.0.0.0:8443 http2 ssl"
+        - name: KONG_ADMIN_LISTEN
+          value: "0.0.0.0:8001, 0.0.0.0:8444 ssl"
+        - name: KONG_STATUS_LISTEN
+          value: "0.0.0.0:8100"
+        - name: KONG_CLUSTER_LISTEN
+          value: "0.0.0.0:8005"
+          
+        # SSL configuration
+        - name: KONG_SSL_CERT
+          value: "/etc/ssl/certs/kong.crt"
+        - name: KONG_SSL_CERT_KEY
+          value: "/etc/ssl/private/kong.key"
+        - name: KONG_ADMIN_SSL_CERT
+          value: "/etc/ssl/certs/kong-admin.crt"
+        - name: KONG_ADMIN_SSL_CERT_KEY
+          value: "/etc/ssl/private/kong-admin.key"
+          
+        # Performance and security settings
+        - name: KONG_NGINX_WORKER_PROCESSES
+          value: "auto"
+        - name: KONG_NGINX_WORKER_CONNECTIONS
+          value: "4096"
+        - name: KONG_MEM_CACHE_SIZE
+          value: "128m"
+        - name: KONG_PROXY_BUFFERING
+          value: "off"  # Better for streaming
+        - name: KONG_LOG_LEVEL
+          value: "info"
+        - name: KONG_TRUSTED_IPS
+          value: "0.0.0.0/0,::/0"  # Configure based on your network
+          
+        # Enable enterprise features
+        - name: KONG_ENFORCE_RBAC
+          value: "on"
+        - name: KONG_ADMIN_GUI_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_PROXY_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_PROXY_ERROR_LOG
+          value: "/dev/stderr"
+        - name: KONG_ADMIN_ERROR_LOG
+          value: "/dev/stderr"
+          
+        # Plugins configuration
+        - name: KONG_PLUGINS
+          value: "bundled,jwt,oauth2,rate-limiting,prometheus,request-transformer,response-transformer,cors,acl,basic-auth,ldap-auth,openid-connect,zipkin,statsd,datadog"
+        - name: KONG_LUA_PACKAGE_PATH
+          value: "/opt/?.lua;/opt/?/init.lua;;"
+          
+        # Clustering for high availability
+        - name: KONG_CLUSTER_CONTROL_PLANE
+          value: "kong-gateway-0.kong-gateway-headless.kong-system.svc.cluster.local:8005"
+        - name: KONG_CLUSTER_CERT
+          value: "/etc/ssl/certs/cluster.crt"
+        - name: KONG_CLUSTER_CERT_KEY
+          value: "/etc/ssl/private/cluster.key"
+          
+        # Observability
+        - name: KONG_TRACING_INSTRUMENTATIONS
+          value: "all"
+        - name: KONG_TRACING_SAMPLING_RATE
+          value: "1.0"
+          
+        ports:
+        - name: proxy
+          containerPort: 8000
+          protocol: TCP
+        - name: proxy-ssl
+          containerPort: 8443
+          protocol: TCP
+        - name: admin
+          containerPort: 8001
+          protocol: TCP
+        - name: admin-ssl
+          containerPort: 8444
+          protocol: TCP
+        - name: status
+          containerPort: 8100
+          protocol: TCP
+        - name: cluster
+          containerPort: 8005
+          protocol: TCP
+          
+        resources:
+          limits:
+            cpu: 2
+            memory: 4Gi
+          requests:
+            cpu: 1
+            memory: 2Gi
+            
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 8100
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /status/ready
+            port: 8100
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+          
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false  # Kong needs write access
+          runAsNonRoot: true
+          runAsUser: 1000
+          
+        volumeMounts:
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs
+          readOnly: true
+        - name: ssl-private
+          mountPath: /etc/ssl/private
+          readOnly: true
+        - name: kong-config
+          mountPath: /etc/kong
+          readOnly: true
+        - name: temp
+          mountPath: /tmp
+        - name: kong-plugins
+          mountPath: /opt/kong/plugins
+          
+      volumes:
+      - name: ssl-certs
+        secret:
+          secretName: kong-ssl-certs
+          defaultMode: 0644
+      - name: ssl-private
+        secret:
+          secretName: kong-ssl-private
+          defaultMode: 0600
+      - name: kong-config
+        configMap:
+          name: kong-config
+      - name: temp
+        emptyDir: {}
+      - name: kong-plugins
+        configMap:
+          name: kong-custom-plugins
+          
+      # Pod disruption budget for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: kong-gateway
+              topologyKey: kubernetes.io/hostname
+              
+      tolerations:
+      - key: "node.kubernetes.io/spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# Kong Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-gateway
+  namespace: kong-system
+  labels:
+    app: kong-gateway
+    component: api-gateway
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  type: LoadBalancer
+  selector:
+    app: kong-gateway
+    
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+    
+  sessionAffinity: None
+
+---
+# Kong Admin Service (Internal only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-admin
+  namespace: kong-system
+  labels:
+    app: kong-gateway
+    component: admin
+spec:
+  type: ClusterIP
+  selector:
+    app: kong-gateway
+    
+  ports:
+  - name: admin
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  - name: admin-ssl
+    port: 8444
+    targetPort: 8444
+    protocol: TCP
+
+---
+# Kong ConfigMap for custom configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: kong-system
+data:
+  kong.conf: |
+    # Kong configuration file
+    # Performance tuning
+    nginx_worker_processes = auto
+    nginx_worker_connections = 4096
+    mem_cache_size = 128m
+    
+    # Security
+    headers = server_tokens, latency_tokens
+    trusted_ips = 0.0.0.0/0,::/0
+    
+    # Logging
+    log_level = info
+    proxy_access_log = /dev/stdout
+    proxy_error_log = /dev/stderr
+    admin_access_log = /dev/stdout
+    admin_error_log = /dev/stderr
+    
+    # Rate limiting defaults
+    nginx_http_client_body_buffer_size = 8k
+    nginx_http_client_header_buffer_size = 1k
+    nginx_http_large_client_header_buffers = 4 4k
+    
+    # Upstream defaults
+    nginx_upstream_keepalive = 60
+    nginx_upstream_keepalive_requests = 100
+    nginx_upstream_keepalive_timeout = 60s
+
+---
+# Kong Custom Plugins ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-custom-plugins
+  namespace: kong-system
+data:
+  custom-auth.lua: |
+    -- Custom authentication plugin for PwC Data Platform
+    local plugin = {
+      PRIORITY = 1000,
+      VERSION = "1.0.0",
+    }
+    
+    function plugin:access(plugin_conf)
+      local auth_header = kong.request.get_header("authorization")
+      if not auth_header then
+        return kong.response.exit(401, {message = "Authorization header required"})
+      end
+      
+      -- Custom JWT validation logic
+      local jwt_token = string.match(auth_header, "Bearer%s+(.+)")
+      if not jwt_token then
+        return kong.response.exit(401, {message = "Invalid authorization format"})
+      end
+      
+      -- Add custom headers for downstream services
+      kong.service.request.set_header("X-User-ID", user_id)
+      kong.service.request.set_header("X-User-Roles", user_roles)
+    end
+    
+    return plugin
+    
+  rate-limit-redis.lua: |
+    -- Redis-based rate limiting plugin
+    local plugin = {
+      PRIORITY = 900,
+      VERSION = "1.0.0",
+    }
+    
+    function plugin:access(plugin_conf)
+      local redis_host = plugin_conf.redis_host or "redis.kong-system.svc.cluster.local"
+      local redis_port = plugin_conf.redis_port or 6379
+      local limit = plugin_conf.limit or 100
+      local window = plugin_conf.window or 60
+      
+      -- Redis-based rate limiting logic
+      -- Implementation details...
+    end
+    
+    return plugin
+
+---
+# Kong Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kong-gateway
+  namespace: kong-system
+  labels:
+    app: kong-gateway
+
+---
+# Kong RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kong-gateway
+rules:
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kong-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kong-gateway
+subjects:
+- kind: ServiceAccount
+  name: kong-gateway
+  namespace: kong-system
+
+---
+# Kong Ingress Class
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: kong
+  labels:
+    app: kong-gateway
+spec:
+  controller: ingress-controllers.konghq.com/kong
+
+---
+# API Service Configuration using Kong CRDs
+apiVersion: configuration.konghq.com/v1
+kind: KongService
+metadata:
+  name: pwc-api-service
+  namespace: kong-system
+spec:
+  host: pwc-api.pwc-data-platform.svc.cluster.local
+  port: 8000
+  protocol: http
+  retries: 3
+  connect_timeout: 60000
+  write_timeout: 60000
+  read_timeout: 60000
+  
+  # Load balancing and health checks
+  tags:
+  - pwc-data-platform
+  - production
+
+---
+# API Routes Configuration
+apiVersion: configuration.konghq.com/v1
+kind: KongRoute
+metadata:
+  name: pwc-api-routes
+  namespace: kong-system
+spec:
+  service:
+    name: pwc-api-service
+    
+  # Route definitions
+  hosts:
+  - api.pwc-data-platform.com
+  
+  paths:
+  - /api/v1
+  - /api/v2
+  
+  methods:
+  - GET
+  - POST
+  - PUT
+  - DELETE
+  - PATCH
+  - OPTIONS
+  
+  strip_path: false
+  preserve_host: true
+  
+  # Advanced routing features
+  tags:
+  - api
+  - production
+
+---
+# Rate Limiting Plugin
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-rate-limiting
+  namespace: kong-system
+spec:
+  plugin: rate-limiting
+  config:
+    minute: 100
+    hour: 1000
+    day: 10000
+    policy: redis
+    redis_host: redis.kong-system.svc.cluster.local
+    redis_port: 6379
+    redis_database: 0
+    fault_tolerant: true
+    hide_client_headers: false
+
+---
+# JWT Authentication Plugin
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-jwt-auth
+  namespace: kong-system
+spec:
+  plugin: jwt
+  config:
+    uri_param_names:
+    - token
+    header_names:
+    - authorization
+    claims_to_verify:
+    - exp
+    - iss
+    - aud
+    key_claim_name: iss
+    secret_is_base64: false
+    run_on_preflight: true
+
+---
+# CORS Plugin
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-cors
+  namespace: kong-system
+spec:
+  plugin: cors
+  config:
+    origins:
+    - "https://admin.pwc-data-platform.com"
+    - "https://dashboard.pwc-data-platform.com"
+    methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+    headers:
+    - Accept
+    - Accept-Version
+    - Content-Length
+    - Content-MD5
+    - Content-Type
+    - Date
+    - Authorization
+    - X-Auth-Token
+    exposed_headers:
+    - X-Auth-Token
+    - X-RateLimit-Limit
+    - X-RateLimit-Remaining
+    - X-RateLimit-Reset
+    credentials: true
+    max_age: 3600
+    preflight_continue: false
+
+---
+# Request Transformer Plugin
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-request-transformer
+  namespace: kong-system
+spec:
+  plugin: request-transformer
+  config:
+    add:
+      headers:
+      - "X-Gateway-Version: kong-3.4"
+      - "X-Request-ID: $(uuid)"
+      - "X-Forwarded-Proto: https"
+    remove:
+      headers:
+      - "X-Internal-Header"
+    replace:
+      headers:
+      - "User-Agent: Kong-Gateway/$(kong_version)"
+
+---
+# Response Transformer Plugin  
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-response-transformer
+  namespace: kong-system
+spec:
+  plugin: response-transformer
+  config:
+    add:
+      headers:
+      - "X-Content-Type-Options: nosniff"
+      - "X-Frame-Options: DENY"
+      - "X-XSS-Protection: 1; mode=block"
+      - "Strict-Transport-Security: max-age=31536000; includeSubDomains"
+      - "X-Gateway-Response-Time: $(latency)"
+    remove:
+      headers:
+      - "Server"
+      - "X-Powered-By"
+
+---
+# Prometheus Plugin for metrics
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-prometheus
+  namespace: kong-system
+spec:
+  plugin: prometheus
+  config:
+    per_consumer: true
+    status_code_metrics: true
+    latency_metrics: true
+    bandwidth_metrics: true
+    upstream_health_metrics: true
+
+---
+# DataDog Plugin for APM
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-datadog
+  namespace: kong-system
+spec:
+  plugin: datadog
+  config:
+    host: datadog-agent.monitoring.svc.cluster.local
+    port: 8125
+    metrics:
+    - request_count
+    - request_size
+    - response_size
+    - latency
+    tags:
+    - "service:kong-gateway"
+    - "env:production"
+    - "team:data-platform"
+
+---
+# Consumer for API access
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: pwc-api-consumer
+  namespace: kong-system
+spec:
+  username: pwc-api-client
+  custom_id: pwc-data-platform-api-client
+  
+---
+# Apply plugins to routes
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: pwc-api-ingress
+  namespace: kong-system
+spec:
+  upstream:
+    healthchecks:
+      active:
+        healthy:
+          interval: 10
+          successes: 3
+        unhealthy:
+          interval: 10
+          tcp_failures: 3
+          http_failures: 5
+        http_path: /health
+        timeout: 3
+        concurrency: 5
+      passive:
+        healthy:
+          successes: 3
+        unhealthy:
+          tcp_failures: 3
+          http_failures: 5
+    slots: 1000
+    
+  proxy:
+    connect_timeout: 10000
+    read_timeout: 10000
+    write_timeout: 10000
+    
+  route:
+    plugins:
+    - name: api-rate-limiting
+    - name: api-jwt-auth  
+    - name: api-cors
+    - name: api-request-transformer
+    - name: api-response-transformer
+    - name: api-prometheus
+    - name: api-datadog

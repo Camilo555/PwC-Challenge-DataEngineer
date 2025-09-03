@@ -2,6 +2,7 @@
 Sales Service Interface
 Domain layer interface for sales business operations.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -17,10 +18,10 @@ class ISalesService(ABC):
     async def get_sales(self, criteria: SalesSearchCriteria) -> tuple[list[Sale], int]:
         """
         Get sales with business rules applied.
-        
+
         Args:
             criteria: Search and filtering criteria
-            
+
         Returns:
             Tuple of (sales_list, total_count)
         """

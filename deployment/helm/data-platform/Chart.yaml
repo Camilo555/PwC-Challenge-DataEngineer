@@ -1,0 +1,85 @@
+apiVersion: v2
+name: pwc-data-platform
+description: Enterprise-grade data platform with auto-scaling, cost optimization, and multi-cloud support
+type: application
+version: 1.0.0
+appVersion: "4.0.0"
+
+home: https://github.com/pwc/data-engineering-challenge
+sources:
+  - https://github.com/pwc/data-engineering-challenge
+
+maintainers:
+  - name: Data Engineering Team
+    email: data-engineering@pwc.com
+    url: https://pwc.com
+
+keywords:
+  - data-platform
+  - etl
+  - analytics
+  - spark
+  - kubernetes
+  - cloud-native
+  - enterprise
+
+annotations:
+  category: Analytics
+  licenses: MIT
+  images: |
+    - name: api
+      image: pwc-data-platform/api:4.0.0
+    - name: etl-processor
+      image: pwc-data-platform/etl:4.0.0
+    - name: spark-operator
+      image: gcr.io/spark-operator/spark-operator:v1beta2-1.3.8-3.1.1
+
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    tags:
+      - database
+  - name: redis
+    version: "17.x.x" 
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+    tags:
+      - cache
+  - name: kafka
+    version: "22.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: kafka.enabled
+    tags:
+      - streaming
+  - name: spark-operator
+    version: "1.1.x"
+    repository: "https://googlecloudplatform.github.io/spark-on-k8s-operator"
+    condition: spark.enabled
+    tags:
+      - processing
+  - name: prometheus
+    version: "23.x.x"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+    tags:
+      - monitoring
+  - name: grafana
+    version: "6.x.x"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: monitoring.grafana.enabled
+    tags:
+      - monitoring
+  - name: istio-base
+    version: "1.19.x"
+    repository: "https://istio-release.storage.googleapis.com/charts"
+    condition: serviceMesh.enabled
+    tags:
+      - service-mesh
+  - name: istiod
+    version: "1.19.x"
+    repository: "https://istio-release.storage.googleapis.com/charts"
+    condition: serviceMesh.enabled
+    tags:
+      - service-mesh

@@ -190,7 +190,7 @@ _performance_data_generator = None
 async def create_performance_test_data() -> PerformanceDataGenerator:
     """
     Create and setup performance test data.
-    
+
     Returns:
         PerformanceDataGenerator instance with test data ready
     """
@@ -227,10 +227,10 @@ async def get_sample_sales_data(num_records: int = 1000) -> list[dict[str, Any]]
 async def create_stress_test_dataset(size_mb: int = 100) -> Path:
     """
     Create a dataset of specific size for stress testing.
-    
+
     Args:
         size_mb: Target size in megabytes
-    
+
     Returns:
         Path to the created dataset file
     """
@@ -277,7 +277,7 @@ def get_test_query_patterns() -> list[dict[str, Any]]:
 async def create_concurrent_test_data(num_datasets: int = 5) -> list[Path]:
     """Create multiple datasets for concurrent testing"""
     generators = []
-    for i in range(num_datasets):
+    for _i in range(num_datasets):
         generator = PerformanceDataGenerator()
         await generator.setup()
         generators.append(generator)

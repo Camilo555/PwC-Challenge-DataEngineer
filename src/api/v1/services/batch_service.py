@@ -2,6 +2,7 @@
 Batch Service for Bulk Operations
 Handles batch CRUD operations with optimizations and error handling.
 """
+
 import asyncio
 import time
 from datetime import datetime
@@ -32,16 +33,16 @@ class BatchService:
         self,
         items: list[SalesTransactionCreate],
         validate_items: bool = True,
-        fail_on_error: bool = False
+        fail_on_error: bool = False,
     ) -> dict[str, Any]:
         """
         Create multiple transactions in batch.
-        
+
         Args:
             items: List of transactions to create
             validate_items: Whether to validate each item
             fail_on_error: Whether to fail entire batch on single error
-            
+
         Returns:
             Dictionary with operation results
         """
@@ -75,7 +76,7 @@ class BatchService:
                     error_detail = {
                         "item_index": i,
                         "error_type": "validation_error",
-                        "details": e.errors()
+                        "details": e.errors(),
                     }
                     errors.append(error_detail)
                     logger.warning(f"Validation failed for item {i}: {e}")
@@ -88,7 +89,7 @@ class BatchService:
                     error_detail = {
                         "item_index": i,
                         "error_type": "processing_error",
-                        "details": str(e)
+                        "details": str(e),
                     }
                     errors.append(error_detail)
                     logger.error(f"Failed to process item {i}: {e}")
@@ -109,7 +110,7 @@ class BatchService:
                 "failed": failed,
                 "errors": errors,
                 "processing_time_ms": processing_time,
-                "created_items": [str(item.id) for item in created_items]
+                "created_items": [str(item.id) for item in created_items],
             }
 
         except Exception as e:
@@ -118,17 +119,15 @@ class BatchService:
             raise
 
     async def batch_update_transactions(
-        self,
-        updates: list[dict[str, Any]],
-        upsert: bool = False
+        self, updates: list[dict[str, Any]], upsert: bool = False
     ) -> dict[str, Any]:
         """
         Update multiple transactions in batch.
-        
+
         Args:
             updates: List of update dictionaries with 'id' and update fields
             upsert: Whether to create items if they don't exist
-            
+
         Returns:
             Dictionary with operation results
         """
@@ -145,10 +144,10 @@ class BatchService:
         try:
             for i, update_data in enumerate(updates):
                 try:
-                    if 'id' not in update_data:
+                    if "id" not in update_data:
                         raise ValueError("Update data must include 'id' field")
 
-                    item_id = update_data['id']
+                    item_id = update_data["id"]
 
                     # Find existing item
                     stmt = select(SalesTransaction).where(SalesTransaction.id == item_id)
@@ -165,7 +164,7 @@ class BatchService:
                     else:
                         # Update existing item
                         for field, value in update_data.items():
-                            if field != 'id' and hasattr(existing_item, field):
+                            if field != "id" and hasattr(existing_item, field):
                                 setattr(existing_item, field, value)
 
                         existing_item.updated_at = datetime.utcnow()
@@ -177,9 +176,9 @@ class BatchService:
                     failed += 1
                     error_detail = {
                         "item_index": i,
-                        "item_id": update_data.get('id'),
+                        "item_id": update_data.get("id"),
                         "error_type": "update_error",
-                        "details": str(e)
+                        "details": str(e),
                     }
                     errors.append(error_detail)
                     logger.error(f"Failed to update item {i}: {e}")
@@ -197,7 +196,7 @@ class BatchService:
                 "failed": failed,
                 "errors": errors,
                 "processing_time_ms": processing_time,
-                "updated_items": [str(item.id) for item in updated_items]
+                "updated_items": [str(item.id) for item in updated_items],
             }
 
         except Exception as e:
@@ -206,17 +205,15 @@ class BatchService:
             raise
 
     async def batch_delete_transactions(
-        self,
-        ids: list[UUID],
-        soft_delete: bool = True
+        self, ids: list[UUID], soft_delete: bool = True
     ) -> dict[str, Any]:
         """
         Delete multiple transactions in batch.
-        
+
         Args:
             ids: List of transaction IDs to delete
             soft_delete: Whether to perform soft delete (mark as deleted)
-            
+
         Returns:
             Dictionary with operation results
         """
@@ -257,7 +254,7 @@ class BatchService:
                         "item_index": i,
                         "item_id": str(item_id),
                         "error_type": "delete_error",
-                        "details": str(e)
+                        "details": str(e),
                     }
                     errors.append(error_detail)
                     logger.error(f"Failed to delete item {i}: {e}")
@@ -275,7 +272,7 @@ class BatchService:
                 "failed": failed,
                 "errors": errors,
                 "processing_time_ms": processing_time,
-                "deleted_items": deleted_items
+                "deleted_items": deleted_items,
             }
 
         except Exception as e:
@@ -284,17 +281,15 @@ class BatchService:
             raise
 
     async def batch_upsert_transactions(
-        self,
-        items: list[SalesTransactionCreate],
-        validate_items: bool = True
+        self, items: list[SalesTransactionCreate], validate_items: bool = True
     ) -> dict[str, Any]:
         """
         Upsert (insert or update) multiple transactions in batch.
-        
+
         Args:
             items: List of transactions to upsert
             validate_items: Whether to validate each item
-            
+
         Returns:
             Dictionary with operation results
         """
@@ -318,7 +313,7 @@ class BatchService:
                     # Check if item exists (based on invoice_no + stock_code)
                     stmt = select(SalesTransaction).where(
                         SalesTransaction.invoice_no == item.invoice_no,
-                        SalesTransaction.stock_code == item.stock_code
+                        SalesTransaction.stock_code == item.stock_code,
                     )
                     existing_item = self.session.exec(stmt).first()
 
@@ -342,7 +337,7 @@ class BatchService:
                     error_detail = {
                         "item_index": i,
                         "error_type": "upsert_error",
-                        "details": str(e)
+                        "details": str(e),
                     }
                     errors.append(error_detail)
                     logger.error(f"Failed to upsert item {i}: {e}")
@@ -360,7 +355,7 @@ class BatchService:
                 "failed": failed,
                 "errors": errors,
                 "processing_time_ms": processing_time,
-                "upserted_items": [str(item.id) for item in upserted_items]
+                "upserted_items": [str(item.id) for item in upserted_items],
             }
 
         except Exception as e:
@@ -368,16 +363,13 @@ class BatchService:
             logger.error(f"Batch upsert {batch_id} failed: {str(e)}")
             raise
 
-    async def validate_batch_data(
-        self,
-        items: list[SalesTransactionCreate]
-    ) -> dict[str, Any]:
+    async def validate_batch_data(self, items: list[SalesTransactionCreate]) -> dict[str, Any]:
         """
         Validate batch data without performing operations.
-        
+
         Args:
             items: List of transactions to validate
-            
+
         Returns:
             Dictionary with validation results
         """
@@ -394,16 +386,10 @@ class BatchService:
                 valid_count += 1
             except ValidationError as e:
                 invalid_count += 1
-                errors.append({
-                    "item_index": i,
-                    "validation_errors": e.errors()
-                })
+                errors.append({"item_index": i, "validation_errors": e.errors()})
             except Exception as e:
                 invalid_count += 1
-                errors.append({
-                    "item_index": i,
-                    "error": str(e)
-                })
+                errors.append({"item_index": i, "error": str(e)})
 
         # Generate recommendations
         if invalid_count > 0:
@@ -411,7 +397,9 @@ class BatchService:
             if error_rate > 0.1:  # More than 10% errors
                 recommendations.append("High error rate detected. Consider reviewing data quality.")
             if error_rate > 0.5:  # More than 50% errors
-                recommendations.append("Majority of items have errors. Consider data validation before batch processing.")
+                recommendations.append(
+                    "Majority of items have errors. Consider data validation before batch processing."
+                )
 
         return {
             "valid_count": valid_count,
@@ -419,16 +407,16 @@ class BatchService:
             "errors": errors,
             "is_valid": invalid_count == 0,
             "error_rate": invalid_count / len(items) if len(items) > 0 else 0,
-            "recommendations": recommendations
+            "recommendations": recommendations,
         }
 
     async def get_batch_status(self, batch_id: str) -> dict[str, Any] | None:
         """
         Get status of a batch operation.
-        
+
         Args:
             batch_id: ID of the batch operation
-            
+
         Returns:
             Status information or None if not found
         """
@@ -441,13 +429,13 @@ class BatchService:
             "completed_at": datetime.utcnow().isoformat(),
             "total_items": 0,
             "successful": 0,
-            "failed": 0
+            "failed": 0,
         }
 
     async def get_active_operations(self) -> list[dict[str, Any]]:
         """
         Get list of currently active batch operations.
-        
+
         Returns:
             List of active operations
         """
@@ -489,10 +477,10 @@ class BatchService:
     def _validate_transaction_item(self, item: SalesTransactionCreate) -> None:
         """
         Validate a single transaction item using business rules.
-        
+
         Args:
             item: Transaction item to validate
-            
+
         Raises:
             ValidationError: If validation fails
         """
@@ -501,5 +489,5 @@ class BatchService:
         self.validator.validate_quantity(item.quantity)
 
         # Additional validations can be added here
-        if hasattr(item, 'discount_amount') and item.discount_amount:
+        if hasattr(item, "discount_amount") and item.discount_amount:
             self.validator.validate_discount_amount(item.discount_amount, item.total_amount)

@@ -2,6 +2,7 @@
 Circuit Breaker middleware for API resilience
 Enterprise-grade circuit breaker implementation with monitoring
 """
+
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
@@ -23,7 +24,7 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 5,
         timeout: int = 60,
-        expected_exception: type = HTTPException
+        expected_exception: type = HTTPException,
     ):
         self.failure_threshold = failure_threshold
         self.timeout = timeout
@@ -41,7 +42,7 @@ class CircuitBreaker:
                 else:
                     raise HTTPException(
                         status_code=503,
-                        detail="Service temporarily unavailable - circuit breaker is OPEN"
+                        detail="Service temporarily unavailable - circuit breaker is OPEN",
                     )
 
         try:
@@ -54,8 +55,8 @@ class CircuitBreaker:
 
     def _should_attempt_reset(self) -> bool:
         return (
-            self.last_failure_time is not None and
-            time.time() - self.last_failure_time >= self.timeout
+            self.last_failure_time is not None
+            and time.time() - self.last_failure_time >= self.timeout
         )
 
     async def _on_success(self):
@@ -93,8 +94,4 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
                 # Server errors trigger circuit breaker
                 raise e
             # Client errors don't trigger circuit breaker
-            return Response(
-                content=str(e.detail),
-                status_code=e.status_code,
-                headers=e.headers
-            )
+            return Response(content=str(e.detail), status_code=e.status_code, headers=e.headers)

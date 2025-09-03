@@ -1,4 +1,5 @@
 """Currency exchange rate API client for data enrichment."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,9 +38,7 @@ class CurrencyAPIClient(BaseAPIClient):
             return False
 
     async def get_exchange_rates(
-        self,
-        base_currency: str = "GBP",
-        target_currencies: list[str] | None = None
+        self, base_currency: str = "GBP", target_currencies: list[str] | None = None
     ) -> dict[str, float]:
         """
         Get current exchange rates from base currency to targets.
@@ -84,10 +83,7 @@ class CurrencyAPIClient(BaseAPIClient):
             return {}
 
     async def get_historical_rates(
-        self,
-        base_currency: str,
-        target_currency: str,
-        date: datetime
+        self, base_currency: str, target_currency: str, date: datetime
     ) -> float | None:
         """
         Get historical exchange rate for a specific date.
@@ -122,9 +118,7 @@ class CurrencyAPIClient(BaseAPIClient):
             return None
 
     async def enrich_transaction_with_rates(
-        self,
-        transaction_data: dict,
-        base_currency: str = "GBP"
+        self, transaction_data: dict, base_currency: str = "GBP"
     ) -> dict:
         """
         Enrich transaction data with current exchange rates.
@@ -142,11 +136,13 @@ class CurrencyAPIClient(BaseAPIClient):
 
             # Add exchange rate information
             enriched_data = transaction_data.copy()
-            enriched_data.update({
-                "base_currency": base_currency,
-                "exchange_rates": rates,
-                "enrichment_timestamp": datetime.utcnow().isoformat(),
-            })
+            enriched_data.update(
+                {
+                    "base_currency": base_currency,
+                    "exchange_rates": rates,
+                    "enrichment_timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
             # Calculate amounts in different currencies if unit_price exists
             if "unit_price" in transaction_data and rates:
@@ -154,8 +150,12 @@ class CurrencyAPIClient(BaseAPIClient):
                 quantity = float(transaction_data.get("quantity", 1))
 
                 for currency_code, rate in rates.items():
-                    enriched_data[f"unit_price_{currency_code.lower()}"] = round(unit_price * rate, 2)
-                    enriched_data[f"amount_{currency_code.lower()}"] = round(unit_price * quantity * rate, 2)
+                    enriched_data[f"unit_price_{currency_code.lower()}"] = round(
+                        unit_price * rate, 2
+                    )
+                    enriched_data[f"amount_{currency_code.lower()}"] = round(
+                        unit_price * quantity * rate, 2
+                    )
 
             return enriched_data
 
@@ -163,8 +163,10 @@ class CurrencyAPIClient(BaseAPIClient):
             logger.error(f"Failed to enrich transaction with currency rates: {e}")
             # Return original data with error flag
             enriched_data = transaction_data.copy()
-            enriched_data.update({
-                "enrichment_error": f"Currency enrichment failed: {str(e)}",
-                "enrichment_timestamp": datetime.utcnow().isoformat(),
-            })
+            enriched_data.update(
+                {
+                    "enrichment_error": f"Currency enrichment failed: {str(e)}",
+                    "enrichment_timestamp": datetime.utcnow().isoformat(),
+                }
+            )
             return enriched_data

@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PwC Data Engineering Platform - Interactive Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui.css" />
+    <script src="https://unpkg.com/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            background: white;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 0;
+            overflow: hidden;
+        }
+        
+        .nav-tab {
+            flex: 1;
+            padding: 1rem 2rem;
+            cursor: pointer;
+            background: #f8f9fa;
+            border: none;
+            border-right: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        
+        .nav-tab:last-child {
+            border-right: none;
+        }
+        
+        .nav-tab:hover {
+            background: #e9ecef;
+        }
+        
+        .nav-tab.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            background: white;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-height: 600px;
+        }
+        
+        .tab-pane {
+            display: none;
+            padding: 2rem;
+        }
+        
+        .tab-pane.active {
+            display: block;
+        }
+        
+        .swagger-container {
+            border: none;
+            padding: 0;
+        }
+        
+        .mermaid-container {
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .code-example {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-left: 4px solid #667eea;
+            position: relative;
+        }
+        
+        .code-example pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+        
+        .code-example code {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            opacity: 1;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .feature-card h3 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        
+        .diagram-controls {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .diagram-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0.75rem 1.5rem;
+            margin: 0 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .diagram-btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+        
+        .search-container {
+            margin-bottom: 2rem;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .search-results {
+            margin-top: 1rem;
+        }
+        
+        .search-result {
+            background: white;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .result-title {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .result-snippet {
+            color: #6c757d;
+            line-height: 1.5;
+        }
+        
+        .highlight {
+            background: #ffeaa7;
+            padding: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PwC Data Engineering Platform</h1>
+        <p>Interactive Documentation & API Explorer</p>
+    </div>
+    
+    <div class="container">
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('api-explorer')">API Explorer</button>
+            <button class="nav-tab" onclick="showTab('architecture-diagrams')">Architecture Diagrams</button>
+            <button class="nav-tab" onclick="showTab('code-examples')">Interactive Examples</button>
+            <button class="nav-tab" onclick="showTab('docs-search')">Documentation Search</button>
+        </div>
+        
+        <div class="tab-content">
+            <div id="api-explorer" class="tab-pane active">
+                <h2>API Explorer</h2>
+                <p>Interactive API documentation powered by Swagger UI. Test endpoints directly from this interface.</p>
+                
+                <div class="swagger-container">
+                    <div id="swagger-ui"></div>
+                </div>
+            </div>
+            
+            <div id="architecture-diagrams" class="tab-pane">
+                <h2>Architecture Diagrams</h2>
+                <p>Interactive system architecture diagrams rendered with Mermaid.</p>
+                
+                <div class="diagram-controls">
+                    <button class="diagram-btn" onclick="showDiagram('system-overview')">System Overview</button>
+                    <button class="diagram-btn" onclick="showDiagram('data-flow')">Data Flow</button>
+                    <button class="diagram-btn" onclick="showDiagram('microservices')">Microservices</button>
+                    <button class="diagram-btn" onclick="showDiagram('deployment')">Deployment</button>
+                </div>
+                
+                <div id="diagram-container">
+                    <!-- Diagrams will be rendered here -->
+                </div>
+            </div>
+            
+            <div id="code-examples" class="tab-pane">
+                <h2>Interactive Code Examples</h2>
+                <p>Copy-to-clipboard code examples for common use cases.</p>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>API Authentication</h3>
+                        <p>Example of how to authenticate with the API using JWT tokens.</p>
+                        
+                        <div class="code-example">
+                            <button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>
+                            <pre><code class="language-python">import requests
+import json
+
+# Authentication endpoint
+auth_url = "http://localhost:8000/api/v1/auth/login"
+
+# Login credentials
+credentials = {
+    "username": "your_username",
+    "password": "your_password"
+}
+
+# Get access token
+response = requests.post(auth_url, json=credentials)
+token = response.json()["access_token"]
+
+# Use token in subsequent requests
+headers = {"Authorization": f"Bearer {token}"}
+api_response = requests.get(
+    "http://localhost:8000/api/v1/retail/sales", 
+    headers=headers
+)</code></pre>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>GraphQL Query</h3>
+                        <p>Example GraphQL query for retrieving sales data with filters.</p>
+                        
+                        <div class="code-example">
+                            <button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>
+                            <pre><code class="language-graphql">query GetSalesData($startDate: String!, $endDate: String!) {
+  sales(
+    filters: {
+      date_range: {
+        start: $startDate
+        end: $endDate
+      }
+      status: "completed"
+    }
+  ) {
+    id
+    customer {
+      name
+      email
+      segment
+    }
+    products {
+      name
+      category
+      price
+      quantity
+    }
+    total_amount
+    order_date
+    shipping_address {
+      city
+      country
+    }
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>ETL Pipeline Trigger</h3>
+                        <p>Example of how to trigger an ETL pipeline programmatically.</p>
+                        
+                        <div class="code-example">
+                            <button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>
+                            <pre><code class="language-python">import requests
+from datetime import datetime
+
+# ETL pipeline endpoint
+pipeline_url = "http://localhost:8000/api/v1/etl/pipelines/retail-etl/trigger"
+
+# Pipeline parameters
+params = {
+    "environment": "production",
+    "source_date": datetime.now().strftime("%Y-%m-%d"),
+    "full_refresh": False,
+    "notify_on_completion": True
+}
+
+# Trigger pipeline
+response = requests.post(
+    pipeline_url, 
+    json=params,
+    headers=headers
+)
+
+# Monitor pipeline status
+pipeline_id = response.json()["pipeline_id"]
+status_url = f"http://localhost:8000/api/v1/etl/pipelines/{pipeline_id}/status"
+
+status_response = requests.get(status_url, headers=headers)
+print(f"Pipeline Status: {status_response.json()['status']}")</code></pre>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>Real-time Monitoring</h3>
+                        <p>Example of connecting to real-time monitoring websocket.</p>
+                        
+                        <div class="code-example">
+                            <button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>
+                            <pre><code class="language-javascript">// WebSocket connection for real-time monitoring
+const ws = new WebSocket('ws://localhost:8000/api/v1/monitoring/realtime');
+
+ws.onopen = function(event) {
+    console.log('Connected to monitoring stream');
+    
+    // Subscribe to specific metrics
+    ws.send(JSON.stringify({
+        action: 'subscribe',
+        metrics: ['pipeline_status', 'system_health', 'error_rate']
+    }));
+};
+
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    
+    switch(data.type) {
+        case 'pipeline_status':
+            updatePipelineStatus(data.payload);
+            break;
+        case 'system_health':
+            updateSystemHealth(data.payload);
+            break;
+        case 'error_rate':
+            updateErrorRate(data.payload);
+            break;
+    }
+};
+
+function updatePipelineStatus(status) {
+    document.getElementById('pipeline-status').innerText = status.status;
+    document.getElementById('pipeline-progress').value = status.progress;
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="docs-search" class="tab-pane">
+                <h2>Documentation Search</h2>
+                <p>Search across all documentation files and get instant results.</p>
+                
+                <div class="search-container">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        class="search-input" 
+                        placeholder="Search documentation..." 
+                        oninput="performSearch(this.value)"
+                    >
+                </div>
+                
+                <div id="search-results" class="search-results">
+                    <p>Start typing to search across all documentation...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script>
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+
+        // Initialize Swagger UI
+        const ui = SwaggerUIBundle({
+            url: '/docs/api/openapi.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIBundle.presets.standalone
+            ],
+            plugins: [
+                SwaggerUIBundle.plugins.DownloadUrl
+            ],
+            layout: "StandaloneLayout",
+            tryItOutEnabled: true,
+            requestInterceptor: (req) => {
+                // Add authentication header if needed
+                const token = localStorage.getItem('api_token');
+                if (token) {
+                    req.headers.Authorization = `Bearer ${token}`;
+                }
+                return req;
+            }
+        });
+
+        // Tab switching functionality
+        function showTab(tabId) {
+            // Hide all tab panes
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab pane
+            document.getElementById(tabId).classList.add('active');
+            
+            // Mark selected tab as active
+            event.target.classList.add('active');
+        }
+
+        // Architecture diagrams
+        const diagrams = {
+            'system-overview': `
+                graph TD
+                    A[Client Applications] --> B[API Gateway]
+                    B --> C[Authentication Service]
+                    B --> D[REST API]
+                    B --> E[GraphQL API]
+                    D --> F[Business Logic Layer]
+                    E --> F
+                    F --> G[Data Access Layer]
+                    G --> H[(PostgreSQL)]
+                    G --> I[(Redis Cache)]
+                    F --> J[ETL Pipeline]
+                    J --> K[Data Warehouse]
+                    J --> L[Message Queue]
+                    M[Monitoring] --> N[Grafana]
+                    M --> O[DataDog]
+                    P[Security] --> Q[RBAC]
+                    P --> R[Encryption]
+            `,
+            'data-flow': `
+                graph LR
+                    A[Raw Data Sources] --> B[Data Ingestion]
+                    B --> C[Bronze Layer<br/>Raw Data]
+                    C --> D[Silver Layer<br/>Cleaned Data]
+                    D --> E[Gold Layer<br/>Business Ready]
+                    E --> F[APIs]
+                    E --> G[Analytics]
+                    E --> H[ML Models]
+                    F --> I[Client Apps]
+                    G --> J[Dashboards]
+                    H --> K[Predictions]
+            `,
+            'microservices': `
+                graph TB
+                    subgraph "API Layer"
+                        A[API Gateway]
+                        B[Auth Service]
+                    end
+                    
+                    subgraph "Core Services"
+                        C[User Service]
+                        D[Retail Service]
+                        E[Analytics Service]
+                        F[ETL Service]
+                    end
+                    
+                    subgraph "Data Layer"
+                        G[(User DB)]
+                        H[(Retail DB)]
+                        I[(Analytics DB)]
+                        J[(Cache)]
+                    end
+                    
+                    subgraph "External Services"
+                        K[Message Queue]
+                        L[File Storage]
+                        M[Monitoring]
+                    end
+                    
+                    A --> B
+                    A --> C
+                    A --> D
+                    A --> E
+                    A --> F
+                    
+                    C --> G
+                    D --> H
+                    E --> I
+                    C --> J
+                    D --> J
+                    E --> J
+                    
+                    F --> K
+                    F --> L
+                    M --> C
+                    M --> D
+                    M --> E
+                    M --> F
+            `,
+            'deployment': `
+                graph TB
+                    subgraph "Production Environment"
+                        subgraph "Kubernetes Cluster"
+                            A[Ingress Controller]
+                            B[API Services]
+                            C[Background Jobs]
+                            D[Monitoring]
+                        end
+                        
+                        subgraph "Managed Services"
+                            E[(PostgreSQL RDS)]
+                            F[(Redis ElastiCache)]
+                            G[S3 Storage]
+                            H[DataDog APM]
+                        end
+                    end
+                    
+                    subgraph "CI/CD Pipeline"
+                        I[GitHub Actions]
+                        J[Docker Registry]
+                        K[Terraform]
+                    end
+                    
+                    I --> J
+                    J --> B
+                    K --> A
+                    K --> E
+                    K --> F
+                    
+                    A --> B
+                    B --> E
+                    B --> F
+                    C --> G
+                    D --> H
+            `
+        };
+
+        function showDiagram(diagramType) {
+            const container = document.getElementById('diagram-container');
+            container.innerHTML = `<div class="mermaid">${diagrams[diagramType]}</div>`;
+            mermaid.init(undefined, container.querySelector('.mermaid'));
+        }
+
+        // Copy to clipboard functionality
+        function copyToClipboard(button) {
+            const codeElement = button.nextElementSibling.querySelector('code');
+            const text = codeElement.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#28a745';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#667eea';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+
+        // Documentation search functionality
+        const mockSearchData = [
+            {
+                title: "API Authentication Guide",
+                url: "/docs/api/authentication.md",
+                content: "Learn how to authenticate with the PwC Data Engineering Platform API using JWT tokens, OAuth2, and API keys."
+            },
+            {
+                title: "ETL Pipeline Documentation",
+                url: "/docs/data-engineering/etl-pipelines.md", 
+                content: "Comprehensive guide to building, deploying, and monitoring ETL pipelines using Apache Airflow and custom frameworks."
+            },
+            {
+                title: "Database Schema Reference",
+                url: "/docs/data-engineering/database-schema.md",
+                content: "Complete reference for the retail database schema including tables, relationships, and data lineage information."
+            },
+            {
+                title: "Deployment Guide",
+                url: "/docs/operations/deployment.md",
+                content: "Step-by-step deployment instructions for staging and production environments using Kubernetes and Terraform."
+            },
+            {
+                title: "Monitoring and Alerting",
+                url: "/docs/operations/monitoring.md",
+                content: "Configure comprehensive monitoring with DataDog, Grafana, and Prometheus. Set up alerts for system health and performance."
+            },
+            {
+                title: "GraphQL API Reference", 
+                url: "/docs/api/graphql.md",
+                content: "GraphQL schema documentation with queries, mutations, and subscriptions for real-time data access."
+            },
+            {
+                title: "Security Best Practices",
+                url: "/docs/security/best-practices.md",
+                content: "Security guidelines covering authentication, authorization, encryption, and compliance requirements."
+            },
+            {
+                title: "Data Quality Framework",
+                url: "/docs/data-engineering/data-quality.md",
+                content: "Implement data quality checks using Great Expectations and custom validation rules for data reliability."
+            }
+        ];
+
+        function performSearch(query) {
+            const resultsContainer = document.getElementById('search-results');
+            
+            if (!query.trim()) {
+                resultsContainer.innerHTML = '<p>Start typing to search across all documentation...</p>';
+                return;
+            }
+
+            const results = mockSearchData.filter(item => 
+                item.title.toLowerCase().includes(query.toLowerCase()) ||
+                item.content.toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<p>No results found. Try different keywords.</p>';
+                return;
+            }
+
+            const resultsHTML = results.map(result => {
+                const highlightedTitle = result.title.replace(
+                    new RegExp(query, 'gi'), 
+                    match => `<span class="highlight">${match}</span>`
+                );
+                
+                const highlightedContent = result.content.replace(
+                    new RegExp(query, 'gi'), 
+                    match => `<span class="highlight">${match}</span>`
+                );
+
+                return `
+                    <div class="search-result">
+                        <div class="result-title">${highlightedTitle}</div>
+                        <div class="result-snippet">${highlightedContent}</div>
+                        <small style="color: #6c757d;">${result.url}</small>
+                    </div>
+                `;
+            }).join('');
+
+            resultsContainer.innerHTML = resultsHTML;
+        }
+
+        // Initialize with system overview diagram
+        document.addEventListener('DOMContentLoaded', function() {
+            showDiagram('system-overview');
+        });
+    </script>
+</body>
+</html>

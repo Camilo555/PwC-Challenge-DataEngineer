@@ -2,6 +2,7 @@
 Health Check System
 Provides comprehensive health monitoring for system components.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ import psutil
 try:
     import aio_pika
     import pika
+
     RABBITMQ_AVAILABLE = True
 except ImportError:
     RABBITMQ_AVAILABLE = False
@@ -25,6 +27,7 @@ except ImportError:
 try:
     from kafka import KafkaConsumer
     from kafka.admin import KafkaAdminClient
+
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
@@ -32,6 +35,7 @@ except ImportError:
 try:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
+
     SQLALCHEMY_AVAILABLE = True
 except ImportError:
     SQLALCHEMY_AVAILABLE = False
@@ -43,6 +47,7 @@ logger = get_logger(__name__)
 
 class HealthStatus(Enum):
     """Health check status levels."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -52,6 +57,7 @@ class HealthStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """Result of a health check."""
+
     component: str
     status: HealthStatus
     message: str
@@ -67,7 +73,7 @@ class HealthCheckResult:
             "message": self.message,
             "timestamp": self.timestamp.isoformat(),
             "response_time_ms": self.response_time_ms,
-            "details": self.details or {}
+            "details": self.details or {},
         }
 
 
@@ -95,7 +101,7 @@ class BaseHealthCheck:
                 status=HealthStatus.UNHEALTHY,
                 message=f"Health check timed out after {self.timeout}s",
                 timestamp=datetime.utcnow(),
-                response_time_ms=response_time
+                response_time_ms=response_time,
             )
 
         except Exception as e:
@@ -105,7 +111,7 @@ class BaseHealthCheck:
                 status=HealthStatus.UNHEALTHY,
                 message=f"Health check failed: {str(e)}",
                 timestamp=datetime.utcnow(),
-                response_time_ms=response_time
+                response_time_ms=response_time,
             )
 
     async def _check_health(self) -> HealthCheckResult:
@@ -127,7 +133,7 @@ class DatabaseHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message="SQLAlchemy not available",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
         try:
@@ -145,15 +151,15 @@ class DatabaseHealthCheck(BaseHealthCheck):
                         timestamp=datetime.utcnow(),
                         details={
                             "query_result": row[0],
-                            "connection_pool_size": engine.pool.size()
-                        }
+                            "connection_pool_size": engine.pool.size(),
+                        },
                     )
                 else:
                     return HealthCheckResult(
                         component=self.name,
                         status=HealthStatus.UNHEALTHY,
                         message="Database query returned unexpected result",
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.utcnow(),
                     )
 
             await engine.dispose()
@@ -163,7 +169,7 @@ class DatabaseHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
                 message=f"Database connection failed: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
@@ -181,7 +187,7 @@ class RedisHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message="Redis client not available",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
         try:
@@ -211,15 +217,15 @@ class RedisHealthCheck(BaseHealthCheck):
                         "ping_successful": pong,
                         "redis_version": info.get("redis_version"),
                         "used_memory": info.get("used_memory_human"),
-                        "connected_clients": info.get("connected_clients")
-                    }
+                        "connected_clients": info.get("connected_clients"),
+                    },
                 )
             else:
                 return HealthCheckResult(
                     component=self.name,
                     status=HealthStatus.DEGRADED,
                     message="Redis connection issues detected",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 )
 
         except Exception as e:
@@ -227,15 +233,22 @@ class RedisHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
                 message=f"Redis connection failed: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
 class RabbitMQHealthCheck(BaseHealthCheck):
     """Health check for RabbitMQ connectivity."""
 
-    def __init__(self, name: str, host: str = "localhost", port: int = 5672, 
-                 username: str = "guest", password: str = "guest", timeout: float = 10.0):
+    def __init__(
+        self,
+        name: str,
+        host: str = "localhost",
+        port: int = 5672,
+        username: str = "guest",
+        password: str = "guest",
+        timeout: float = 10.0,
+    ):
         super().__init__(name, timeout)
         self.host = host
         self.port = port
@@ -249,7 +262,7 @@ class RabbitMQHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message="RabbitMQ client not available",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
         try:
@@ -260,26 +273,26 @@ class RabbitMQHealthCheck(BaseHealthCheck):
                 credentials=pika.PlainCredentials(self.username, self.password),
                 connection_attempts=1,
                 retry_delay=1.0,
-                socket_timeout=self.timeout
+                socket_timeout=self.timeout,
             )
-            
+
             connection = pika.BlockingConnection(connection_params)
             channel = connection.channel()
-            
+
             # Test basic queue operation
             test_queue = f"health_check_{int(time.time())}"
             channel.queue_declare(queue=test_queue, durable=False, auto_delete=True)
-            
+
             # Publish and consume test message
             test_message = "health_check_message"
-            channel.basic_publish(exchange='', routing_key=test_queue, body=test_message)
-            
+            channel.basic_publish(exchange="", routing_key=test_queue, body=test_message)
+
             method_frame, header_frame, body = channel.basic_get(queue=test_queue, auto_ack=True)
-            
+
             # Clean up
             channel.queue_delete(queue=test_queue)
             connection.close()
-            
+
             if body and body.decode() == test_message:
                 return HealthCheckResult(
                     component=self.name,
@@ -291,15 +304,15 @@ class RabbitMQHealthCheck(BaseHealthCheck):
                         "port": self.port,
                         "test_queue_created": True,
                         "message_published": True,
-                        "message_consumed": True
-                    }
+                        "message_consumed": True,
+                    },
                 )
             else:
                 return HealthCheckResult(
                     component=self.name,
                     status=HealthStatus.DEGRADED,
                     message="RabbitMQ operations failed",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 )
 
         except Exception as e:
@@ -307,7 +320,7 @@ class RabbitMQHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
                 message=f"RabbitMQ connection failed: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
@@ -325,7 +338,7 @@ class KafkaHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message="Kafka client not available",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
         try:
@@ -333,26 +346,26 @@ class KafkaHealthCheck(BaseHealthCheck):
             admin_client = KafkaAdminClient(
                 bootstrap_servers=self.bootstrap_servers,
                 request_timeout_ms=int(self.timeout * 1000),
-                api_version=(2, 0, 0)
+                api_version=(2, 0, 0),
             )
-            
+
             # List topics to test connectivity
             topic_metadata = admin_client.list_topics(timeout=self.timeout)
             topics = list(topic_metadata.topics.keys())
-            
+
             # Test consumer creation (without subscribing)
             consumer = KafkaConsumer(
                 bootstrap_servers=self.bootstrap_servers,
                 consumer_timeout_ms=1000,
-                api_version=(2, 0, 0)
+                api_version=(2, 0, 0),
             )
-            
+
             # Get cluster metadata
             cluster_metadata = consumer.list_consumer_groups()
-            
+
             consumer.close()
             admin_client.close()
-            
+
             return HealthCheckResult(
                 component=self.name,
                 status=HealthStatus.HEALTHY,
@@ -362,8 +375,8 @@ class KafkaHealthCheck(BaseHealthCheck):
                     "bootstrap_servers": self.bootstrap_servers,
                     "topics_available": len(topics),
                     "cluster_connected": True,
-                    "consumer_groups_available": len(cluster_metadata) if cluster_metadata else 0
-                }
+                    "consumer_groups_available": len(cluster_metadata) if cluster_metadata else 0,
+                },
             )
 
         except Exception as e:
@@ -371,17 +384,20 @@ class KafkaHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
                 message=f"Kafka connection failed: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
 class SystemResourcesHealthCheck(BaseHealthCheck):
     """Health check for system resources (CPU, Memory, Disk)."""
 
-    def __init__(self, name: str = "system_resources",
-                 cpu_threshold: float = 90.0,
-                 memory_threshold: float = 90.0,
-                 disk_threshold: float = 90.0):
+    def __init__(
+        self,
+        name: str = "system_resources",
+        cpu_threshold: float = 90.0,
+        memory_threshold: float = 90.0,
+        disk_threshold: float = 90.0,
+    ):
         super().__init__(name)
         self.cpu_threshold = cpu_threshold
         self.memory_threshold = memory_threshold
@@ -398,7 +414,7 @@ class SystemResourcesHealthCheck(BaseHealthCheck):
             memory_percent = memory.percent
 
             # Get disk usage for root partition
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
             disk_percent = disk.percent
 
             # Determine overall status
@@ -412,7 +428,9 @@ class SystemResourcesHealthCheck(BaseHealthCheck):
             if memory_percent > self.memory_threshold:
                 issues.append(f"High memory usage: {memory_percent:.1f}%")
                 if status != HealthStatus.UNHEALTHY:
-                    status = HealthStatus.DEGRADED if memory_percent < 95 else HealthStatus.UNHEALTHY
+                    status = (
+                        HealthStatus.DEGRADED if memory_percent < 95 else HealthStatus.UNHEALTHY
+                    )
 
             if disk_percent > self.disk_threshold:
                 issues.append(f"High disk usage: {disk_percent:.1f}%")
@@ -437,8 +455,8 @@ class SystemResourcesHealthCheck(BaseHealthCheck):
                     "disk_free_gb": disk.free / (1024**3),
                     "disk_total_gb": disk.total / (1024**3),
                     "platform": platform.platform(),
-                    "cpu_count": psutil.cpu_count()
-                }
+                    "cpu_count": psutil.cpu_count(),
+                },
             )
 
         except Exception as e:
@@ -446,7 +464,7 @@ class SystemResourcesHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message=f"Failed to check system resources: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
@@ -499,14 +517,18 @@ class FileSystemHealthCheck(BaseHealthCheck):
                 details[path] = path_details
 
             status = HealthStatus.HEALTHY if not issues else HealthStatus.UNHEALTHY
-            message = "All file system paths accessible" if not issues else f"Issues found: {', '.join(issues)}"
+            message = (
+                "All file system paths accessible"
+                if not issues
+                else f"Issues found: {', '.join(issues)}"
+            )
 
             return HealthCheckResult(
                 component=self.name,
                 status=status,
                 message=message,
                 timestamp=datetime.utcnow(),
-                details=details
+                details=details,
             )
 
         except Exception as e:
@@ -514,7 +536,7 @@ class FileSystemHealthCheck(BaseHealthCheck):
                 component=self.name,
                 status=HealthStatus.UNKNOWN,
                 message=f"Failed to check file system: {str(e)}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
 
 
@@ -602,7 +624,7 @@ class HealthCheckManager:
                     component=name,
                     status=HealthStatus.UNHEALTHY,
                     message=f"Health check raised exception: {str(result)}",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
                 )
 
             # Store result and history
@@ -637,8 +659,7 @@ class HealthCheckManager:
         overall_status = self.get_overall_status()
 
         component_statuses = {
-            name: result.status.value
-            for name, result in self.last_results.items()
+            name: result.status.value for name, result in self.last_results.items()
         }
 
         status_counts = {}
@@ -653,19 +674,15 @@ class HealthCheckManager:
             "status_counts": status_counts,
             "components": component_statuses,
             "last_check_times": {
-                name: result.timestamp.isoformat()
-                for name, result in self.last_results.items()
-            }
+                name: result.timestamp.isoformat() for name, result in self.last_results.items()
+            },
         }
 
     def get_detailed_report(self) -> dict[str, Any]:
         """Get detailed health report with all check results."""
         return {
             "summary": self.get_health_summary(),
-            "details": {
-                name: result.to_dict()
-                for name, result in self.last_results.items()
-            }
+            "details": {name: result.to_dict() for name, result in self.last_results.items()},
         }
 
     def get_check_history(self, name: str, limit: int = 50) -> list[dict[str, Any]]:
@@ -683,10 +700,13 @@ health_manager = HealthCheckManager()
 
 # Utility functions for common health check setups
 
-def setup_basic_health_checks(database_url: str | None = None,
-                            rabbitmq_host: str | None = None,
-                            kafka_servers: list[str] | None = None,
-                            file_paths: list[str] | None = None):
+
+def setup_basic_health_checks(
+    database_url: str | None = None,
+    rabbitmq_host: str | None = None,
+    kafka_servers: list[str] | None = None,
+    file_paths: list[str] | None = None,
+):
     """Setup basic health checks for common components."""
 
     # System resources check
@@ -702,7 +722,7 @@ def setup_basic_health_checks(database_url: str | None = None,
     if rabbitmq_host:
         rabbitmq_check = RabbitMQHealthCheck("rabbitmq", rabbitmq_host)
         health_manager.register_health_check(rabbitmq_check)
-    
+
     # Kafka check
     if kafka_servers:
         kafka_check = KafkaHealthCheck("kafka", kafka_servers)
@@ -726,8 +746,7 @@ async def run_health_check_loop(interval: int = 60, max_failures: int = 5):
 
             # Check for any unhealthy components
             unhealthy_components = [
-                name for name, result in results.items()
-                if result.status == HealthStatus.UNHEALTHY
+                name for name, result in results.items() if result.status == HealthStatus.UNHEALTHY
             ]
 
             if unhealthy_components:
@@ -735,7 +754,9 @@ async def run_health_check_loop(interval: int = 60, max_failures: int = 5):
                 consecutive_failures += 1
 
                 if consecutive_failures >= max_failures:
-                    logger.critical(f"System unhealthy for {consecutive_failures} consecutive checks")
+                    logger.critical(
+                        f"System unhealthy for {consecutive_failures} consecutive checks"
+                    )
             else:
                 consecutive_failures = 0
                 logger.debug("All health checks passed")

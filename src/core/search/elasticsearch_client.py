@@ -19,6 +19,7 @@ config = get_base_config()
 
 class SearchQuery(BaseModel):
     """Search query model for Elasticsearch"""
+
     query: str
     size: int = 10
     from_: int = 0
@@ -30,6 +31,7 @@ class SearchQuery(BaseModel):
 
 class SearchResult(BaseModel):
     """Search result model"""
+
     total: int
     hits: list[dict[str, Any]]
     aggregations: dict[str, Any] | None = None
@@ -43,20 +45,20 @@ class ElasticsearchClient:
     def __init__(self):
         self.host = config.ELASTICSEARCH_HOST
         self.port = config.ELASTICSEARCH_PORT
-        self.scheme = getattr(config, 'ELASTICSEARCH_SCHEME', 'http')
-        self.username = getattr(config, 'ELASTICSEARCH_USERNAME', None)
-        self.password = getattr(config, 'ELASTICSEARCH_PASSWORD', None)
+        self.scheme = getattr(config, "ELASTICSEARCH_SCHEME", "http")
+        self.username = getattr(config, "ELASTICSEARCH_USERNAME", None)
+        self.password = getattr(config, "ELASTICSEARCH_PASSWORD", None)
 
         # Connection configuration
         self.connection_config = {
-            'hosts': [f"{self.scheme}://{self.host}:{self.port}"],
-            'request_timeout': 30,
-            'max_retries': 3,
-            'retry_on_timeout': True
+            "hosts": [f"{self.scheme}://{self.host}:{self.port}"],
+            "request_timeout": 30,
+            "max_retries": 3,
+            "retry_on_timeout": True,
         }
 
         if self.username and self.password:
-            self.connection_config['http_auth'] = (self.username, self.password)
+            self.connection_config["http_auth"] = (self.username, self.password)
 
         self._client = None
         self._async_client = None
@@ -81,25 +83,21 @@ class ElasticsearchClient:
             health = await self.async_client.cluster.health()
             return {
                 "status": "healthy",
-                "cluster_status": health.get('status'),
-                "number_of_nodes": health.get('number_of_nodes'),
-                "active_shards": health.get('active_shards'),
-                "timestamp": datetime.utcnow().isoformat()
+                "cluster_status": health.get("status"),
+                "number_of_nodes": health.get("number_of_nodes"),
+                "active_shards": health.get("active_shards"),
+                "timestamp": datetime.utcnow().isoformat(),
             }
         except ConnectionError as e:
             logger.error(f"Elasticsearch connection error: {e}")
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             }
         except Exception as e:
             logger.error(f"Elasticsearch health check error: {e}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            return {"status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
     async def create_index(self, index_name: str, mapping: dict[str, Any]) -> bool:
         """Create an index with mapping"""
@@ -108,10 +106,7 @@ class ElasticsearchClient:
                 logger.info(f"Index {index_name} already exists")
                 return True
 
-            await self.async_client.indices.create(
-                index=index_name,
-                body=mapping
-            )
+            await self.async_client.indices.create(index=index_name, body=mapping)
             logger.info(f"Created index: {index_name}")
             return True
 
@@ -133,38 +128,29 @@ class ElasticsearchClient:
             return False
 
     async def index_document(
-        self,
-        index_name: str,
-        document: dict[str, Any],
-        doc_id: str | None = None
+        self, index_name: str, document: dict[str, Any], doc_id: str | None = None
     ) -> bool:
         """Index a single document"""
         try:
-            kwargs = {'index': index_name, 'body': document}
+            kwargs = {"index": index_name, "body": document}
             if doc_id:
-                kwargs['id'] = doc_id
+                kwargs["id"] = doc_id
 
             response = await self.async_client.index(**kwargs)
-            return response.get('result') in ['created', 'updated']
+            return response.get("result") in ["created", "updated"]
 
         except Exception as e:
             logger.error(f"Error indexing document: {e}")
             return False
 
     async def bulk_index(
-        self,
-        index_name: str,
-        documents: list[dict[str, Any]],
-        id_field: str | None = None
+        self, index_name: str, documents: list[dict[str, Any]], id_field: str | None = None
     ) -> dict[str, Any]:
         """Bulk index multiple documents"""
         try:
             actions = []
             for doc in documents:
-                action = {
-                    "_index": index_name,
-                    "_source": doc
-                }
+                action = {"_index": index_name, "_source": doc}
                 if id_field and id_field in doc:
                     action["_id"] = doc[id_field]
                 actions.append(action)
@@ -175,18 +161,18 @@ class ElasticsearchClient:
             successful = 0
             errors = []
 
-            for item in response.get('items', []):
-                if 'index' in item:
-                    if item['index'].get('status') in [200, 201]:
+            for item in response.get("items", []):
+                if "index" in item:
+                    if item["index"].get("status") in [200, 201]:
                         successful += 1
                     else:
-                        errors.append(item['index'])
+                        errors.append(item["index"])
 
             return {
                 "total": len(documents),
                 "successful": successful,
                 "errors": len(errors),
-                "error_details": errors[:10]  # First 10 errors
+                "error_details": errors[:10],  # First 10 errors
             }
 
         except Exception as e:
@@ -195,21 +181,17 @@ class ElasticsearchClient:
                 "total": len(documents),
                 "successful": 0,
                 "errors": len(documents),
-                "error": str(e)
+                "error": str(e),
             }
 
-    async def search(
-        self,
-        index_name: str,
-        search_query: SearchQuery
-    ) -> SearchResult:
+    async def search(self, index_name: str, search_query: SearchQuery) -> SearchResult:
         """Perform search with complex queries"""
         try:
             # Build Elasticsearch query
             query_body = {
                 "query": self._build_query(search_query.query, search_query.filters),
                 "size": search_query.size,
-                "from": search_query.from_
+                "from": search_query.from_,
             }
 
             # Add sorting
@@ -219,51 +201,43 @@ class ElasticsearchClient:
             # Add highlighting
             if search_query.highlight:
                 query_body["highlight"] = {
-                    "fields": {
-                        "*": {}
-                    },
+                    "fields": {"*": {}},
                     "pre_tags": ["<mark>"],
-                    "post_tags": ["</mark>"]
+                    "post_tags": ["</mark>"],
                 }
 
             # Add aggregations
             if search_query.aggregations:
                 query_body["aggs"] = search_query.aggregations
 
-            response = await self.async_client.search(
-                index=index_name,
-                body=query_body
-            )
+            response = await self.async_client.search(index=index_name, body=query_body)
 
             # Format response
             hits = []
-            for hit in response.get('hits', {}).get('hits', []):
+            for hit in response.get("hits", {}).get("hits", []):
                 hit_data = {
-                    "id": hit.get('_id'),
-                    "score": hit.get('_score'),
-                    "source": hit.get('_source', {}),
-                    "highlight": hit.get('highlight', {})
+                    "id": hit.get("_id"),
+                    "score": hit.get("_score"),
+                    "source": hit.get("_source", {}),
+                    "highlight": hit.get("highlight", {}),
                 }
                 hits.append(hit_data)
 
             return SearchResult(
-                total=response.get('hits', {}).get('total', {}).get('value', 0),
+                total=response.get("hits", {}).get("total", {}).get("value", 0),
                 hits=hits,
-                aggregations=response.get('aggregations'),
-                took=response.get('took', 0),
-                max_score=response.get('hits', {}).get('max_score')
+                aggregations=response.get("aggregations"),
+                took=response.get("took", 0),
+                max_score=response.get("hits", {}).get("max_score"),
             )
 
         except Exception as e:
             logger.error(f"Error in search: {e}")
-            return SearchResult(
-                total=0,
-                hits=[],
-                took=0,
-                aggregations={"error": str(e)}
-            )
+            return SearchResult(total=0, hits=[], took=0, aggregations={"error": str(e)})
 
-    def _build_query(self, query_string: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _build_query(
+        self, query_string: str, filters: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Build Elasticsearch query with filters"""
         if not query_string and not filters:
             return {"match_all": {}}
@@ -272,124 +246,88 @@ class ElasticsearchClient:
 
         # Add text query if provided
         if query_string:
-            must_clauses.append({
-                "multi_match": {
-                    "query": query_string,
-                    "fields": [
-                        "product_name^3",
-                        "description^2",
-                        "category^2",
-                        "brand",
-                        "customer_name",
-                        "*"
-                    ],
-                    "type": "best_fields",
-                    "fuzziness": "AUTO"
+            must_clauses.append(
+                {
+                    "multi_match": {
+                        "query": query_string,
+                        "fields": [
+                            "product_name^3",
+                            "description^2",
+                            "category^2",
+                            "brand",
+                            "customer_name",
+                            "*",
+                        ],
+                        "type": "best_fields",
+                        "fuzziness": "AUTO",
+                    }
                 }
-            })
+            )
 
         # Add filters
         if filters:
             for field, value in filters.items():
                 if isinstance(value, list):
-                    must_clauses.append({
-                        "terms": {field: value}
-                    })
+                    must_clauses.append({"terms": {field: value}})
                 elif isinstance(value, dict) and "range" in value:
-                    must_clauses.append({
-                        "range": {field: value["range"]}
-                    })
+                    must_clauses.append({"range": {field: value["range"]}})
                 else:
-                    must_clauses.append({
-                        "term": {f"{field}.keyword": value}
-                    })
+                    must_clauses.append({"term": {f"{field}.keyword": value}})
 
         if not must_clauses:
             return {"match_all": {}}
 
         return {"bool": {"must": must_clauses}}
 
-    async def get_analytics(self, index_name: str, date_range: dict[str, str] | None = None) -> dict[str, Any]:
+    async def get_analytics(
+        self, index_name: str, date_range: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         """Get analytics and aggregations for the data"""
         try:
             # Build date filter if provided
             date_filter = []
             if date_range:
-                date_filter.append({
-                    "range": {
-                        "order_date": {
-                            "gte": date_range.get("start"),
-                            "lte": date_range.get("end")
+                date_filter.append(
+                    {
+                        "range": {
+                            "order_date": {
+                                "gte": date_range.get("start"),
+                                "lte": date_range.get("end"),
+                            }
                         }
                     }
-                })
+                )
 
             query_body = {
-                "query": {
-                    "bool": {
-                        "must": date_filter if date_filter else [{"match_all": {}}]
-                    }
-                },
+                "query": {"bool": {"must": date_filter if date_filter else [{"match_all": {}}]}},
                 "size": 0,
                 "aggs": {
-                    "total_revenue": {
-                        "sum": {"field": "quantity_price"}
-                    },
-                    "total_orders": {
-                        "cardinality": {"field": "invoice_no.keyword"}
-                    },
-                    "avg_order_value": {
-                        "avg": {"field": "quantity_price"}
-                    },
+                    "total_revenue": {"sum": {"field": "quantity_price"}},
+                    "total_orders": {"cardinality": {"field": "invoice_no.keyword"}},
+                    "avg_order_value": {"avg": {"field": "quantity_price"}},
                     "top_products": {
-                        "terms": {
-                            "field": "product_name.keyword",
-                            "size": 10
-                        },
-                        "aggs": {
-                            "revenue": {
-                                "sum": {"field": "quantity_price"}
-                            }
-                        }
+                        "terms": {"field": "product_name.keyword", "size": 10},
+                        "aggs": {"revenue": {"sum": {"field": "quantity_price"}}},
                     },
-                    "top_categories": {
-                        "terms": {
-                            "field": "category.keyword",
-                            "size": 10
-                        }
-                    },
+                    "top_categories": {"terms": {"field": "category.keyword", "size": 10}},
                     "revenue_by_country": {
-                        "terms": {
-                            "field": "country.keyword",
-                            "size": 20
-                        },
-                        "aggs": {
-                            "revenue": {
-                                "sum": {"field": "quantity_price"}
-                            }
-                        }
+                        "terms": {"field": "country.keyword", "size": 20},
+                        "aggs": {"revenue": {"sum": {"field": "quantity_price"}}},
                     },
                     "sales_over_time": {
                         "date_histogram": {
                             "field": "order_date",
                             "calendar_interval": "1d",
-                            "min_doc_count": 0
+                            "min_doc_count": 0,
                         },
-                        "aggs": {
-                            "daily_revenue": {
-                                "sum": {"field": "quantity_price"}
-                            }
-                        }
-                    }
-                }
+                        "aggs": {"daily_revenue": {"sum": {"field": "quantity_price"}}},
+                    },
+                },
             }
 
-            response = await self.async_client.search(
-                index=index_name,
-                body=query_body
-            )
+            response = await self.async_client.search(index=index_name, body=query_body)
 
-            return response.get('aggregations', {})
+            return response.get("aggregations", {})
 
         except Exception as e:
             logger.error(f"Error getting analytics: {e}")

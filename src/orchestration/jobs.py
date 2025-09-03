@@ -30,7 +30,7 @@ retail_etl_job = define_asset_job(
         "pipeline": "retail_etl",
         "owner": "data_engineering",
         "environment": "production",
-    }
+    },
 )
 
 # Define incremental processing job (bronze to gold only)
@@ -45,7 +45,7 @@ incremental_processing_job = define_asset_job(
     tags={
         "pipeline": "incremental",
         "processing_type": "incremental",
-    }
+    },
 )
 
 # Define data quality monitoring job
@@ -58,7 +58,7 @@ data_quality_job = define_asset_job(
     tags={
         "pipeline": "monitoring",
         "type": "data_quality",
-    }
+    },
 )
 
 # Define reprocessing job for historical data
@@ -75,7 +75,7 @@ reprocessing_job = define_asset_job(
     tags={
         "pipeline": "reprocessing",
         "processing_type": "historical",
-    }
+    },
 )
 
 

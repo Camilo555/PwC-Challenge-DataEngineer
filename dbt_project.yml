@@ -1,4 +1,6 @@
-# dbt Project Configuration for PwC Retail Data Platform
+# dbt Project Configuration for PwC Data Engineering Platform
+# Medallion Architecture: Bronze -> Silver -> Gold
+
 name: 'pwc_retail_analytics'
 version: '1.0.0'
 config-version: 2
@@ -7,93 +9,213 @@ config-version: 2
 profile: 'pwc_retail'
 
 # These configurations specify where dbt should look for different types of files.
-model-paths: ["dbt/models"]
-analysis-paths: ["dbt/analyses"]
-test-paths: ["dbt/tests"]
-seed-paths: ["dbt/seeds"]
-macro-paths: ["dbt/macros"]
-snapshot-paths: ["dbt/snapshots"]
+model-paths: ["models"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+seed-paths: ["data"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
 
-target-path: "dbt/target"
+target-path: "target"
 clean-targets:
-  - "dbt/target"
-  - "dbt/dbt_packages"
+  - "target"
+  - "dbt_packages"
 
-# Configuring models
+# Model configurations with enterprise optimizations
 models:
   pwc_retail_analytics:
-    # Config indicated by + and applies to all files under models/example/
-    +materialized: table
+    # Staging layer - raw data validation and standardization
     staging:
       +materialized: view
-    marts:
+      +schema: staging
+      +tags: ["staging", "raw_data", "source_aligned"]
+      +pre-hook: "{{ log('Starting staging layer processing', info=true) }}"
+      +post-hook: "{{ log('Completed staging layer processing', info=true) }}"
+      
+    # Intermediate layer - business logic transformations
+    intermediate:
+      +materialized: ephemeral
+      +schema: intermediate  
+      +tags: ["intermediate", "business_logic"]
+      +pre-hook: "{{ log('Starting intermediate processing', info=true) }}"
+      
+    # Bronze layer - raw data ingestion with optimizations
+    bronze:
+      +materialized: table
+      +schema: bronze
+      +tags: ["bronze", "raw_data", "source_system"]
+      +pre-hook: 
+        - "{{ log('Starting Bronze layer processing', info=true) }}"
+        - "{{ create_optimized_indexes(this) }}"
+      +post-hook: 
+        - "{{ log('Completed Bronze layer processing', info=true) }}"
+        - "ANALYZE TABLE {{ this }}"
+        - "{{ collect_table_statistics(this) }}"
+      +partition_by: "date_trunc('day', created_at)"
+      +cluster_by: ["source_system", "entity_type"]
+      
+    # Silver layer - cleaned and conformed data with performance tuning
+    silver:
+      +materialized: table
+      +schema: silver
+      +tags: ["silver", "cleansed_data", "conformed"]
+      +pre-hook: 
+        - "{{ log('Starting Silver layer processing', info=true) }}"
+        - "{{ validate_data_quality_thresholds() }}"
+      +post-hook:
+        - "{{ log('Completed Silver layer processing', info=true) }}"
+        - "ANALYZE TABLE {{ this }}"
+        - "{{ update_data_lineage(this) }}"
+        - "{{ run_data_quality_checks(this) }}"
+      +on_schema_change: "append_new_columns"
+      +partition_by: "date_trunc('month', processed_date)"
+      +cluster_by: ["entity_id", "data_source"]
+      
+    # Gold layer - business ready analytics with advanced caching
+    gold:
+      +materialized: table
+      +schema: gold
+      +tags: ["gold", "business_ready", "analytics"]
+      +pre-hook: 
+        - "{{ log('Starting Gold layer processing', info=true) }}"
+        - "{{ create_performance_indexes(this) }}"
+      +post-hook:
+        - "{{ log('Completed Gold layer processing', info=true) }}"
+        - "ANALYZE TABLE {{ this }}"
+        - "{{ refresh_downstream_views(this) }}"
+        - "{{ update_business_metadata(this) }}"
+      +partition_by: "date_trunc('day', business_date)"
+      +cluster_by: ["business_unit", "metric_category"]
+      
+      # Core dimensional models
       core:
         +materialized: table
-        +tags: ["core", "production"]
-      finance:
-        +materialized: table  
-        +tags: ["finance", "production"]
+        +tags: ["core", "dimension", "fact"]
+        +partition_by: "date_trunc('day', effective_date)"
+        +cluster_by: ["primary_key", "business_key"]
+        
+        dimensions:
+          +materialized: table
+          +tags: ["dimension", "scd", "master_data"]
+          +unique_key: "dimension_key"
+          +on_schema_change: "sync_all_columns"
+          +post-hook: "{{ update_dimension_metadata(this) }}"
+          
+        facts:
+          +materialized: incremental
+          +incremental_strategy: "merge"
+          +unique_key: "fact_key"  
+          +tags: ["fact", "metrics", "transactional"]
+          +partition_by: "date_trunc('day', transaction_date)"
+          +cluster_by: ["customer_key", "product_key", "date_key"]
+          +post-hook: "{{ validate_fact_integrity(this) }}"
+        
+      # Analytics marts for specific business domains  
+      analytics:
+        +materialized: table
+        +tags: ["analytics", "mart", "kpi"]
+        +partition_by: "date_trunc('month', analysis_date)"
+        +cluster_by: ["segment", "metric_type"]
+        +post-hook: "{{ cache_analytical_results(this) }}"
+        
+      # Performance optimized models
+      performance:
+        +materialized: incremental
+        +incremental_strategy: "merge"
+        +tags: ["performance", "optimized", "real_time"]
+        +partition_by: "date_trunc('hour', event_timestamp)"
+        +cluster_by: ["partition_key", "sort_key"]
+        +pre-hook: "{{ optimize_query_cache() }}"
+        +post-hook: "{{ update_performance_metrics(this) }}"
+        
+      # Marketing domain
       marketing:
         +materialized: table
-        +tags: ["marketing", "production"]
-    intermediate:
-      +materialized: view
-      +tags: ["intermediate"]
+        +tags: ["marketing", "customer_analytics"]
+        +partition_by: "date_trunc('day', campaign_date)"
+        +cluster_by: ["customer_segment", "channel"]
+        
+      # Finance domain  
+      finance:
+        +materialized: table
+        +tags: ["finance", "revenue_analytics"]
+        +partition_by: "date_trunc('day', financial_date)"
+        +cluster_by: ["cost_center", "account_code"]
+        
+      # Reporting layer - optimized views for BI tools
+      reports:
+        +materialized: view
+        +tags: ["report", "presentation", "bi_ready"]
+        +post-hook: "{{ generate_report_documentation(this) }}"
 
-# Global variables
-vars:
-  # Database schemas
-  bronze_schema: bronze
-  silver_schema: silver  
-  gold_schema: gold
-  metrics_schema: metrics
-  audit_schema: audit
-  
-  # Date ranges for incremental models
-  start_date: '2020-01-01'
-  end_date: '2025-12-31'
-  
-  # Business logic constants
-  high_value_customer_threshold: 1000
-  rfm_recency_days: 365
-  min_orders_for_segmentation: 3
-
-# Testing
+# Test configurations
 tests:
   +store_failures: true
-  +schema: dbt_test_failures
+  +severity: warn
 
-# Documentation
-docs-paths: ["dbt/docs"]
-
-# Packages
-packages:
-  - package: dbt-labs/dbt_utils
-    version: 1.3.0
-  - package: calogica/dbt_expectations
-    version: 0.10.4
-  - package: dbt-labs/audit_helper
-    version: 0.12.0
-
-# Seeds configuration
-seeds:
-  pwc_retail_analytics:
-    +schema: seeds
-    +quote_columns: false
-    country_mappings:
-      +column_types:
-        country_code: varchar(3)
-        country_name: varchar(100)
-        region: varchar(50)
-
-# Snapshots configuration  
+# Snapshot configurations
 snapshots:
   pwc_retail_analytics:
     +target_schema: snapshots
     +strategy: timestamp
     +updated_at: updated_at
 
-# Macros
+# Seeds configuration
+seeds:
+  pwc_retail_analytics:
+    +schema: seeds
+    +quote_columns: false
+
+# Documentation
+docs:
+  +node_color: "#2E8B57"
+
+# Vars for environment configuration
+vars:
+  # Date ranges for incremental models
+  start_date: '2010-01-01'
+  end_date: '2024-12-31'
+  
+  # Data quality thresholds
+  completeness_threshold: 0.95
+  uniqueness_threshold: 0.99
+  validity_threshold: 0.95
+  
+  # Performance tuning
+  batch_size: 10000
+  max_parallelism: 4
+  
+  # Business logic
+  high_value_threshold: 1000
+  vip_customer_threshold: 5000
+  seasonality_window: 365
+  
+  # Incremental strategy
+  incremental_strategy: 'merge'
+  
+  # Schema evolution
+  on_schema_change: 'append_new_columns'
+
+# Dispatch configuration for cross-database compatibility
 dispatch:
   - macro_namespace: dbt_utils
-    search_order: ['pwc_retail_analytics', 'dbt_utils']
+    search_order: ['custom_utils', 'dbt_utils']
+  - macro_namespace: dbt_date
+    search_order: ['custom_date', 'dbt_date']
+
+# Query comment for SQL identification
+query-comment: |
+  {%- set comment_dict = {} -%}
+  {%- do comment_dict.update(
+      {
+        "dbt_version": dbt_version,
+        "profile_name": profile_name,
+        "target_name": target_name,
+        "node_id": node.unique_id,
+        "model_name": node.name,
+        "materialization": node.config.materialized,
+        "schema": node.schema,
+        "tags": node.tags
+      }
+  ) -%}
+  {{ comment_dict | tojson }}

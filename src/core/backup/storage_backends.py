@@ -4,6 +4,7 @@ Storage Backend Implementations
 Multi-tier storage backends for backup data with support for local storage,
 cloud storage, and S3-compatible object storage.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,15 +23,17 @@ logger = get_logger(__name__)
 
 class StorageTier(str, Enum):
     """Storage tiers for different backup retention policies."""
-    HOT = "hot"          # Frequent access, fast retrieval
-    WARM = "warm"        # Infrequent access, moderate retrieval
-    COLD = "cold"        # Rare access, slow retrieval
+
+    HOT = "hot"  # Frequent access, fast retrieval
+    WARM = "warm"  # Infrequent access, moderate retrieval
+    COLD = "cold"  # Rare access, slow retrieval
     ARCHIVE = "archive"  # Long-term retention, very slow retrieval
 
 
 @dataclass
 class StorageMetadata:
     """Metadata for stored backup files."""
+
     storage_id: str
     original_path: Path
     storage_path: str
@@ -46,17 +49,17 @@ class StorageMetadata:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            'storage_id': self.storage_id,
-            'original_path': str(self.original_path),
-            'storage_path': self.storage_path,
-            'storage_backend': self.storage_backend,
-            'storage_tier': self.storage_tier.value,
-            'size_bytes': self.size_bytes,
-            'checksum': self.checksum,
-            'created_at': self.created_at.isoformat(),
-            'last_accessed': self.last_accessed.isoformat() if self.last_accessed else None,
-            'retention_until': self.retention_until.isoformat() if self.retention_until else None,
-            'tags': self.tags
+            "storage_id": self.storage_id,
+            "original_path": str(self.original_path),
+            "storage_path": self.storage_path,
+            "storage_backend": self.storage_backend,
+            "storage_tier": self.storage_tier.value,
+            "size_bytes": self.size_bytes,
+            "checksum": self.checksum,
+            "created_at": self.created_at.isoformat(),
+            "last_accessed": self.last_accessed.isoformat() if self.last_accessed else None,
+            "retention_until": self.retention_until.isoformat() if self.retention_until else None,
+            "tags": self.tags,
         }
 
 
@@ -75,17 +78,13 @@ class StorageBackend(ABC):
         storage_key: str,
         tier: StorageTier = StorageTier.HOT,
         retention_days: int | None = None,
-        tags: dict[str, str] | None = None
+        tags: dict[str, str] | None = None,
     ) -> StorageMetadata:
         """Store a file in the backend."""
         pass
 
     @abstractmethod
-    async def retrieve(
-        self,
-        storage_key: str,
-        destination_path: Path
-    ) -> bool:
+    async def retrieve(self, storage_key: str, destination_path: Path) -> bool:
         """Retrieve a file from the backend."""
         pass
 
@@ -96,9 +95,7 @@ class StorageBackend(ABC):
 
     @abstractmethod
     async def list_files(
-        self,
-        prefix: str | None = None,
-        tier: StorageTier | None = None
+        self, prefix: str | None = None, tier: StorageTier | None = None
     ) -> list[StorageMetadata]:
         """List files in the backend."""
         pass
@@ -127,7 +124,7 @@ class StorageBackend(ABC):
 class LocalStorageBackend(StorageBackend):
     """
     Local filesystem storage backend with tier-based directory organization.
-    
+
     Features:
     - Tier-based directory structure
     - Automatic cleanup of expired files
@@ -167,9 +164,13 @@ class LocalStorageBackend(StorageBackend):
                         size_bytes=data["size_bytes"],
                         checksum=data["checksum"],
                         created_at=datetime.fromisoformat(data["created_at"]),
-                        last_accessed=datetime.fromisoformat(data["last_accessed"]) if data.get("last_accessed") else None,
-                        retention_until=datetime.fromisoformat(data["retention_until"]) if data.get("retention_until") else None,
-                        tags=data.get("tags", {})
+                        last_accessed=datetime.fromisoformat(data["last_accessed"])
+                        if data.get("last_accessed")
+                        else None,
+                        retention_until=datetime.fromisoformat(data["retention_until"])
+                        if data.get("retention_until")
+                        else None,
+                        tags=data.get("tags", {}),
                     )
 
                 logger.info(f"Loaded {len(self._metadata_store)} metadata records")
@@ -185,7 +186,7 @@ class LocalStorageBackend(StorageBackend):
                 for storage_id, metadata in self._metadata_store.items()
             }
 
-            with open(self.metadata_file, 'w') as f:
+            with open(self.metadata_file, "w") as f:
                 json.dump(metadata_dict, f, indent=2)
 
         except Exception as e:
@@ -197,7 +198,7 @@ class LocalStorageBackend(StorageBackend):
         storage_key: str,
         tier: StorageTier = StorageTier.HOT,
         retention_days: int | None = None,
-        tags: dict[str, str] | None = None
+        tags: dict[str, str] | None = None,
     ) -> StorageMetadata:
         """Store file in local storage."""
         if not source_path.exists():
@@ -225,7 +226,7 @@ class LocalStorageBackend(StorageBackend):
             checksum=checksum,
             created_at=datetime.utcnow(),
             retention_until=self._calculate_retention_date(retention_days),
-            tags=tags or {}
+            tags=tags or {},
         )
 
         # Store metadata
@@ -284,9 +285,7 @@ class LocalStorageBackend(StorageBackend):
             return False
 
     async def list_files(
-        self,
-        prefix: str | None = None,
-        tier: StorageTier | None = None
+        self, prefix: str | None = None, tier: StorageTier | None = None
     ) -> list[StorageMetadata]:
         """List files in local storage."""
         files = []
@@ -314,15 +313,12 @@ class LocalStorageBackend(StorageBackend):
             "total_size_bytes": 0,
             "tiers": {},
             "oldest_file": None,
-            "newest_file": None
+            "newest_file": None,
         }
 
         # Calculate tier statistics
         for tier in StorageTier:
-            stats["tiers"][tier.value] = {
-                "files": 0,
-                "size_bytes": 0
-            }
+            stats["tiers"][tier.value] = {"files": 0, "size_bytes": 0}
 
         oldest_date = None
         newest_date = None
@@ -349,7 +345,7 @@ class LocalStorageBackend(StorageBackend):
             "files_checked": 0,
             "files_deleted": 0,
             "files_failed": 0,
-            "bytes_freed": 0
+            "bytes_freed": 0,
         }
 
         current_time = datetime.utcnow()
@@ -369,8 +365,10 @@ class LocalStorageBackend(StorageBackend):
             else:
                 cleanup_stats["files_failed"] += 1
 
-        logger.info(f"Cleanup completed: {cleanup_stats['files_deleted']} files deleted, "
-                   f"{cleanup_stats['bytes_freed']} bytes freed")
+        logger.info(
+            f"Cleanup completed: {cleanup_stats['files_deleted']} files deleted, "
+            f"{cleanup_stats['bytes_freed']} bytes freed"
+        )
 
         return cleanup_stats
 
@@ -389,7 +387,7 @@ class LocalStorageBackend(StorageBackend):
 class CloudStorageBackend(StorageBackend):
     """
     Generic cloud storage backend with lifecycle management.
-    
+
     This is a base class that can be extended for specific cloud providers
     like AWS S3, Azure Blob Storage, Google Cloud Storage, etc.
     """
@@ -408,7 +406,7 @@ class CloudStorageBackend(StorageBackend):
             StorageTier.HOT: {"days_to_warm": 30, "days_to_cold": 90, "days_to_archive": 365},
             StorageTier.WARM: {"days_to_cold": 60, "days_to_archive": 365},
             StorageTier.COLD: {"days_to_archive": 730},
-            StorageTier.ARCHIVE: {"days_to_delete": 2555}  # ~7 years
+            StorageTier.ARCHIVE: {"days_to_delete": 2555},  # ~7 years
         }
 
     async def store(
@@ -417,7 +415,7 @@ class CloudStorageBackend(StorageBackend):
         storage_key: str,
         tier: StorageTier = StorageTier.HOT,
         retention_days: int | None = None,
-        tags: dict[str, str] | None = None
+        tags: dict[str, str] | None = None,
     ) -> StorageMetadata:
         """Store file in cloud storage."""
         # This is a template implementation
@@ -443,7 +441,7 @@ class CloudStorageBackend(StorageBackend):
             checksum=checksum,
             created_at=datetime.utcnow(),
             retention_until=self._calculate_retention_date(retention_days),
-            tags=tags or {}
+            tags=tags or {},
         )
 
         self._metadata_store[storage_key] = metadata
@@ -481,9 +479,7 @@ class CloudStorageBackend(StorageBackend):
         return True
 
     async def list_files(
-        self,
-        prefix: str | None = None,
-        tier: StorageTier | None = None
+        self, prefix: str | None = None, tier: StorageTier | None = None
     ) -> list[StorageMetadata]:
         """List files in cloud storage."""
         files = []
@@ -510,7 +506,7 @@ class CloudStorageBackend(StorageBackend):
             "bucket_name": self.bucket_name,
             "region": self.region,
             "total_files": len(self._metadata_store),
-            "total_size_bytes": sum(m.size_bytes for m in self._metadata_store.values())
+            "total_size_bytes": sum(m.size_bytes for m in self._metadata_store.values()),
         }
 
     async def _calculate_checksum(self, file_path: Path) -> str:
@@ -528,7 +524,7 @@ class CloudStorageBackend(StorageBackend):
 class S3Backend(CloudStorageBackend):
     """
     AWS S3-compatible storage backend with advanced features.
-    
+
     Features:
     - S3-compatible object storage
     - Intelligent tiering
@@ -544,7 +540,7 @@ class S3Backend(CloudStorageBackend):
             StorageTier.HOT: "STANDARD",
             StorageTier.WARM: "STANDARD_IA",
             StorageTier.COLD: "GLACIER",
-            StorageTier.ARCHIVE: "DEEP_ARCHIVE"
+            StorageTier.ARCHIVE: "DEEP_ARCHIVE",
         }
 
         # Initialize S3 client (boto3 would be used in real implementation)
@@ -557,7 +553,7 @@ class S3Backend(CloudStorageBackend):
         storage_key: str,
         tier: StorageTier = StorageTier.HOT,
         retention_days: int | None = None,
-        tags: dict[str, str] | None = None
+        tags: dict[str, str] | None = None,
     ) -> StorageMetadata:
         """Store file in S3."""
         if not source_path.exists():
@@ -573,7 +569,7 @@ class S3Backend(CloudStorageBackend):
         s3_tags = {
             "BackupTier": tier.value,
             "BackupDate": datetime.utcnow().isoformat(),
-            "Checksum": checksum
+            "Checksum": checksum,
         }
 
         if tags:
@@ -600,7 +596,7 @@ class S3Backend(CloudStorageBackend):
             checksum=checksum,
             created_at=datetime.utcnow(),
             retention_until=self._calculate_retention_date(retention_days),
-            tags=s3_tags
+            tags=s3_tags,
         )
 
         self._metadata_store[storage_key] = metadata
@@ -658,19 +654,13 @@ class S3Backend(CloudStorageBackend):
         base_stats = await super().get_storage_stats()
 
         # Add S3-specific statistics
-        s3_stats = {
-            "storage_classes": {},
-            "estimated_costs": {}
-        }
+        s3_stats = {"storage_classes": {}, "estimated_costs": {}}
 
         # Calculate storage class distribution
         for metadata in self._metadata_store.values():
             storage_class = self.storage_class_mapping[metadata.storage_tier]
             if storage_class not in s3_stats["storage_classes"]:
-                s3_stats["storage_classes"][storage_class] = {
-                    "files": 0,
-                    "size_bytes": 0
-                }
+                s3_stats["storage_classes"][storage_class] = {"files": 0, "size_bytes": 0}
 
             s3_stats["storage_classes"][storage_class]["files"] += 1
             s3_stats["storage_classes"][storage_class]["size_bytes"] += metadata.size_bytes
@@ -705,23 +695,21 @@ class S3Backend(CloudStorageBackend):
 
 
 # Factory function for creating storage backends
-def create_storage_backend(backend_type: str, backend_id: str, config: dict[str, Any]) -> StorageBackend:
+def create_storage_backend(
+    backend_type: str, backend_id: str, config: dict[str, Any]
+) -> StorageBackend:
     """
     Factory function to create storage backend instances.
-    
+
     Args:
         backend_type: Type of storage backend (local, cloud, s3)
         backend_id: Unique identifier for the backend
         config: Configuration parameters
-        
+
     Returns:
         Storage backend instance
     """
-    backend_map = {
-        "local": LocalStorageBackend,
-        "cloud": CloudStorageBackend,
-        "s3": S3Backend
-    }
+    backend_map = {"local": LocalStorageBackend, "cloud": CloudStorageBackend, "s3": S3Backend}
 
     if backend_type not in backend_map:
         raise ValueError(f"Unknown storage backend type: {backend_type}")

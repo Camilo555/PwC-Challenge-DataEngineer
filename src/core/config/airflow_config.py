@@ -2,6 +2,7 @@
 Advanced Airflow Configuration
 Provides comprehensive Airflow settings for enterprise deployment
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -23,9 +24,7 @@ class AirflowConfig(BaseSettings):
     base_log_folder: str = Field(default="logs")
 
     # Database configuration
-    sql_alchemy_conn: str = Field(
-        default="sqlite:///airflow.db"
-    )
+    sql_alchemy_conn: str = Field(default="sqlite:///airflow.db")
 
     # Executor configuration
     executor: str = Field(default="LocalExecutor")
@@ -35,9 +34,7 @@ class AirflowConfig(BaseSettings):
 
     # Security settings
     authenticate: bool = Field(default=True)
-    auth_backend: str = Field(
-        default="airflow.contrib.auth.backends.password_auth"
-    )
+    auth_backend: str = Field(default="airflow.contrib.auth.backends.password_auth")
     secret_key: str = Field(default="")
 
     # Web server configuration
@@ -86,10 +83,7 @@ class AirflowConfig(BaseSettings):
     max_null_percentage: float = Field(default=0.1)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     @field_validator("airflow_home", mode="before")
@@ -104,25 +98,26 @@ class AirflowConfig(BaseSettings):
     def get_dag_default_args(self, base_config: BaseConfig) -> dict[str, Any]:
         """Get default arguments for DAG creation."""
         return {
-            'owner': 'data-team',
-            'depends_on_past': False,
-            'start_date': datetime(2024, 1, 1),
-            'email_on_failure': self.smtp_host is not None,
-            'email_on_retry': False,
-            'retries': self.default_retries,
-            'retry_delay': timedelta(minutes=self.default_retry_delay_minutes),
-            'retry_exponential_backoff': True,
-            'max_retry_delay': timedelta(minutes=self.max_retry_delay_minutes),
-            'execution_timeout': timedelta(hours=self.default_task_timeout_hours),
-            'on_failure_callback': self._get_failure_callback(),
-            'on_success_callback': self._get_success_callback(),
-            'on_retry_callback': self._get_retry_callback(),
-            'pool': self._get_default_pool(base_config.environment),
-            'queue': self._get_default_queue(base_config.environment),
+            "owner": "data-team",
+            "depends_on_past": False,
+            "start_date": datetime(2024, 1, 1),
+            "email_on_failure": self.smtp_host is not None,
+            "email_on_retry": False,
+            "retries": self.default_retries,
+            "retry_delay": timedelta(minutes=self.default_retry_delay_minutes),
+            "retry_exponential_backoff": True,
+            "max_retry_delay": timedelta(minutes=self.max_retry_delay_minutes),
+            "execution_timeout": timedelta(hours=self.default_task_timeout_hours),
+            "on_failure_callback": self._get_failure_callback(),
+            "on_success_callback": self._get_success_callback(),
+            "on_retry_callback": self._get_retry_callback(),
+            "pool": self._get_default_pool(base_config.environment),
+            "queue": self._get_default_queue(base_config.environment),
         }
 
     def _get_failure_callback(self):
         """Get failure callback function."""
+
         def task_failure_callback(context):
             """Handle task failure notifications."""
             try:
@@ -131,7 +126,7 @@ class AirflowConfig(BaseSettings):
                     self._send_slack_notification(context, "FAILED")
 
                 # Email notification
-                if self.smtp_host and context.get('task_instance'):
+                if self.smtp_host and context.get("task_instance"):
                     self._send_email_notification(context, "FAILED")
 
             except Exception as e:
@@ -141,11 +136,12 @@ class AirflowConfig(BaseSettings):
 
     def _get_success_callback(self):
         """Get success callback function."""
+
         def task_success_callback(context):
             """Handle task success notifications."""
             # Only notify on final task success or critical milestones
-            task_id = context.get('task_instance', {}).task_id
-            if task_id in ['gold_layer_etl', 'data_quality_check']:
+            task_id = context.get("task_instance", {}).task_id
+            if task_id in ["gold_layer_etl", "data_quality_check"]:
                 try:
                     if self.slack_webhook_url:
                         self._send_slack_notification(context, "SUCCESS")
@@ -156,10 +152,11 @@ class AirflowConfig(BaseSettings):
 
     def _get_retry_callback(self):
         """Get retry callback function."""
+
         def task_retry_callback(context):
             """Handle task retry notifications."""
             try:
-                task_instance = context.get('task_instance')
+                task_instance = context.get("task_instance")
                 if task_instance and task_instance.try_number >= 2:
                     # Only notify after second retry
                     if self.slack_webhook_url:
@@ -174,28 +171,42 @@ class AirflowConfig(BaseSettings):
         try:
             import requests
 
-            task_instance = context.get('task_instance')
-            dag_run = context.get('dag_run')
+            task_instance = context.get("task_instance")
+            dag_run = context.get("dag_run")
 
-            color_map = {
-                "SUCCESS": "good",
-                "FAILED": "danger",
-                "RETRY": "warning"
-            }
+            color_map = {"SUCCESS": "good", "FAILED": "danger", "RETRY": "warning"}
 
             message = {
                 "channel": self.slack_channel,
                 "username": self.slack_username,
-                "attachments": [{
-                    "color": color_map.get(status, "good"),
-                    "title": f"Airflow Task {status}",
-                    "fields": [
-                        {"title": "DAG", "value": dag_run.dag_id if dag_run else "Unknown", "short": True},
-                        {"title": "Task", "value": task_instance.task_id if task_instance else "Unknown", "short": True},
-                        {"title": "Execution Date", "value": str(dag_run.execution_date) if dag_run else "Unknown", "short": True},
-                        {"title": "Log URL", "value": task_instance.log_url if task_instance else "N/A", "short": False}
-                    ]
-                }]
+                "attachments": [
+                    {
+                        "color": color_map.get(status, "good"),
+                        "title": f"Airflow Task {status}",
+                        "fields": [
+                            {
+                                "title": "DAG",
+                                "value": dag_run.dag_id if dag_run else "Unknown",
+                                "short": True,
+                            },
+                            {
+                                "title": "Task",
+                                "value": task_instance.task_id if task_instance else "Unknown",
+                                "short": True,
+                            },
+                            {
+                                "title": "Execution Date",
+                                "value": str(dag_run.execution_date) if dag_run else "Unknown",
+                                "short": True,
+                            },
+                            {
+                                "title": "Log URL",
+                                "value": task_instance.log_url if task_instance else "N/A",
+                                "short": False,
+                            },
+                        ],
+                    }
+                ],
             }
 
             requests.post(self.slack_webhook_url, json=message, timeout=10)
@@ -214,7 +225,7 @@ class AirflowConfig(BaseSettings):
             Environment.DEVELOPMENT: "default_pool",
             Environment.TESTING: "test_pool",
             Environment.STAGING: "staging_pool",
-            Environment.PRODUCTION: "production_pool"
+            Environment.PRODUCTION: "production_pool",
         }
         return pool_map.get(environment, "default_pool")
 
@@ -224,7 +235,7 @@ class AirflowConfig(BaseSettings):
             Environment.DEVELOPMENT: "default",
             Environment.TESTING: "test",
             Environment.STAGING: "staging",
-            Environment.PRODUCTION: "production"
+            Environment.PRODUCTION: "production",
         }
         return queue_map.get(environment, "default")
 
@@ -237,21 +248,18 @@ class AirflowConfig(BaseSettings):
                 "schema": "retail_dw",
                 "login": "airflow",
                 "password": "airflow",
-                "port": 5432
+                "port": 5432,
             },
             "spark_default": {
                 "conn_type": "spark",
                 "host": "spark://localhost:7077",
-                "extra": {
-                    "master": "spark://localhost:7077",
-                    "deploy-mode": "client"
-                }
+                "extra": {"master": "spark://localhost:7077", "deploy-mode": "client"},
             },
             "slack_default": {
                 "conn_type": "http",
                 "host": "hooks.slack.com",
-                "password": self.slack_webhook_url
-            }
+                "password": self.slack_webhook_url,
+            },
         }
 
     def get_variable_configs(self) -> dict[str, Any]:
@@ -264,24 +272,15 @@ class AirflowConfig(BaseSettings):
             "environment": "production",  # Will be overridden by base_config
             "bronze_path": "data/bronze",
             "silver_path": "data/silver",
-            "gold_path": "data/gold"
+            "gold_path": "data/gold",
         }
 
     def get_pool_configs(self) -> dict[str, dict[str, Any]]:
         """Get Airflow pool configurations."""
         return {
-            "etl_pool": {
-                "slots": 4,
-                "description": "Pool for ETL tasks"
-            },
-            "api_pool": {
-                "slots": 2,
-                "description": "Pool for external API tasks"
-            },
-            "quality_pool": {
-                "slots": 2,
-                "description": "Pool for data quality tasks"
-            }
+            "etl_pool": {"slots": 4, "description": "Pool for ETL tasks"},
+            "api_pool": {"slots": 2, "description": "Pool for external API tasks"},
+            "quality_pool": {"slots": 2, "description": "Pool for data quality tasks"},
         }
 
     def generate_airflow_cfg(self, base_config: BaseConfig) -> str:
@@ -320,12 +319,12 @@ dag_dir_list_interval = {self.dag_dir_list_interval}
 max_threads = {self.max_threads}
 
 [smtp]
-smtp_host = {self.smtp_host or ''}
+smtp_host = {self.smtp_host or ""}
 smtp_starttls = True
 smtp_ssl = False
 smtp_port = {self.smtp_port}
-smtp_user = {self.smtp_user or ''}
-smtp_password = {self.smtp_password or ''}
+smtp_user = {self.smtp_user or ""}
+smtp_password = {self.smtp_password or ""}
 smtp_mail_from = {self.smtp_mail_from}
 
 [metrics]
@@ -336,7 +335,7 @@ statsd_prefix = airflow
 
 [logging]
 remote_logging = False
-logging_level = {'DEBUG' if base_config.debug else 'INFO'}
+logging_level = {"DEBUG" if base_config.debug else "INFO"}
 fab_logging_level = WARN
 log_processor_filename_template = {{{{ ti.dag_id }}}}/{{{{ ti.task_id }}}}/{{{{ ts }}}}/{{{{ try_number }}}}.log
 

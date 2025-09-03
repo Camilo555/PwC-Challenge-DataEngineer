@@ -2,30 +2,18 @@
 Apache Kafka Manager for Real-time Data Streaming
 Provides comprehensive Kafka integration for real-time data processing
 """
+
 import json
 import uuid
-import asyncio
-import threading
-import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Union
-import hashlib
-import gzip
-import avro.schema
-import avro.io
-import redis
-import pika
+from typing import Any
 
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.admin import ConfigResource, ConfigResourceType, KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
-from kafka.structs import TopicPartition
-from confluent_kafka import Producer as ConfluentProducer, Consumer as ConfluentConsumer
-from confluent_kafka.avro import AvroProducer, AvroConsumer, CachedSchemaRegistryClient
-from confluent_kafka.admin import AdminClient as ConfluentAdminClient
 
 from core.config.unified_config import get_unified_config
 from core.logging import get_logger
@@ -33,6 +21,7 @@ from core.logging import get_logger
 
 class MessageFormat(Enum):
     """Message format types"""
+
     JSON = "json"
     AVRO = "avro"
     PROTOBUF = "protobuf"
@@ -41,6 +30,7 @@ class MessageFormat(Enum):
 
 class PartitionStrategy(Enum):
     """Partition assignment strategies"""
+
     ROUND_ROBIN = "round_robin"
     HASH_KEY = "hash_key"
     RANDOM = "random"
@@ -49,6 +39,7 @@ class PartitionStrategy(Enum):
 
 class CompressionType(Enum):
     """Compression types for Kafka messages"""
+
     NONE = "none"
     GZIP = "gzip"
     SNAPPY = "snappy"
@@ -58,13 +49,15 @@ class CompressionType(Enum):
 
 class DeliveryGuarantee(Enum):
     """Message delivery guarantees"""
-    AT_MOST_ONCE = "at_most_once"      # acks=0
-    AT_LEAST_ONCE = "at_least_once"    # acks=1
-    EXACTLY_ONCE = "exactly_once"      # acks=all, idempotent=true
+
+    AT_MOST_ONCE = "at_most_once"  # acks=0
+    AT_LEAST_ONCE = "at_least_once"  # acks=1
+    EXACTLY_ONCE = "exactly_once"  # acks=all, idempotent=true
 
 
 class ConsumerStrategy(Enum):
     """Consumer processing strategies"""
+
     LATEST = "latest"
     EARLIEST = "earliest"
     SPECIFIC_OFFSET = "specific_offset"
@@ -73,6 +66,7 @@ class ConsumerStrategy(Enum):
 
 class StreamingTopic(Enum):
     """Predefined Kafka topics"""
+
     RETAIL_TRANSACTIONS = "retail-transactions"
     CUSTOMER_EVENTS = "customer-events"
     PRODUCT_UPDATES = "product-updates"
@@ -90,6 +84,7 @@ class StreamingTopic(Enum):
 @dataclass
 class StreamingMessage:
     """Streaming message structure"""
+
     message_id: str
     topic: str
     key: str | None
@@ -109,181 +104,191 @@ class StreamingMessage:
 @dataclass
 class AdvancedProducerConfig:
     """Advanced Kafka producer configuration for enterprise use"""
-    bootstrap_servers: List[str]
-    
+
+    bootstrap_servers: list[str]
+
     # Reliability settings
     acks: str = "all"  # all, 1, 0
     retries: int = int(1e9)  # Retry essentially forever
     retry_backoff_ms: int = 100
     delivery_timeout_ms: int = 300000  # 5 minutes
     request_timeout_ms: int = 30000
-    
+
     # Performance settings
     batch_size: int = 65536  # 64KB for better throughput
     linger_ms: int = 10  # Wait up to 10ms to batch
     buffer_memory: int = 134217728  # 128MB
     max_in_flight_requests_per_connection: int = 1  # For ordering guarantee
-    
+
     # Compression settings
     compression_type: CompressionType = CompressionType.ZSTD
-    
+
     # Message settings
     max_request_size: int = 10485760  # 10MB
     send_buffer_bytes: int = 131072  # 128KB
     receive_buffer_bytes: int = 65536  # 64KB
-    
+
     # Idempotent producer settings
     enable_idempotence: bool = True
-    transactional_id: Optional[str] = None
-    
+    transactional_id: str | None = None
+
     # Security settings
     security_protocol: str = "PLAINTEXT"
-    ssl_cafile: Optional[str] = None
-    ssl_certfile: Optional[str] = None
-    ssl_keyfile: Optional[str] = None
-    sasl_mechanism: Optional[str] = None
-    sasl_username: Optional[str] = None
-    sasl_password: Optional[str] = None
-    
+    ssl_cafile: str | None = None
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None
+    sasl_mechanism: str | None = None
+    sasl_username: str | None = None
+    sasl_password: str | None = None
+
     # Schema registry settings
-    schema_registry_url: Optional[str] = None
-    schema_registry_auth: Optional[tuple] = None
-    
+    schema_registry_url: str | None = None
+    schema_registry_auth: tuple | None = None
+
     # Custom partitioner
-    partitioner: Optional[Callable] = None
+    partitioner: Callable | None = None
     partition_strategy: PartitionStrategy = PartitionStrategy.HASH_KEY
-    
+
     # Monitoring
     enable_metrics: bool = True
-    metrics_reporters: List[str] = field(default_factory=list)
-    
-    def to_kafka_config(self) -> Dict[str, Any]:
+    metrics_reporters: list[str] = field(default_factory=list)
+
+    def to_kafka_config(self) -> dict[str, Any]:
         """Convert to Kafka client configuration"""
         config = {
-            'bootstrap.servers': ','.join(self.bootstrap_servers),
-            'acks': self.acks,
-            'retries': self.retries,
-            'retry.backoff.ms': self.retry_backoff_ms,
-            'delivery.timeout.ms': self.delivery_timeout_ms,
-            'request.timeout.ms': self.request_timeout_ms,
-            'batch.size': self.batch_size,
-            'linger.ms': self.linger_ms,
-            'buffer.memory': self.buffer_memory,
-            'max.in.flight.requests.per.connection': self.max_in_flight_requests_per_connection,
-            'compression.type': self.compression_type.value,
-            'max.request.size': self.max_request_size,
-            'send.buffer.bytes': self.send_buffer_bytes,
-            'receive.buffer.bytes': self.receive_buffer_bytes,
-            'enable.idempotence': self.enable_idempotence,
-            'security.protocol': self.security_protocol
+            "bootstrap.servers": ",".join(self.bootstrap_servers),
+            "acks": self.acks,
+            "retries": self.retries,
+            "retry.backoff.ms": self.retry_backoff_ms,
+            "delivery.timeout.ms": self.delivery_timeout_ms,
+            "request.timeout.ms": self.request_timeout_ms,
+            "batch.size": self.batch_size,
+            "linger.ms": self.linger_ms,
+            "buffer.memory": self.buffer_memory,
+            "max.in.flight.requests.per.connection": self.max_in_flight_requests_per_connection,
+            "compression.type": self.compression_type.value,
+            "max.request.size": self.max_request_size,
+            "send.buffer.bytes": self.send_buffer_bytes,
+            "receive.buffer.bytes": self.receive_buffer_bytes,
+            "enable.idempotence": self.enable_idempotence,
+            "security.protocol": self.security_protocol,
         }
-        
+
         if self.transactional_id:
-            config['transactional.id'] = self.transactional_id
-            
+            config["transactional.id"] = self.transactional_id
+
         if self.ssl_cafile:
-            config.update({
-                'ssl.ca.location': self.ssl_cafile,
-                'ssl.certificate.location': self.ssl_certfile,
-                'ssl.key.location': self.ssl_keyfile
-            })
-            
+            config.update(
+                {
+                    "ssl.ca.location": self.ssl_cafile,
+                    "ssl.certificate.location": self.ssl_certfile,
+                    "ssl.key.location": self.ssl_keyfile,
+                }
+            )
+
         if self.sasl_mechanism:
-            config.update({
-                'sasl.mechanism': self.sasl_mechanism,
-                'sasl.username': self.sasl_username,
-                'sasl.password': self.sasl_password
-            })
-            
+            config.update(
+                {
+                    "sasl.mechanism": self.sasl_mechanism,
+                    "sasl.username": self.sasl_username,
+                    "sasl.password": self.sasl_password,
+                }
+            )
+
         return config
 
 
 @dataclass
 class AdvancedConsumerConfig:
     """Advanced Kafka consumer configuration for enterprise use"""
-    bootstrap_servers: List[str]
+
+    bootstrap_servers: list[str]
     group_id: str
-    
+
     # Offset management
     auto_offset_reset: ConsumerStrategy = ConsumerStrategy.EARLIEST
     enable_auto_commit: bool = False  # Manual commit for better control
     auto_commit_interval_ms: int = 5000
-    
-    # Performance settings  
+
+    # Performance settings
     max_poll_records: int = 1000
     max_poll_interval_ms: int = 300000  # 5 minutes
     fetch_min_bytes: int = 1024  # 1KB
     fetch_max_wait_ms: int = 500
     max_partition_fetch_bytes: int = 10485760  # 10MB
-    
+
     # Session management
     session_timeout_ms: int = 30000  # 30 seconds
     heartbeat_interval_ms: int = 10000  # 10 seconds
-    
+
     # Network settings
     request_timeout_ms: int = 30000
     connections_max_idle_ms: int = 300000  # 5 minutes
-    
-    # Security settings  
+
+    # Security settings
     security_protocol: str = "PLAINTEXT"
-    ssl_cafile: Optional[str] = None
-    ssl_certfile: Optional[str] = None
-    ssl_keyfile: Optional[str] = None
-    sasl_mechanism: Optional[str] = None
-    sasl_username: Optional[str] = None
-    sasl_password: Optional[str] = None
-    
+    ssl_cafile: str | None = None
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None
+    sasl_mechanism: str | None = None
+    sasl_username: str | None = None
+    sasl_password: str | None = None
+
     # Consumer group settings
     partition_assignment_strategy: str = "range"  # range, roundrobin, sticky, cooperative-sticky
-    
+
     # Schema registry settings
-    schema_registry_url: Optional[str] = None
-    schema_registry_auth: Optional[tuple] = None
-    
+    schema_registry_url: str | None = None
+    schema_registry_auth: tuple | None = None
+
     # Processing settings
     enable_exactly_once: bool = False
     isolation_level: str = "read_uncommitted"  # read_committed, read_uncommitted
-    
+
     # Monitoring
     enable_metrics: bool = True
-    metrics_reporters: List[str] = field(default_factory=list)
-    
-    def to_kafka_config(self) -> Dict[str, Any]:
+    metrics_reporters: list[str] = field(default_factory=list)
+
+    def to_kafka_config(self) -> dict[str, Any]:
         """Convert to Kafka client configuration"""
         config = {
-            'bootstrap.servers': ','.join(self.bootstrap_servers),
-            'group.id': self.group_id,
-            'auto.offset.reset': self.auto_offset_reset.value,
-            'enable.auto.commit': self.enable_auto_commit,
-            'auto.commit.interval.ms': self.auto_commit_interval_ms,
-            'max.poll.records': self.max_poll_records,
-            'max.poll.interval.ms': self.max_poll_interval_ms,
-            'fetch.min.bytes': self.fetch_min_bytes,
-            'fetch.max.wait.ms': self.fetch_max_wait_ms,
-            'max.partition.fetch.bytes': self.max_partition_fetch_bytes,
-            'session.timeout.ms': self.session_timeout_ms,
-            'heartbeat.interval.ms': self.heartbeat_interval_ms,
-            'request.timeout.ms': self.request_timeout_ms,
-            'connections.max.idle.ms': self.connections_max_idle_ms,
-            'security.protocol': self.security_protocol,
-            'partition.assignment.strategy': [self.partition_assignment_strategy],
-            'isolation.level': self.isolation_level
+            "bootstrap.servers": ",".join(self.bootstrap_servers),
+            "group.id": self.group_id,
+            "auto.offset.reset": self.auto_offset_reset.value,
+            "enable.auto.commit": self.enable_auto_commit,
+            "auto.commit.interval.ms": self.auto_commit_interval_ms,
+            "max.poll.records": self.max_poll_records,
+            "max.poll.interval.ms": self.max_poll_interval_ms,
+            "fetch.min.bytes": self.fetch_min_bytes,
+            "fetch.max.wait.ms": self.fetch_max_wait_ms,
+            "max.partition.fetch.bytes": self.max_partition_fetch_bytes,
+            "session.timeout.ms": self.session_timeout_ms,
+            "heartbeat.interval.ms": self.heartbeat_interval_ms,
+            "request.timeout.ms": self.request_timeout_ms,
+            "connections.max.idle.ms": self.connections_max_idle_ms,
+            "security.protocol": self.security_protocol,
+            "partition.assignment.strategy": [self.partition_assignment_strategy],
+            "isolation.level": self.isolation_level,
         }
-        
+
         if self.ssl_cafile:
-            config.update({
-                'ssl.ca.location': self.ssl_cafile,
-                'ssl.certificate.location': self.ssl_certfile,
-                'ssl.key.location': self.ssl_keyfile
-            })
-            
+            config.update(
+                {
+                    "ssl.ca.location": self.ssl_cafile,
+                    "ssl.certificate.location": self.ssl_certfile,
+                    "ssl.key.location": self.ssl_keyfile,
+                }
+            )
+
         if self.sasl_mechanism:
-            config.update({
-                'sasl.mechanism': self.sasl_mechanism,
-                'sasl.username': self.sasl_username,
-                'sasl.password': self.sasl_password
-            })
-            
+            config.update(
+                {
+                    "sasl.mechanism": self.sasl_mechanism,
+                    "sasl.username": self.sasl_username,
+                    "sasl.password": self.sasl_password,
+                }
+            )
+
         return config
 
 
@@ -313,7 +318,7 @@ class KafkaManager:
             "messages_produced": 0,
             "messages_consumed": 0,
             "errors": 0,
-            "topics_created": 0
+            "topics_created": 0,
         }
 
         # Initialize admin client
@@ -337,7 +342,7 @@ class KafkaManager:
             self.admin_client = KafkaAdminClient(
                 bootstrap_servers=self.bootstrap_servers,
                 request_timeout_ms=30000,
-                api_version=(2, 0, 0)
+                api_version=(2, 0, 0),
             )
             self.logger.info("Kafka admin client initialized")
         except Exception as e:
@@ -346,10 +351,10 @@ class KafkaManager:
     def create_producer(self, config: ProducerConfig | None = None) -> KafkaProducer:
         """
         Create Kafka producer with optimized configuration
-        
+
         Args:
             config: Optional producer configuration
-            
+
         Returns:
             KafkaProducer instance
         """
@@ -358,17 +363,17 @@ class KafkaManager:
                 config = ProducerConfig(bootstrap_servers=self.bootstrap_servers)
 
             producer_config = {
-                'bootstrap_servers': config.bootstrap_servers,
-                'acks': config.acks,
-                'retries': config.retries,
-                'batch_size': config.batch_size,
-                'linger_ms': config.linger_ms,
-                'buffer_memory': config.buffer_memory,
-                'compression_type': config.compression_type,
-                'max_request_size': config.max_request_size,
-                'security_protocol': config.security_protocol,
-                'value_serializer': lambda v: json.dumps(v, default=str).encode('utf-8'),
-                'key_serializer': lambda k: k.encode('utf-8') if k else None
+                "bootstrap_servers": config.bootstrap_servers,
+                "acks": config.acks,
+                "retries": config.retries,
+                "batch_size": config.batch_size,
+                "linger_ms": config.linger_ms,
+                "buffer_memory": config.buffer_memory,
+                "compression_type": config.compression_type,
+                "max_request_size": config.max_request_size,
+                "security_protocol": config.security_protocol,
+                "value_serializer": lambda v: json.dumps(v, default=str).encode("utf-8"),
+                "key_serializer": lambda k: k.encode("utf-8") if k else None,
             }
 
             self.producer = KafkaProducer(**producer_config)
@@ -381,42 +386,36 @@ class KafkaManager:
             raise
 
     def create_consumer(
-        self,
-        topics: list[str],
-        group_id: str,
-        config: ConsumerConfig | None = None
+        self, topics: list[str], group_id: str, config: ConsumerConfig | None = None
     ) -> KafkaConsumer:
         """
         Create Kafka consumer for specified topics
-        
+
         Args:
             topics: List of topics to subscribe to
             group_id: Consumer group ID
             config: Optional consumer configuration
-            
+
         Returns:
             KafkaConsumer instance
         """
         try:
             if not config:
-                config = ConsumerConfig(
-                    bootstrap_servers=self.bootstrap_servers,
-                    group_id=group_id
-                )
+                config = ConsumerConfig(bootstrap_servers=self.bootstrap_servers, group_id=group_id)
 
             consumer_config = {
-                'bootstrap_servers': config.bootstrap_servers,
-                'group_id': config.group_id,
-                'auto_offset_reset': config.auto_offset_reset,
-                'enable_auto_commit': config.enable_auto_commit,
-                'auto_commit_interval_ms': config.auto_commit_interval_ms,
-                'max_poll_records': config.max_poll_records,
-                'max_poll_interval_ms': config.max_poll_interval_ms,
-                'session_timeout_ms': config.session_timeout_ms,
-                'heartbeat_interval_ms': config.heartbeat_interval_ms,
-                'security_protocol': config.security_protocol,
-                'value_deserializer': lambda m: json.loads(m.decode('utf-8')),
-                'key_deserializer': lambda k: k.decode('utf-8') if k else None
+                "bootstrap_servers": config.bootstrap_servers,
+                "group_id": config.group_id,
+                "auto_offset_reset": config.auto_offset_reset,
+                "enable_auto_commit": config.enable_auto_commit,
+                "auto_commit_interval_ms": config.auto_commit_interval_ms,
+                "max_poll_records": config.max_poll_records,
+                "max_poll_interval_ms": config.max_poll_interval_ms,
+                "session_timeout_ms": config.session_timeout_ms,
+                "heartbeat_interval_ms": config.heartbeat_interval_ms,
+                "security_protocol": config.security_protocol,
+                "value_deserializer": lambda m: json.loads(m.decode("utf-8")),
+                "key_deserializer": lambda k: k.decode("utf-8") if k else None,
             }
 
             consumer = KafkaConsumer(*topics, **consumer_config)
@@ -436,11 +435,11 @@ class KafkaManager:
         key: str | None = None,
         partition: int | None = None,
         headers: dict[str, str] | None = None,
-        callback: Callable | None = None
+        callback: Callable | None = None,
     ) -> bool:
         """
         Produce message to Kafka topic
-        
+
         Args:
             topic: Topic name or StreamingTopic enum
             message: Message payload or StreamingMessage object
@@ -448,7 +447,7 @@ class KafkaManager:
             partition: Optional specific partition
             headers: Optional message headers
             callback: Optional callback function
-            
+
         Returns:
             True if message sent successfully
         """
@@ -469,14 +468,16 @@ class KafkaManager:
                 headers = headers or {}
 
             # Add default headers
-            headers.update({
-                'timestamp': str(int(datetime.now().timestamp() * 1000)),
-                'source': 'kafka_manager',
-                'version': '1.0'
-            })
+            headers.update(
+                {
+                    "timestamp": str(int(datetime.now().timestamp() * 1000)),
+                    "source": "kafka_manager",
+                    "version": "1.0",
+                }
+            )
 
             # Convert headers to bytes
-            headers_bytes = {k: v.encode('utf-8') for k, v in headers.items()}
+            headers_bytes = {k: v.encode("utf-8") for k, v in headers.items()}
 
             # Send message
             future = self.producer.send(
@@ -484,7 +485,7 @@ class KafkaManager:
                 value=payload,
                 key=key,
                 partition=partition,
-                headers=list(headers_bytes.items())
+                headers=list(headers_bytes.items()),
             )
 
             # Add callback if provided
@@ -509,11 +510,11 @@ class KafkaManager:
         group_id: str,
         message_handler: Callable[[dict[str, Any]], None],
         max_messages: int | None = None,
-        timeout_ms: int = 1000
+        timeout_ms: int = 1000,
     ):
         """
         Consume messages from Kafka topics
-        
+
         Args:
             topics: List of topics to consume from
             group_id: Consumer group ID
@@ -524,8 +525,7 @@ class KafkaManager:
         try:
             # Convert topics to strings
             topic_names = [
-                topic.value if isinstance(topic, StreamingTopic) else topic
-                for topic in topics
+                topic.value if isinstance(topic, StreamingTopic) else topic for topic in topics
             ]
 
             # Create consumer
@@ -543,18 +543,18 @@ class KafkaManager:
                     if not message_batch:
                         continue
 
-                    for topic_partition, messages in message_batch.items():
+                    for _topic_partition, messages in message_batch.items():
                         for message in messages:
                             try:
                                 # Process message
                                 message_data = {
-                                    'topic': message.topic,
-                                    'partition': message.partition,
-                                    'offset': message.offset,
-                                    'key': message.key,
-                                    'value': message.value,
-                                    'headers': dict(message.headers or {}),
-                                    'timestamp': message.timestamp
+                                    "topic": message.topic,
+                                    "partition": message.partition,
+                                    "offset": message.offset,
+                                    "key": message.key,
+                                    "value": message.value,
+                                    "headers": dict(message.headers or {}),
+                                    "timestamp": message.timestamp,
                                 }
 
                                 message_handler(message_data)
@@ -587,17 +587,17 @@ class KafkaManager:
         topic_name: str,
         num_partitions: int = 1,
         replication_factor: int = 1,
-        config: dict[str, str] | None = None
+        config: dict[str, str] | None = None,
     ) -> bool:
         """
         Create Kafka topic
-        
+
         Args:
             topic_name: Name of the topic to create
             num_partitions: Number of partitions
             replication_factor: Replication factor
             config: Optional topic configuration
-            
+
         Returns:
             True if topic created successfully
         """
@@ -607,10 +607,10 @@ class KafkaManager:
 
             # Default topic configuration
             default_config = {
-                'cleanup.policy': 'delete',
-                'retention.ms': str(7 * 24 * 60 * 60 * 1000),  # 7 days
-                'segment.ms': str(24 * 60 * 60 * 1000),  # 1 day
-                'compression.type': 'gzip'
+                "cleanup.policy": "delete",
+                "retention.ms": str(7 * 24 * 60 * 60 * 1000),  # 7 days
+                "segment.ms": str(24 * 60 * 60 * 1000),  # 1 day
+                "compression.type": "gzip",
             }
 
             if config:
@@ -621,7 +621,7 @@ class KafkaManager:
                 name=topic_name,
                 num_partitions=num_partitions,
                 replication_factor=replication_factor,
-                topic_configs=default_config
+                topic_configs=default_config,
             )
 
             result = self.admin_client.create_topics([topic])
@@ -649,86 +649,86 @@ class KafkaManager:
 
         standard_topics = [
             {
-                'name': StreamingTopic.RETAIL_TRANSACTIONS.value,
-                'partitions': 3,
-                'replication': 1,
-                'config': {'retention.ms': str(30 * 24 * 60 * 60 * 1000)}  # 30 days
+                "name": StreamingTopic.RETAIL_TRANSACTIONS.value,
+                "partitions": 3,
+                "replication": 1,
+                "config": {"retention.ms": str(30 * 24 * 60 * 60 * 1000)},  # 30 days
             },
             {
-                'name': StreamingTopic.CUSTOMER_EVENTS.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'cleanup.policy': 'compact'}
+                "name": StreamingTopic.CUSTOMER_EVENTS.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"cleanup.policy": "compact"},
             },
             {
-                'name': StreamingTopic.PRODUCT_UPDATES.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'cleanup.policy': 'compact'}
+                "name": StreamingTopic.PRODUCT_UPDATES.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"cleanup.policy": "compact"},
             },
             {
-                'name': StreamingTopic.SYSTEM_EVENTS.value,
-                'partitions': 1,
-                'replication': 1,
-                'config': {'retention.ms': str(7 * 24 * 60 * 60 * 1000)}  # 7 days
+                "name": StreamingTopic.SYSTEM_EVENTS.value,
+                "partitions": 1,
+                "replication": 1,
+                "config": {"retention.ms": str(7 * 24 * 60 * 60 * 1000)},  # 7 days
             },
             {
-                'name': StreamingTopic.DATA_QUALITY_ALERTS.value,
-                'partitions': 1,
-                'replication': 1,
-                'config': {'retention.ms': str(14 * 24 * 60 * 60 * 1000)}  # 14 days
+                "name": StreamingTopic.DATA_QUALITY_ALERTS.value,
+                "partitions": 1,
+                "replication": 1,
+                "config": {"retention.ms": str(14 * 24 * 60 * 60 * 1000)},  # 14 days
             },
             {
-                'name': StreamingTopic.ETL_PROGRESS.value,
-                'partitions': 1,
-                'replication': 1,
-                'config': {'retention.ms': str(3 * 24 * 60 * 60 * 1000)}  # 3 days
+                "name": StreamingTopic.ETL_PROGRESS.value,
+                "partitions": 1,
+                "replication": 1,
+                "config": {"retention.ms": str(3 * 24 * 60 * 60 * 1000)},  # 3 days
             },
             {
-                'name': StreamingTopic.NOTIFICATIONS.value,
-                'partitions': 1,
-                'replication': 1,
-                'config': {'retention.ms': str(24 * 60 * 60 * 1000)}  # 1 day
+                "name": StreamingTopic.NOTIFICATIONS.value,
+                "partitions": 1,
+                "replication": 1,
+                "config": {"retention.ms": str(24 * 60 * 60 * 1000)},  # 1 day
             },
             {
-                'name': StreamingTopic.METRICS.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'retention.ms': str(7 * 24 * 60 * 60 * 1000)}  # 7 days
+                "name": StreamingTopic.METRICS.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"retention.ms": str(7 * 24 * 60 * 60 * 1000)},  # 7 days
             },
             {
-                'name': StreamingTopic.CACHE_EVENTS.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'retention.ms': str(24 * 60 * 60 * 1000)}  # 1 day
+                "name": StreamingTopic.CACHE_EVENTS.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"retention.ms": str(24 * 60 * 60 * 1000)},  # 1 day
             },
             {
-                'name': StreamingTopic.STATE_CHANGES.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'retention.ms': str(3 * 24 * 60 * 60 * 1000)}  # 3 days
+                "name": StreamingTopic.STATE_CHANGES.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"retention.ms": str(3 * 24 * 60 * 60 * 1000)},  # 3 days
             },
             {
-                'name': StreamingTopic.RATE_LIMIT_EVENTS.value,
-                'partitions': 1,
-                'replication': 1,
-                'config': {'retention.ms': str(6 * 60 * 60 * 1000)}  # 6 hours
+                "name": StreamingTopic.RATE_LIMIT_EVENTS.value,
+                "partitions": 1,
+                "replication": 1,
+                "config": {"retention.ms": str(6 * 60 * 60 * 1000)},  # 6 hours
             },
             {
-                'name': StreamingTopic.TASK_EVENTS.value,
-                'partitions': 2,
-                'replication': 1,
-                'config': {'retention.ms': str(24 * 60 * 60 * 1000)}  # 1 day
-            }
+                "name": StreamingTopic.TASK_EVENTS.value,
+                "partitions": 2,
+                "replication": 1,
+                "config": {"retention.ms": str(24 * 60 * 60 * 1000)},  # 1 day
+            },
         ]
 
         created_count = 0
         for topic_config in standard_topics:
             if self.create_topic(
-                topic_name=topic_config['name'],
-                num_partitions=topic_config['partitions'],
-                replication_factor=topic_config['replication'],
-                config=topic_config['config']
+                topic_name=topic_config["name"],
+                num_partitions=topic_config["partitions"],
+                replication_factor=topic_config["replication"],
+                config=topic_config["config"],
             ):
                 created_count += 1
 
@@ -768,17 +768,19 @@ class KafkaManager:
             return {
                 "name": topic_name,
                 "partitions": len(topic_metadata.partitions),
-                "replication_factor": len(topic_metadata.partitions[0].replicas) if topic_metadata.partitions else 0,
+                "replication_factor": len(topic_metadata.partitions[0].replicas)
+                if topic_metadata.partitions
+                else 0,
                 "configuration": {k: v.value for k, v in topic_config.items()},
                 "partition_info": [
                     {
                         "partition": p.partition,
                         "leader": p.leader,
                         "replicas": p.replicas,
-                        "isr": p.isr
+                        "isr": p.isr,
                     }
                     for p in topic_metadata.partitions
-                ]
+                ],
             }
 
         except Exception as e:
@@ -795,15 +797,14 @@ class KafkaManager:
             payload=transaction_data,
             timestamp=datetime.now(),
             headers={"event_type": "transaction", "version": "1.0"},
-            source="retail_system"
+            source="retail_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.RETAIL_TRANSACTIONS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.RETAIL_TRANSACTIONS, message=message)
 
-    def produce_customer_event(self, customer_id: str, event_type: str, event_data: dict[str, Any]) -> bool:
+    def produce_customer_event(
+        self, customer_id: str, event_type: str, event_data: dict[str, Any]
+    ) -> bool:
         """Produce customer event"""
 
         message = StreamingMessage(
@@ -814,17 +815,14 @@ class KafkaManager:
                 "customer_id": customer_id,
                 "event_type": event_type,
                 "event_data": event_data,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
             headers={"event_type": event_type, "customer_id": customer_id},
-            source="customer_system"
+            source="customer_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.CUSTOMER_EVENTS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.CUSTOMER_EVENTS, message=message)
 
     def produce_data_quality_alert(self, alert_data: dict[str, Any]) -> bool:
         """Produce data quality alert"""
@@ -837,17 +835,16 @@ class KafkaManager:
             timestamp=datetime.now(),
             headers={
                 "alert_type": "data_quality",
-                "severity": alert_data.get("severity", "medium")
+                "severity": alert_data.get("severity", "medium"),
             },
-            source="data_quality_system"
+            source="data_quality_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.DATA_QUALITY_ALERTS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.DATA_QUALITY_ALERTS, message=message)
 
-    def produce_etl_progress(self, pipeline_id: str, stage: str, progress_data: dict[str, Any]) -> bool:
+    def produce_etl_progress(
+        self, pipeline_id: str, stage: str, progress_data: dict[str, Any]
+    ) -> bool:
         """Produce ETL progress event"""
 
         message = StreamingMessage(
@@ -858,19 +855,18 @@ class KafkaManager:
                 "pipeline_id": pipeline_id,
                 "stage": stage,
                 "progress_data": progress_data,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
             headers={"pipeline_id": pipeline_id, "stage": stage},
-            source="etl_system"
+            source="etl_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.ETL_PROGRESS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.ETL_PROGRESS, message=message)
 
-    def produce_cache_event(self, operation: str, key: str, hit: bool = False, metadata: dict[str, Any] | None = None) -> bool:
+    def produce_cache_event(
+        self, operation: str, key: str, hit: bool = False, metadata: dict[str, Any] | None = None
+    ) -> bool:
         """Produce cache operation event for analytics and monitoring"""
 
         message = StreamingMessage(
@@ -882,19 +878,18 @@ class KafkaManager:
                 "key": key,
                 "hit": hit,
                 "metadata": metadata or {},
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
             headers={"operation": operation, "hit": str(hit).lower()},
-            source="cache_system"
+            source="cache_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.CACHE_EVENTS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.CACHE_EVENTS, message=message)
 
-    def produce_state_change_event(self, component: str, key: str, operation: str, metadata: dict[str, Any] | None = None) -> bool:
+    def produce_state_change_event(
+        self, component: str, key: str, operation: str, metadata: dict[str, Any] | None = None
+    ) -> bool:
         """Produce state change event for distributed state management"""
 
         message = StreamingMessage(
@@ -906,19 +901,18 @@ class KafkaManager:
                 "key": key,
                 "operation": operation,
                 "metadata": metadata or {},
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
             headers={"component": component, "operation": operation},
-            source="state_management_system"
+            source="state_management_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.STATE_CHANGES,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.STATE_CHANGES, message=message)
 
-    def produce_rate_limit_event(self, client_id: str, endpoint: str, allowed: bool, current_count: int, limit: int) -> bool:
+    def produce_rate_limit_event(
+        self, client_id: str, endpoint: str, allowed: bool, current_count: int, limit: int
+    ) -> bool:
         """Produce rate limiting event for monitoring and analytics"""
 
         message = StreamingMessage(
@@ -931,23 +925,18 @@ class KafkaManager:
                 "allowed": allowed,
                 "current_count": current_count,
                 "limit": limit,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
-            headers={
-                "client_id": client_id,
-                "endpoint": endpoint,
-                "allowed": str(allowed).lower()
-            },
-            source="rate_limiter"
+            headers={"client_id": client_id, "endpoint": endpoint, "allowed": str(allowed).lower()},
+            source="rate_limiter",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.RATE_LIMIT_EVENTS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.RATE_LIMIT_EVENTS, message=message)
 
-    def produce_task_event(self, task_id: str, task_name: str, status: str, metadata: dict[str, Any] | None = None) -> bool:
+    def produce_task_event(
+        self, task_id: str, task_name: str, status: str, metadata: dict[str, Any] | None = None
+    ) -> bool:
         """Produce task execution event for monitoring and analytics"""
 
         message = StreamingMessage(
@@ -959,17 +948,14 @@ class KafkaManager:
                 "task_name": task_name,
                 "status": status,
                 "metadata": metadata or {},
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
             timestamp=datetime.now(),
             headers={"task_id": task_id, "task_name": task_name, "status": status},
-            source="task_system"
+            source="task_system",
         )
 
-        return self.produce_message(
-            topic=StreamingTopic.TASK_EVENTS,
-            message=message
-        )
+        return self.produce_message(topic=StreamingTopic.TASK_EVENTS, message=message)
 
     def get_consumer_lag(self, group_id: str) -> dict[str, Any]:
         """Get consumer lag information"""
@@ -1003,14 +989,14 @@ class KafkaManager:
                 lag_info[str(partition)] = {
                     "committed_offset": committed_offset,
                     "latest_offset": latest_offset,
-                    "lag": lag
+                    "lag": lag,
                 }
 
             return {
                 "group_id": group_id,
                 "total_lag": total_lag,
                 "partition_lag": lag_info,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -1024,7 +1010,7 @@ class KafkaManager:
             "producer_active": self.producer is not None,
             "active_consumers": len(self.consumers),
             "bootstrap_servers": self.bootstrap_servers,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def flush_producer(self):
@@ -1083,7 +1069,7 @@ class KafkaETLStreamer:
                 "stage": stage,
                 "progress_percentage": ((i + 1) / len(stages)) * 100,
                 "records_processed": (i + 1) * 10000,
-                "status": "completed" if i < len(stages) - 1 else "in_progress"
+                "status": "completed" if i < len(stages) - 1 else "in_progress",
             }
 
             self.kafka.produce_etl_progress(pipeline_id, stage, progress_data)
@@ -1093,7 +1079,7 @@ class KafkaETLStreamer:
         """Consume real-time transaction stream"""
 
         def handle_transaction(message_data):
-            transaction = message_data['value']['payload']
+            transaction = message_data["value"]["payload"]
             self.logger.info(f"Processing transaction: {transaction.get('invoice_no')}")
 
             # Process transaction in real-time
@@ -1102,7 +1088,7 @@ class KafkaETLStreamer:
         self.kafka.consume_messages(
             topics=[StreamingTopic.RETAIL_TRANSACTIONS],
             group_id="transaction_processor",
-            message_handler=handle_transaction
+            message_handler=handle_transaction,
         )
 
 
@@ -1129,9 +1115,9 @@ if __name__ == "__main__":
             topic=StreamingTopic.SYSTEM_EVENTS,
             message={
                 "event_type": "test",
-                "data": {"test": True, "timestamp": datetime.now().isoformat()}
+                "data": {"test": True, "timestamp": datetime.now().isoformat()},
             },
-            key="test_key"
+            key="test_key",
         )
 
         if success:
@@ -1142,16 +1128,14 @@ if __name__ == "__main__":
             "invoice_no": "TEST001",
             "customer_id": "12345",
             "amount": 99.99,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         if manager.produce_retail_transaction(transaction_data):
             print("✅ Retail transaction streamed")
 
         # Test customer event
-        if manager.produce_customer_event(
-            "12345", "purchase", {"amount": 99.99, "items": 3}
-        ):
+        if manager.produce_customer_event("12345", "purchase", {"amount": 99.99, "items": 3}):
             print("✅ Customer event streamed")
 
         # Test data quality alert
@@ -1159,7 +1143,7 @@ if __name__ == "__main__":
             "component": "bronze_layer",
             "severity": "medium",
             "message": "Data quality score below threshold",
-            "quality_score": 0.75
+            "quality_score": 0.75,
         }
 
         if manager.produce_data_quality_alert(alert_data):
@@ -1182,4 +1166,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Testing failed: {str(e)}")
         import traceback
+
         traceback.print_exc()

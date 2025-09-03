@@ -3,6 +3,7 @@ Backup and Disaster Recovery Command Line Interface
 
 Comprehensive CLI for backup and disaster recovery operations management.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,8 +28,7 @@ class BackupCLI:
 
     def __init__(self, config_path: Path | None = None):
         self.config = BaseConfig(
-            environment=Environment.PRODUCTION,
-            project_root=config_path or Path.cwd()
+            environment=Environment.PRODUCTION, project_root=config_path or Path.cwd()
         )
 
         self.orchestrator: BackupOrchestrator | None = None
@@ -41,10 +41,7 @@ class BackupCLI:
         return self.orchestrator
 
     async def backup_full_system(
-        self,
-        validate: bool = True,
-        multi_storage: bool = False,
-        mode: str = "manual"
+        self, validate: bool = True, multi_storage: bool = False, mode: str = "manual"
     ) -> None:
         """Perform full system backup."""
         orchestrator = await self._ensure_orchestrator()
@@ -53,29 +50,28 @@ class BackupCLI:
             click.echo("🔄 Starting full system backup...")
 
             results = await orchestrator.trigger_full_system_backup(
-                mode=OrchestrationMode(mode),
-                validate=validate,
-                multi_storage=multi_storage
+                mode=OrchestrationMode(mode), validate=validate, multi_storage=multi_storage
             )
 
             if results["success"]:
                 click.echo("✅ Full system backup completed successfully!")
                 click.echo(f"   Operation ID: {results['operation_id']}")
                 click.echo(f"   Duration: {results['duration_seconds']:.1f} seconds")
-                click.echo(f"   Size: {results['backup_results']['summary']['total_size_bytes'] / 1024 / 1024:.1f} MB")
+                click.echo(
+                    f"   Size: {results['backup_results']['summary']['total_size_bytes'] / 1024 / 1024:.1f} MB"
+                )
             else:
                 click.echo("❌ Full system backup completed with issues!")
-                click.echo(f"   Failed backups: {results['backup_results']['summary']['failed_backups']}")
+                click.echo(
+                    f"   Failed backups: {results['backup_results']['summary']['failed_backups']}"
+                )
 
         except Exception as e:
             click.echo(f"❌ Full system backup failed: {e}")
             raise click.ClickException(str(e))
 
     async def backup_component(
-        self,
-        component: str,
-        backup_type: str = "full",
-        validate: bool = True
+        self, component: str, backup_type: str = "full", validate: bool = True
     ) -> None:
         """Backup specific component."""
         orchestrator = await self._ensure_orchestrator()
@@ -85,18 +81,17 @@ class BackupCLI:
 
             if component == "database":
                 from .backup_manager import BackupType
+
                 result = await orchestrator.backup_manager.backup_database(
-                    backup_type=BackupType(backup_type),
-                    compress=True,
-                    validate=validate
+                    backup_type=BackupType(backup_type), compress=True, validate=validate
                 )
                 click.echo(f"✅ Database backup completed: {result.backup_id}")
 
             elif component == "data_lake":
                 from .backup_manager import BackupType
+
                 results = await orchestrator.backup_manager.backup_data_lake(
-                    backup_type=BackupType(backup_type),
-                    compress=True
+                    backup_type=BackupType(backup_type), compress=True
                 )
                 click.echo(f"✅ Data lake backup completed: {len(results)} layer(s) backed up")
 
@@ -112,10 +107,7 @@ class BackupCLI:
             raise click.ClickException(str(e))
 
     async def restore_component(
-        self,
-        backup_id: str,
-        destination: str | None = None,
-        verify: bool = True
+        self, backup_id: str, destination: str | None = None, verify: bool = True
     ) -> None:
         """Restore from specific backup."""
         orchestrator = await self._ensure_orchestrator()
@@ -126,9 +118,7 @@ class BackupCLI:
             dest_path = Path(destination) if destination else None
 
             results = await orchestrator.recovery_manager.restore_from_backup(
-                backup_id=backup_id,
-                target_location=dest_path,
-                verify_integrity=verify
+                backup_id=backup_id, target_location=dest_path, verify_integrity=verify
             )
 
             if results["status"] == "completed":
@@ -149,24 +139,19 @@ class BackupCLI:
             raise click.ClickException(str(e))
 
     async def restore_point_in_time(
-        self,
-        component: str,
-        timestamp: str,
-        destination: str | None = None
+        self, component: str, timestamp: str, destination: str | None = None
     ) -> None:
         """Restore component to point in time."""
         orchestrator = await self._ensure_orchestrator()
 
         try:
-            target_time = datetime.fromisoformat(timestamp.replace('T', ' ').replace('Z', ''))
+            target_time = datetime.fromisoformat(timestamp.replace("T", " ").replace("Z", ""))
             dest_path = Path(destination) if destination else None
 
             click.echo(f"🔄 Starting point-in-time restore: {component} to {target_time}")
 
             results = await orchestrator.restore_point_in_time(
-                component=component,
-                target_timestamp=target_time,
-                destination=dest_path
+                component=component, target_timestamp=target_time, destination=dest_path
             )
 
             if results["restore_results"]["status"] == "completed":
@@ -186,11 +171,7 @@ class BackupCLI:
             click.echo(f"❌ Point-in-time restore failed: {e}")
             raise click.ClickException(str(e))
 
-    async def execute_disaster_recovery(
-        self,
-        plan_id: str,
-        simulate: bool = False
-    ) -> None:
+    async def execute_disaster_recovery(self, plan_id: str, simulate: bool = False) -> None:
         """Execute disaster recovery plan."""
         orchestrator = await self._ensure_orchestrator()
 
@@ -200,20 +181,23 @@ class BackupCLI:
                     f"⚠️  This will execute REAL disaster recovery for plan: {plan_id}\n"
                     "   This operation may affect production systems.\n"
                     "   Do you want to continue?",
-                    abort=True
+                    abort=True,
                 )
 
-            click.echo(f"🚨 {'Simulating' if simulate else 'Executing'} disaster recovery plan: {plan_id}")
+            click.echo(
+                f"🚨 {'Simulating' if simulate else 'Executing'} disaster recovery plan: {plan_id}"
+            )
 
             results = await orchestrator.execute_disaster_recovery(
-                plan_id=plan_id,
-                simulate=simulate
+                plan_id=plan_id, simulate=simulate
             )
 
             dr_results = results["dr_results"]
 
             if dr_results["status"] == "completed":
-                click.echo(f"✅ Disaster recovery {'simulation' if simulate else 'execution'} completed!")
+                click.echo(
+                    f"✅ Disaster recovery {'simulation' if simulate else 'execution'} completed!"
+                )
                 click.echo(f"   Execution ID: {results['operation_id']}")
                 click.echo(f"   Duration: {results['total_duration']:.1f} seconds")
                 click.echo(f"   Steps completed: {len(dr_results['steps'])}")
@@ -222,22 +206,26 @@ class BackupCLI:
                 steps_table = []
                 for step in dr_results["steps"]:
                     status_icon = "✅" if step["status"] in ["completed", "simulated"] else "❌"
-                    steps_table.append([
-                        f"{status_icon} {step['step']}",
-                        step["name"],
-                        f"{step.get('actual_minutes', 0):.1f}m",
-                        step["status"]
-                    ])
+                    steps_table.append(
+                        [
+                            f"{status_icon} {step['step']}",
+                            step["name"],
+                            f"{step.get('actual_minutes', 0):.1f}m",
+                            step["status"],
+                        ]
+                    )
 
                 click.echo("\nExecution Steps:")
-                click.echo(tabulate(
-                    steps_table,
-                    headers=["Step", "Name", "Duration", "Status"],
-                    tablefmt="grid"
-                ))
+                click.echo(
+                    tabulate(
+                        steps_table, headers=["Step", "Name", "Duration", "Status"], tablefmt="grid"
+                    )
+                )
 
             else:
-                click.echo(f"❌ Disaster recovery {'simulation' if simulate else 'execution'} failed!")
+                click.echo(
+                    f"❌ Disaster recovery {'simulation' if simulate else 'execution'} failed!"
+                )
                 click.echo(f"   Error: {dr_results.get('error', 'Unknown error')}")
 
         except click.Abort:
@@ -246,18 +234,13 @@ class BackupCLI:
             click.echo(f"❌ Disaster recovery failed: {e}")
             raise click.ClickException(str(e))
 
-    async def list_backups(
-        self,
-        component: str | None = None,
-        limit: int = 20
-    ) -> None:
+    async def list_backups(self, component: str | None = None, limit: int = 20) -> None:
         """List available backups."""
         orchestrator = await self._ensure_orchestrator()
 
         try:
             backups = orchestrator.backup_manager.get_backup_history(
-                component=component,
-                limit=limit
+                component=component, limit=limit
             )
 
             if not backups:
@@ -271,31 +254,31 @@ class BackupCLI:
                 component_name = backup.get("tags", {}).get("component", "unknown")
                 status_icon = "✅" if backup.get("status") in ["completed", "validated"] else "❌"
 
-                table_data.append([
-                    f"{status_icon} {backup['backup_id'][:20]}...",
-                    component_name,
-                    backup.get("backup_type", "unknown"),
-                    backup["timestamp"][:19].replace("T", " "),
-                    f"{size_mb:.1f} MB",
-                    backup.get("status", "unknown")
-                ])
+                table_data.append(
+                    [
+                        f"{status_icon} {backup['backup_id'][:20]}...",
+                        component_name,
+                        backup.get("backup_type", "unknown"),
+                        backup["timestamp"][:19].replace("T", " "),
+                        f"{size_mb:.1f} MB",
+                        backup.get("status", "unknown"),
+                    ]
+                )
 
             click.echo(f"\nAvailable Backups ({len(backups)} found):")
-            click.echo(tabulate(
-                table_data,
-                headers=["Backup ID", "Component", "Type", "Created", "Size", "Status"],
-                tablefmt="grid"
-            ))
+            click.echo(
+                tabulate(
+                    table_data,
+                    headers=["Backup ID", "Component", "Type", "Created", "Size", "Status"],
+                    tablefmt="grid",
+                )
+            )
 
         except Exception as e:
             click.echo(f"❌ Failed to list backups: {e}")
             raise click.ClickException(str(e))
 
-    async def validate_backup(
-        self,
-        backup_id: str,
-        integrity_level: str = "standard"
-    ) -> None:
+    async def validate_backup(self, backup_id: str, integrity_level: str = "standard") -> None:
         """Validate specific backup."""
         orchestrator = await self._ensure_orchestrator()
 
@@ -318,9 +301,7 @@ class BackupCLI:
             click.echo(f"   Integrity level: {integrity_level}")
 
             report = await orchestrator.validator.validate_backup(
-                backup_path,
-                backup_metadata,
-                IntegrityLevel(integrity_level)
+                backup_path, backup_metadata, IntegrityLevel(integrity_level)
             )
 
             # Display results
@@ -373,11 +354,15 @@ class BackupCLI:
 
             # Last operations
             if status.get("last_full_backup"):
-                last_backup = datetime.fromisoformat(status["last_full_backup"]).strftime("%Y-%m-%d %H:%M:%S")
+                last_backup = datetime.fromisoformat(status["last_full_backup"]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 click.echo(f"💾 Last Full Backup: {last_backup}")
 
             if status.get("last_dr_test"):
-                last_test = datetime.fromisoformat(status["last_dr_test"]).strftime("%Y-%m-%d %H:%M:%S")
+                last_test = datetime.fromisoformat(status["last_dr_test"]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 click.echo(f"🚨 Last DR Test: {last_test}")
 
             # Scheduler status
@@ -397,10 +382,12 @@ class BackupCLI:
             periods = sla["periods"]
 
             click.echo("\n📊 SLA Compliance (24h/7d/30d):")
-            click.echo(f"   Backup Success: "
-                      f"{periods['24_hours']['backup_success_rate']:.1f}% / "
-                      f"{periods['7_days']['backup_success_rate']:.1f}% / "
-                      f"{periods['30_days']['backup_success_rate']:.1f}%")
+            click.echo(
+                f"   Backup Success: "
+                f"{periods['24_hours']['backup_success_rate']:.1f}% / "
+                f"{periods['7_days']['backup_success_rate']:.1f}% / "
+                f"{periods['30_days']['backup_success_rate']:.1f}%"
+            )
 
             # Storage backends
             if status["storage_backends"]:
@@ -410,18 +397,16 @@ class BackupCLI:
                         click.echo(f"   {backend_id}: ❌ Error - {backend_stats['error']}")
                     else:
                         total_size_mb = backend_stats.get("total_size_bytes", 0) / 1024 / 1024
-                        click.echo(f"   {backend_id}: {backend_stats.get('total_files', 0)} files, "
-                                  f"{total_size_mb:.1f} MB")
+                        click.echo(
+                            f"   {backend_id}: {backend_stats.get('total_files', 0)} files, "
+                            f"{total_size_mb:.1f} MB"
+                        )
 
         except Exception as e:
             click.echo(f"❌ Failed to get system status: {e}")
             raise click.ClickException(str(e))
 
-    async def show_alerts(
-        self,
-        severity: str | None = None,
-        limit: int = 10
-    ) -> None:
+    async def show_alerts(self, severity: str | None = None, limit: int = 10) -> None:
         """Show active alerts."""
         orchestrator = await self._ensure_orchestrator()
 
@@ -444,26 +429,30 @@ class BackupCLI:
                     "high": "❗",
                     "medium": "⚠️",
                     "low": "ℹ️",
-                    "info": "💡"
+                    "info": "💡",
                 }
 
                 severity_icon = severity_icons.get(alert["severity"], "❓")
                 timestamp = alert["timestamp"][:19].replace("T", " ")
 
-                table_data.append([
-                    alert["alert_id"][:12] + "...",
-                    f"{severity_icon} {alert['severity'].upper()}",
-                    alert["component"],
-                    alert["title"][:30] + ("..." if len(alert["title"]) > 30 else ""),
-                    timestamp
-                ])
+                table_data.append(
+                    [
+                        alert["alert_id"][:12] + "...",
+                        f"{severity_icon} {alert['severity'].upper()}",
+                        alert["component"],
+                        alert["title"][:30] + ("..." if len(alert["title"]) > 30 else ""),
+                        timestamp,
+                    ]
+                )
 
             click.echo(f"\n🚨 Active Alerts ({len(alerts)} shown):")
-            click.echo(tabulate(
-                table_data,
-                headers=["Alert ID", "Severity", "Component", "Title", "Created"],
-                tablefmt="grid"
-            ))
+            click.echo(
+                tabulate(
+                    table_data,
+                    headers=["Alert ID", "Severity", "Component", "Title", "Created"],
+                    tablefmt="grid",
+                )
+            )
 
         except Exception as e:
             click.echo(f"❌ Failed to show alerts: {e}")
@@ -486,7 +475,7 @@ class BackupCLI:
 
                 if isinstance(task_result, dict):
                     for key, value in task_result.items():
-                        if isinstance(value, (int, float)):
+                        if isinstance(value, int | float):
                             click.echo(f"      {key}: {value}")
                         elif isinstance(value, dict):
                             click.echo(f"      {key}: {len(value)} items")
@@ -512,7 +501,7 @@ class BackupCLI:
 def cli(ctx, config_path):
     """Backup and Disaster Recovery CLI Tool"""
     ctx.ensure_object(dict)
-    ctx.obj['config_path'] = Path(config_path) if config_path else None
+    ctx.obj["config_path"] = Path(config_path) if config_path else None
 
 
 @cli.command()
@@ -522,7 +511,7 @@ def cli(ctx, config_path):
 @click.pass_context
 def backup_full(ctx, validate, multi_storage, mode):
     """Perform full system backup"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -535,12 +524,17 @@ def backup_full(ctx, validate, multi_storage, mode):
 
 @cli.command()
 @click.argument("component", type=click.Choice(["database", "data_lake", "configuration"]))
-@click.option("--type", "backup_type", type=click.Choice(["full", "incremental", "differential"]), default="full")
+@click.option(
+    "--type",
+    "backup_type",
+    type=click.Choice(["full", "incremental", "differential"]),
+    default="full",
+)
 @click.option("--validate/--no-validate", default=True, help="Validate backup after completion")
 @click.pass_context
 def backup(ctx, component, backup_type, validate):
     """Backup specific component"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -558,7 +552,7 @@ def backup(ctx, component, backup_type, validate):
 @click.pass_context
 def restore(ctx, backup_id, destination, verify):
     """Restore from specific backup"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -576,7 +570,7 @@ def restore(ctx, backup_id, destination, verify):
 @click.pass_context
 def restore_pit(ctx, component, timestamp, destination):
     """Restore component to point in time (YYYY-MM-DD HH:MM:SS)"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -593,7 +587,7 @@ def restore_pit(ctx, component, timestamp, destination):
 @click.pass_context
 def disaster_recovery(ctx, plan_id, simulate):
     """Execute disaster recovery plan"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -610,7 +604,7 @@ def disaster_recovery(ctx, plan_id, simulate):
 @click.pass_context
 def list_backups(ctx, component, limit):
     """List available backups"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -623,11 +617,13 @@ def list_backups(ctx, component, limit):
 
 @cli.command()
 @click.argument("backup_id")
-@click.option("--level", type=click.Choice(["basic", "standard", "thorough", "forensic"]), default="standard")
+@click.option(
+    "--level", type=click.Choice(["basic", "standard", "thorough", "forensic"]), default="standard"
+)
 @click.pass_context
 def validate(ctx, backup_id, level):
     """Validate specific backup"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -642,7 +638,7 @@ def validate(ctx, backup_id, level):
 @click.pass_context
 def status(ctx):
     """Show system status"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -659,7 +655,7 @@ def status(ctx):
 @click.pass_context
 def alerts(ctx, severity, limit):
     """Show active alerts"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:
@@ -674,7 +670,7 @@ def alerts(ctx, severity, limit):
 @click.pass_context
 def maintenance(ctx):
     """Run maintenance tasks"""
-    backup_cli = BackupCLI(ctx.obj['config_path'])
+    backup_cli = BackupCLI(ctx.obj["config_path"])
 
     async def run():
         try:

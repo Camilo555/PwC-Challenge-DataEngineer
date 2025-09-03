@@ -1,4 +1,5 @@
 """Main enrichment service orchestrating multiple external APIs."""
+
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,7 @@ class DataEnrichmentService:
             self.currency_client.health_check(),
             self.country_client.health_check(),
             self.product_client.health_check(),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # Handle exceptions
@@ -73,9 +74,7 @@ class DataEnrichmentService:
                 )
             )
         else:
-            enrichment_tasks.append(
-                asyncio.create_task(self._return_as_is(transaction_data))
-            )
+            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
 
         if include_country:
             enrichment_tasks.append(
@@ -84,26 +83,19 @@ class DataEnrichmentService:
                 )
             )
         else:
-            enrichment_tasks.append(
-                asyncio.create_task(self._return_as_is(transaction_data))
-            )
+            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
 
         if include_product:
             enrichment_tasks.append(
-                asyncio.create_task(
-                    self.product_client.enrich_product_data(transaction_data)
-                )
+                asyncio.create_task(self.product_client.enrich_product_data(transaction_data))
             )
         else:
-            enrichment_tasks.append(
-                asyncio.create_task(self._return_as_is(transaction_data))
-            )
+            enrichment_tasks.append(asyncio.create_task(self._return_as_is(transaction_data)))
 
         try:
             # Run enrichments concurrently
             currency_enriched, country_enriched, product_enriched = await asyncio.gather(
-                *enrichment_tasks,
-                return_exceptions=True
+                *enrichment_tasks, return_exceptions=True
             )
 
             # Merge enrichment results
@@ -115,24 +107,29 @@ class DataEnrichmentService:
             )
 
             # Add enrichment metadata
-            enriched_data.update({
-                "enrichment_completed": True,
-                "enrichment_errors": self._collect_enrichment_errors(
-                    currency_enriched, country_enriched, product_enriched
-                ),
-                "enrichment_services_used": {
-                    "currency": include_currency and not isinstance(currency_enriched, Exception),
-                    "country": include_country and not isinstance(country_enriched, Exception),
-                    "product": include_product and not isinstance(product_enriched, Exception),
+            enriched_data.update(
+                {
+                    "enrichment_completed": True,
+                    "enrichment_errors": self._collect_enrichment_errors(
+                        currency_enriched, country_enriched, product_enriched
+                    ),
+                    "enrichment_services_used": {
+                        "currency": include_currency
+                        and not isinstance(currency_enriched, Exception),
+                        "country": include_country and not isinstance(country_enriched, Exception),
+                        "product": include_product and not isinstance(product_enriched, Exception),
+                    },
                 }
-            })
+            )
 
         except Exception as e:
             logger.error(f"Error during transaction enrichment: {e}")
-            enriched_data.update({
-                "enrichment_completed": False,
-                "enrichment_error": str(e),
-            })
+            enriched_data.update(
+                {
+                    "enrichment_completed": False,
+                    "enrichment_error": str(e),
+                }
+            )
 
         return enriched_data
 
@@ -163,8 +160,10 @@ class DataEnrichmentService:
 
         # Process in batches
         for i in range(0, len(transactions), batch_size):
-            batch = transactions[i:i + batch_size]
-            logger.info(f"Processing batch {i//batch_size + 1}: transactions {i+1}-{min(i+batch_size, len(transactions))}")
+            batch = transactions[i : i + batch_size]
+            logger.info(
+                f"Processing batch {i // batch_size + 1}: transactions {i + 1}-{min(i + batch_size, len(transactions))}"
+            )
 
             # Enrich batch concurrently
             batch_tasks = [
@@ -183,13 +182,15 @@ class DataEnrichmentService:
                 # Handle results and exceptions
                 for j, result in enumerate(batch_results):
                     if isinstance(result, Exception):
-                        logger.error(f"Failed to enrich transaction {i+j+1}: {result}")
+                        logger.error(f"Failed to enrich transaction {i + j + 1}: {result}")
                         # Keep original transaction with error marker
                         error_transaction = batch[j].copy()
-                        error_transaction.update({
-                            "enrichment_completed": False,
-                            "enrichment_error": str(result),
-                        })
+                        error_transaction.update(
+                            {
+                                "enrichment_completed": False,
+                                "enrichment_error": str(result),
+                            }
+                        )
                         enriched_transactions.append(error_transaction)
                     else:
                         enriched_transactions.append(result)
@@ -199,10 +200,12 @@ class DataEnrichmentService:
                 # Add original transactions with error markers
                 for transaction in batch:
                     error_transaction = transaction.copy()
-                    error_transaction.update({
-                        "enrichment_completed": False,
-                        "enrichment_error": f"Batch processing failed: {e}",
-                    })
+                    error_transaction.update(
+                        {
+                            "enrichment_completed": False,
+                            "enrichment_error": f"Batch processing failed: {e}",
+                        }
+                    )
                     enriched_transactions.append(error_transaction)
 
             # Small delay between batches to be respectful to APIs
@@ -227,22 +230,24 @@ class DataEnrichmentService:
             return {"total_transactions": 0}
 
         successful_enrichments = sum(
-            1 for t in enriched_transactions
-            if t.get("enrichment_completed", False)
+            1 for t in enriched_transactions if t.get("enrichment_completed", False)
         )
 
         currency_enriched = sum(
-            1 for t in enriched_transactions
+            1
+            for t in enriched_transactions
             if t.get("enrichment_services_used", {}).get("currency", False)
         )
 
         country_enriched = sum(
-            1 for t in enriched_transactions
+            1
+            for t in enriched_transactions
             if t.get("enrichment_services_used", {}).get("country", False)
         )
 
         product_enriched = sum(
-            1 for t in enriched_transactions
+            1
+            for t in enriched_transactions
             if t.get("enrichment_services_used", {}).get("product", False)
         )
 
@@ -257,7 +262,7 @@ class DataEnrichmentService:
                 "currency": currency_enriched / total_transactions,
                 "country": country_enriched / total_transactions,
                 "product": product_enriched / total_transactions,
-            }
+            },
         }
 
     async def close_all_clients(self) -> None:
@@ -266,7 +271,7 @@ class DataEnrichmentService:
             self.currency_client.close(),
             self.country_client.close(),
             self.product_client.close(),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
     async def _return_as_is(self, data: dict) -> dict:
@@ -285,7 +290,9 @@ class DataEnrichmentService:
 
         # Merge currency data
         for key, value in currency_data.items():
-            if key not in merged or key.startswith(("amount_", "unit_price_", "exchange_", "base_currency")):
+            if key not in merged or key.startswith(
+                ("amount_", "unit_price_", "exchange_", "base_currency")
+            ):
                 merged[key] = value
 
         # Merge country data

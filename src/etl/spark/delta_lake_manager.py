@@ -2,6 +2,7 @@
 Delta Lake Manager for Spark DataFrames
 Provides unified Delta Lake operations for Bronze, Silver, and Gold layers
 """
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -48,17 +49,20 @@ class DeltaLakeManager:
     def _create_delta_spark_session(self) -> SparkSession:
         """Create Spark session optimized for Delta Lake"""
 
-        builder = (SparkSession.builder
-                  .appName("PwC-Delta-Lake-ETL")
-                  .config("spark.sql.adaptive.enabled", "true")
-                  .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-                  .config("spark.sql.adaptive.skewJoin.enabled", "true")
-                  .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-                  .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-                  .config("spark.databricks.delta.retentionDurationCheck.enabled", "false")
-                  .config("spark.databricks.delta.vacuum.logging.enabled", "true")
-                  .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-                  .config("spark.sql.shuffle.partitions", "200"))
+        builder = (
+            SparkSession.builder.appName("PwC-Delta-Lake-ETL")
+            .config("spark.sql.adaptive.enabled", "true")
+            .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+            .config("spark.sql.adaptive.skewJoin.enabled", "true")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config(
+                "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+            )
+            .config("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+            .config("spark.databricks.delta.vacuum.logging.enabled", "true")
+            .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+            .config("spark.sql.shuffle.partitions", "200")
+        )
 
         # Configure memory settings
         if self.config.spark.executor_memory:
@@ -86,18 +90,18 @@ class DeltaLakeManager:
         table_name: str,
         partition_cols: list[str] | None = None,
         mode: str = "append",
-        add_metadata: bool = True
+        add_metadata: bool = True,
     ) -> dict[str, Any]:
         """
         Write data to Bronze Delta Lake layer with metadata enrichment
-        
+
         Args:
             df: Spark DataFrame to write
             table_name: Name of the Delta table
             partition_cols: Optional partition columns
             mode: Write mode (append, overwrite, merge)
             add_metadata: Whether to add ingestion metadata
-            
+
         Returns:
             Dictionary with write operation results
         """
@@ -130,10 +134,12 @@ class DeltaLakeManager:
                 "processing_time_seconds": processing_time,
                 "table_path": str(table_path),
                 "partition_cols": partition_cols or [],
-                "write_mode": mode
+                "write_mode": mode,
             }
 
-            self.logger.info(f"Bronze layer write completed: {table_name} ({record_count:,} records)")
+            self.logger.info(
+                f"Bronze layer write completed: {table_name} ({record_count:,} records)"
+            )
             return result
 
         except Exception as e:
@@ -146,18 +152,18 @@ class DeltaLakeManager:
         table_name: str,
         business_key: str,
         partition_cols: list[str] | None = None,
-        enable_scd2: bool = True
+        enable_scd2: bool = True,
     ) -> dict[str, Any]:
         """
         Write data to Silver Delta Lake layer with SCD2 support
-        
+
         Args:
             df: Spark DataFrame to write
             table_name: Name of the Delta table
             business_key: Business key for SCD2 tracking
             partition_cols: Optional partition columns
             enable_scd2: Whether to enable SCD Type 2 processing
-            
+
         Returns:
             Dictionary with write operation results
         """
@@ -189,7 +195,7 @@ class DeltaLakeManager:
                     "records_updated": 0,
                     "processing_time_seconds": (datetime.now() - start_time).total_seconds(),
                     "table_path": str(table_path),
-                    "scd2_enabled": enable_scd2
+                    "scd2_enabled": enable_scd2,
                 }
 
             self.logger.info(f"Silver layer write completed: {table_name}")
@@ -204,17 +210,17 @@ class DeltaLakeManager:
         df: DataFrame,
         table_name: str,
         partition_cols: list[str] | None = None,
-        optimize_for_queries: bool = True
+        optimize_for_queries: bool = True,
     ) -> dict[str, Any]:
         """
         Write data to Gold Delta Lake layer with query optimization
-        
+
         Args:
             df: Spark DataFrame to write
             table_name: Name of the Delta table
             partition_cols: Optional partition columns
             optimize_for_queries: Whether to apply query optimizations
-            
+
         Returns:
             Dictionary with write operation results
         """
@@ -247,7 +253,7 @@ class DeltaLakeManager:
                 "processing_time_seconds": processing_time,
                 "table_path": str(table_path),
                 "optimized": optimize_for_queries,
-                "partition_cols": partition_cols or []
+                "partition_cols": partition_cols or [],
             }
 
             self.logger.info(f"Gold layer write completed: {table_name} ({record_count:,} records)")
@@ -263,18 +269,18 @@ class DeltaLakeManager:
         table_name: str,
         version: int | None = None,
         timestamp: str | None = None,
-        filters: list[str] | None = None
+        filters: list[str] | None = None,
     ) -> DataFrame:
         """
         Read Delta table with time travel support
-        
+
         Args:
             layer: Layer name (bronze, silver, gold)
             table_name: Name of the Delta table
             version: Specific version to read
             timestamp: Specific timestamp to read
             filters: Optional filter conditions
-            
+
         Returns:
             Spark DataFrame
         """
@@ -345,36 +351,38 @@ class DeltaLakeManager:
 
     def _add_bronze_metadata(self, df: DataFrame) -> DataFrame:
         """Add Bronze layer metadata"""
-        return (df
-                .withColumn("__bronze_ingestion_timestamp", current_timestamp())
-                .withColumn("__bronze_file_path", lit("spark_dataframe"))
-                .withColumn("__bronze_source_system", lit("etl_pipeline"))
-                .withColumn("__bronze_schema_version", lit("1.0")))
+        return (
+            df.withColumn("__bronze_ingestion_timestamp", current_timestamp())
+            .withColumn("__bronze_file_path", lit("spark_dataframe"))
+            .withColumn("__bronze_source_system", lit("etl_pipeline"))
+            .withColumn("__bronze_schema_version", lit("1.0"))
+        )
 
     def _add_silver_metadata(self, df: DataFrame) -> DataFrame:
         """Add Silver layer metadata with SCD2 support"""
-        return (df
-                .withColumn("__silver_processed_timestamp", current_timestamp())
-                .withColumn("__silver_valid_from", current_timestamp())
-                .withColumn("__silver_valid_to", lit(None).cast(TimestampType()))
-                .withColumn("__silver_is_current", lit(True))
-                .withColumn("__silver_version", lit(1))
-                .withColumn("__silver_record_hash",
-                           hash(*[col(c) for c in df.columns if not c.startswith("__")])))
+        return (
+            df.withColumn("__silver_processed_timestamp", current_timestamp())
+            .withColumn("__silver_valid_from", current_timestamp())
+            .withColumn("__silver_valid_to", lit(None).cast(TimestampType()))
+            .withColumn("__silver_is_current", lit(True))
+            .withColumn("__silver_version", lit(1))
+            .withColumn(
+                "__silver_record_hash",
+                hash(*[col(c) for c in df.columns if not c.startswith("__")]),
+            )
+        )
 
     def _add_gold_metadata(self, df: DataFrame) -> DataFrame:
         """Add Gold layer metadata"""
-        return (df
-                .withColumn("__gold_created_timestamp", current_timestamp())
-                .withColumn("__gold_last_updated", current_timestamp())
-                .withColumn("__gold_aggregation_level", lit("detailed"))
-                .withColumn("__gold_data_quality_score", lit(1.0)))
+        return (
+            df.withColumn("__gold_created_timestamp", current_timestamp())
+            .withColumn("__gold_last_updated", current_timestamp())
+            .withColumn("__gold_aggregation_level", lit("detailed"))
+            .withColumn("__gold_data_quality_score", lit(1.0))
+        )
 
     def _perform_scd2_merge(
-        self,
-        new_df: DataFrame,
-        table_path: Path,
-        business_key: str
+        self, new_df: DataFrame, table_path: Path, business_key: str
     ) -> dict[str, Any]:
         """Perform SCD2 merge operation"""
 
@@ -384,36 +392,38 @@ class DeltaLakeManager:
         current_ts = current_timestamp()
 
         # Prepare merge condition
-        merge_condition = f"target.{business_key} = source.{business_key} AND target.__silver_is_current = true"
+        merge_condition = (
+            f"target.{business_key} = source.{business_key} AND target.__silver_is_current = true"
+        )
 
         # Prepare update expressions
         update_when_matched = {
             "__silver_valid_to": current_ts,
             "__silver_is_current": lit(False),
-            "__silver_last_updated": current_ts
+            "__silver_last_updated": current_ts,
         }
 
         # Prepare insert expressions for updated records
         insert_expressions = {col: f"source.{col}" for col in new_df.columns}
-        insert_expressions.update({
-            "__silver_valid_from": current_ts,
-            "__silver_valid_to": lit(None).cast(TimestampType()),
-            "__silver_is_current": lit(True),
-            "__silver_version": expr("COALESCE(target.__silver_version, 0) + 1")
-        })
+        insert_expressions.update(
+            {
+                "__silver_valid_from": current_ts,
+                "__silver_valid_to": lit(None).cast(TimestampType()),
+                "__silver_is_current": lit(True),
+                "__silver_version": expr("COALESCE(target.__silver_version, 0) + 1"),
+            }
+        )
 
         # Execute merge
-        merge_result = (delta_table.alias("target")
-                       .merge(new_df.alias("source"), merge_condition)
-                       .whenMatchedUpdate(set=update_when_matched)
-                       .whenNotMatchedInsert(values=insert_expressions)
-                       .execute())
+        merge_result = (
+            delta_table.alias("target")
+            .merge(new_df.alias("source"), merge_condition)
+            .whenMatchedUpdate(set=update_when_matched)
+            .whenNotMatchedInsert(values=insert_expressions)
+            .execute()
+        )
 
-        return {
-            "status": "success",
-            "scd2_merge": True,
-            "merge_metrics": merge_result
-        }
+        return {"status": "success", "scd2_merge": True, "merge_metrics": merge_result}
 
     def _optimize_table(self, table_path: Path, z_order_cols: list[str] | None = None):
         """Apply Delta table optimizations"""
@@ -432,8 +442,7 @@ class DeltaLakeManager:
 
     def _table_exists(self, table_path: Path) -> bool:
         """Check if Delta table exists"""
-        return (table_path.exists() and
-                (table_path / "_delta_log").exists())
+        return table_path.exists() and (table_path / "_delta_log").exists()
 
     def get_table_metrics(self, layer: str, table_name: str) -> dict[str, Any]:
         """Get comprehensive table metrics"""
@@ -451,7 +460,9 @@ class DeltaLakeManager:
                     null_count = df.filter(col(column).isNull()).count()
                     null_counts[column] = {
                         "null_count": null_count,
-                        "null_percentage": (null_count / total_records) * 100 if total_records > 0 else 0
+                        "null_percentage": (null_count / total_records) * 100
+                        if total_records > 0
+                        else 0,
                     }
 
             # Get table history
@@ -465,7 +476,9 @@ class DeltaLakeManager:
                 "column_count": column_count,
                 "version_count": version_count,
                 "null_analysis": null_counts,
-                "last_updated": history.select("timestamp").orderBy(col("timestamp").desc()).first()["timestamp"]
+                "last_updated": history.select("timestamp")
+                .orderBy(col("timestamp").desc())
+                .first()["timestamp"],
             }
 
         except Exception as e:
@@ -494,11 +507,13 @@ if __name__ == "__main__":
         # Create sample data
         from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, StructType
 
-        schema = StructType([
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-            StructField("value", DoubleType(), True)
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+                StructField("value", DoubleType(), True),
+            ]
+        )
 
         sample_data = [(1, "test1", 100.0), (2, "test2", 200.0), (3, "test3", 300.0)]
         df = delta_manager.spark.createDataFrame(sample_data, schema)

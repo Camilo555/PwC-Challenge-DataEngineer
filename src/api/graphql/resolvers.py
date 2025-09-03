@@ -1,16 +1,19 @@
 """
 GraphQL Resolvers
-Business logic for GraphQL queries and mutations.
+Optimized business logic for GraphQL queries with DataLoader pattern to solve N+1 problems.
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
 
 import strawberry
 from sqlmodel import Session, and_, desc, func, select
 from strawberry.types import Info
 
+from api.graphql.dataloaders import DataLoaderFactory, get_dataloaders
 from api.graphql.schemas import (
     BusinessMetrics,
     Country,
@@ -48,6 +51,19 @@ def get_session_from_info(info: Info) -> Session:
     return next(get_session())
 
 
+def get_dataloaders_from_info(info: Info) -> DataLoaderFactory:
+    """Get or create DataLoaders for this request context."""
+    if not hasattr(info.context, "dataloaders"):
+        session = get_session_from_info(info)
+        info.context.dataloaders = get_dataloaders(session)
+    return info.context.dataloaders
+
+
+def get_user_context(info: Info) -> dict[str, Any] | None:
+    """Extract user context from GraphQL info."""
+    return getattr(info.context, "user", None)
+
+
 @strawberry.type
 class Query:
     """GraphQL Query root."""
@@ -57,40 +73,43 @@ class Query:
         self,
         info: Info,
         filters: SalesFilters | None = None,
-        pagination: PaginationInput | None = None
+        pagination: PaginationInput | None = None,
     ) -> PaginatedSales:
         """Get paginated sales data with optional filters."""
         session = get_session_from_info(info)
 
         try:
             # Build base query
-            query = select(
-                FactSale.sale_id,
-                FactSale.quantity,
-                FactSale.unit_price,
-                FactSale.total_amount,
-                FactSale.discount_amount,
-                FactSale.tax_amount,
-                FactSale.profit_amount,
-                FactSale.margin_percentage,
-                FactSale.created_at,
-                # Product fields
-                DimProduct.stock_code,
-                DimProduct.description,
-                DimProduct.category,
-                DimProduct.brand,
-                # Customer fields
-                DimCustomer.customer_id,
-                DimCustomer.customer_segment,
-                DimCustomer.lifetime_value,
-                # Country fields
-                DimCountry.country_name,
-                DimCountry.country_code,
-                DimCountry.region
-            ).select_from(FactSale)\
-             .join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-             .join(DimCountry, FactSale.country_key == DimCountry.country_key)\
-             .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+            query = (
+                select(
+                    FactSale.sale_id,
+                    FactSale.quantity,
+                    FactSale.unit_price,
+                    FactSale.total_amount,
+                    FactSale.discount_amount,
+                    FactSale.tax_amount,
+                    FactSale.profit_amount,
+                    FactSale.margin_percentage,
+                    FactSale.created_at,
+                    # Product fields
+                    DimProduct.stock_code,
+                    DimProduct.description,
+                    DimProduct.category,
+                    DimProduct.brand,
+                    # Customer fields
+                    DimCustomer.customer_id,
+                    DimCustomer.customer_segment,
+                    DimCustomer.lifetime_value,
+                    # Country fields
+                    DimCountry.country_name,
+                    DimCountry.country_code,
+                    DimCountry.region,
+                )
+                .select_from(FactSale)
+                .join(DimProduct, FactSale.product_key == DimProduct.product_key)
+                .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+                .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+            )
 
             # Apply filters
             query_filters = []
@@ -124,9 +143,11 @@ class Query:
             count_query = select(func.count(FactSale.sale_id)).select_from(FactSale)
             if query_filters:
                 # Apply same filters to count query
-                count_query = count_query.join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-                                        .join(DimCountry, FactSale.country_key == DimCountry.country_key)\
-                                        .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+                count_query = (
+                    count_query.join(DimProduct, FactSale.product_key == DimProduct.product_key)
+                    .join(DimCountry, FactSale.country_key == DimCountry.country_key)
+                    .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+                )
                 if filters and (filters.date_from or filters.date_to):
                     count_query = count_query.join(DimDate, FactSale.date_key == DimDate.date_key)
                 count_query = count_query.where(and_(*query_filters))
@@ -160,7 +181,7 @@ class Query:
                         recency_score=None,
                         frequency_score=None,
                         monetary_score=None,
-                        rfm_segment=None
+                        rfm_segment=None,
                     )
 
                 # Create product object
@@ -172,7 +193,7 @@ class Query:
                     subcategory=None,
                     brand=row.brand,
                     unit_cost=None,
-                    recommended_price=None
+                    recommended_price=None,
                 )
 
                 # Create country object
@@ -184,7 +205,7 @@ class Query:
                     continent=None,
                     currency_code=None,
                     gdp_per_capita=None,
-                    population=None
+                    population=None,
                 )
 
                 # Create sale object
@@ -196,11 +217,13 @@ class Query:
                     discount_amount=float(row.discount_amount),
                     tax_amount=float(row.tax_amount),
                     profit_amount=float(row.profit_amount) if row.profit_amount else None,
-                    margin_percentage=float(row.margin_percentage) if row.margin_percentage else None,
+                    margin_percentage=float(row.margin_percentage)
+                    if row.margin_percentage
+                    else None,
                     created_at=row.created_at,
                     customer=customer,
                     product=product,
-                    country=country
+                    country=country,
                 )
                 sales.append(sale)
 
@@ -214,7 +237,7 @@ class Query:
                 page=page,
                 page_size=page_size,
                 has_next=has_next,
-                has_previous=has_previous
+                has_previous=has_previous,
             )
 
         except Exception as e:
@@ -225,10 +248,7 @@ class Query:
 
     @strawberry.field
     async def sales_analytics(
-        self,
-        info: Info,
-        granularity: TimeGranularity,
-        filters: SalesFilters | None = None
+        self, info: Info, granularity: TimeGranularity, filters: SalesFilters | None = None
     ) -> list[SalesAnalytics]:
         """Get sales analytics with time-based aggregation."""
         session = get_session_from_info(info)
@@ -246,7 +266,7 @@ class Query:
                 date_from=date_from,
                 date_to=date_to,
                 country=country,
-                product_category=product_category
+                product_category=product_category,
             )
 
             # Convert to GraphQL types
@@ -257,7 +277,7 @@ class Query:
                     total_quantity=item["units_sold"],
                     transaction_count=item["transactions"],
                     unique_customers=item["unique_customers"],
-                    avg_order_value=item["avg_order_value"]
+                    avg_order_value=item["avg_order_value"],
                 )
                 for item in result["time_series"]
             ]
@@ -283,7 +303,7 @@ class Query:
                     customer_count=segment["customer_count"],
                     avg_lifetime_value=segment["avg_lifetime_value"],
                     avg_order_value=segment["avg_order_value"],
-                    avg_total_orders=segment["avg_total_orders"]
+                    avg_total_orders=segment["avg_total_orders"],
                 )
                 for segment in segments
             ]
@@ -296,11 +316,7 @@ class Query:
 
     @strawberry.field
     async def product_performance(
-        self,
-        info: Info,
-        metric: MetricType,
-        top_n: int = 20,
-        filters: SalesFilters | None = None
+        self, info: Info, metric: MetricType, top_n: int = 20, filters: SalesFilters | None = None
     ) -> list[ProductPerformance]:
         """Get top-performing products by specified metric."""
         session = get_session_from_info(info)
@@ -311,10 +327,7 @@ class Query:
             date_to = filters.date_to.isoformat() if filters and filters.date_to else None
 
             products = await service.get_product_performance(
-                top_n=top_n,
-                metric=metric.value,
-                date_from=date_from,
-                date_to=date_to
+                top_n=top_n, metric=metric.value, date_from=date_from, date_to=date_to
             )
 
             return [
@@ -324,7 +337,7 @@ class Query:
                     category=product["category"],
                     total_revenue=product["total_revenue"],
                     total_quantity=product["total_quantity"],
-                    transaction_count=product["transaction_count"]
+                    transaction_count=product["transaction_count"],
                 )
                 for product in products
             ]
@@ -350,7 +363,7 @@ class Query:
                 unique_customers=metrics["customer_metrics"]["total_customers"],
                 avg_order_value=metrics["sales_metrics"]["avg_order_value"],
                 total_products=metrics["product_metrics"]["total_products"],
-                active_countries=0  # Would need to calculate
+                active_countries=0,  # Would need to calculate
             )
 
         except Exception as e:
@@ -377,7 +390,7 @@ class Query:
                 submitted_at=datetime.fromisoformat(task_data["submitted_at"]),
                 progress=task_data.get("progress"),
                 result=json.dumps(task_data["result"]) if task_data.get("result") else None,
-                error=task_data.get("error")
+                error=task_data.get("error"),
             )
 
         except Exception as e:
@@ -391,10 +404,7 @@ class Mutation:
 
     @strawberry.mutation
     async def submit_task(
-        self,
-        info: Info,
-        task_input: TaskSubmissionInput,
-        user_id: str | None = None
+        self, info: Info, task_input: TaskSubmissionInput, user_id: str | None = None
     ) -> TaskStatus:
         """Submit an async task for processing."""
         service = AsyncTaskService()
@@ -404,9 +414,7 @@ class Mutation:
             parameters = json.loads(task_input.parameters)
 
             result = await service.submit_task(
-                task_name=task_input.task_name,
-                task_args=parameters,
-                user_id=user_id
+                task_name=task_input.task_name, task_args=parameters, user_id=user_id
             )
 
             return TaskStatus(
@@ -416,7 +424,7 @@ class Mutation:
                 submitted_at=datetime.fromisoformat(result["submitted_at"]),
                 progress=None,
                 result=None,
-                error=None
+                error=None,
             )
 
         except Exception as e:

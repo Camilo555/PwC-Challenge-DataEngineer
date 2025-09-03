@@ -1,4 +1,5 @@
 """Product categorization API client for enriching product data."""
+
 from __future__ import annotations
 
 import re
@@ -28,43 +29,60 @@ class ProductAPIClient(BaseAPIClient):
         self.product_categories = {
             # Home & Garden
             "home_garden": {
-                "keywords": ["garden", "plant", "flower", "pot", "vase", "candle", "lantern", "decoration"],
-                "patterns": [r".*garden.*", r".*plant.*", r".*flower.*", r".*decoration.*"]
+                "keywords": [
+                    "garden",
+                    "plant",
+                    "flower",
+                    "pot",
+                    "vase",
+                    "candle",
+                    "lantern",
+                    "decoration",
+                ],
+                "patterns": [r".*garden.*", r".*plant.*", r".*flower.*", r".*decoration.*"],
             },
             # Fashion & Accessories
             "fashion": {
                 "keywords": ["bag", "handbag", "purse", "belt", "scarf", "hat", "jewelry", "watch"],
-                "patterns": [r".*bag.*", r".*handbag.*", r".*fashion.*", r".*jewelry.*"]
+                "patterns": [r".*bag.*", r".*handbag.*", r".*fashion.*", r".*jewelry.*"],
             },
             # Kitchen & Dining
             "kitchen": {
                 "keywords": ["kitchen", "cook", "plate", "bowl", "cup", "mug", "cutlery", "spoon"],
-                "patterns": [r".*kitchen.*", r".*cook.*", r".*dining.*", r".*plate.*"]
+                "patterns": [r".*kitchen.*", r".*cook.*", r".*dining.*", r".*plate.*"],
             },
             # Toys & Games
             "toys": {
                 "keywords": ["toy", "game", "puzzle", "doll", "bear", "child", "kid"],
-                "patterns": [r".*toy.*", r".*game.*", r".*child.*", r".*kid.*"]
+                "patterns": [r".*toy.*", r".*game.*", r".*child.*", r".*kid.*"],
             },
             # Gifts & Souvenirs
             "gifts": {
-                "keywords": ["gift", "souvenir", "memory", "keepsake", "present", "christmas", "birthday"],
-                "patterns": [r".*gift.*", r".*souvenir.*", r".*christmas.*", r".*birthday.*"]
+                "keywords": [
+                    "gift",
+                    "souvenir",
+                    "memory",
+                    "keepsake",
+                    "present",
+                    "christmas",
+                    "birthday",
+                ],
+                "patterns": [r".*gift.*", r".*souvenir.*", r".*christmas.*", r".*birthday.*"],
             },
             # Books & Stationery
             "books": {
                 "keywords": ["book", "notebook", "pen", "pencil", "paper", "card", "stationery"],
-                "patterns": [r".*book.*", r".*notebook.*", r".*stationery.*", r".*card.*"]
+                "patterns": [r".*book.*", r".*notebook.*", r".*stationery.*", r".*card.*"],
             },
             # Art & Craft
             "art_craft": {
                 "keywords": ["art", "craft", "paint", "brush", "creative", "handmade", "vintage"],
-                "patterns": [r".*art.*", r".*craft.*", r".*vintage.*", r".*handmade.*"]
+                "patterns": [r".*art.*", r".*craft.*", r".*vintage.*", r".*handmade.*"],
             },
             # Electronics & Tech
             "electronics": {
                 "keywords": ["electronic", "tech", "digital", "device", "gadget", "cable"],
-                "patterns": [r".*electronic.*", r".*tech.*", r".*digital.*", r".*device.*"]
+                "patterns": [r".*electronic.*", r".*tech.*", r".*digital.*", r".*device.*"],
             },
         }
 
@@ -159,10 +177,13 @@ class ProductAPIClient(BaseAPIClient):
         """
         try:
             # Use DataMuse API to find related words
-            response = await self.get("words", params={
-                "ml": word,  # Words with similar meaning
-                "max": 10
-            })
+            response = await self.get(
+                "words",
+                params={
+                    "ml": word,  # Words with similar meaning
+                    "max": 10,
+                },
+            )
 
             return [item["word"] for item in response if "word" in item]
 
@@ -170,10 +191,7 @@ class ProductAPIClient(BaseAPIClient):
             logger.error(f"Failed to get related words for '{word}': {e}")
             return []
 
-    async def enrich_product_data(
-        self,
-        product_data: dict
-    ) -> dict:
+    async def enrich_product_data(self, product_data: dict) -> dict:
         """
         Enrich product data with categorization and additional information.
 
@@ -191,19 +209,18 @@ class ProductAPIClient(BaseAPIClient):
 
         # Enrich with additional analysis
         enriched_data = product_data.copy()
-        enriched_data.update({
-            f"product_{key}": value
-            for key, value in categorization.items()
-        })
+        enriched_data.update({f"product_{key}": value for key, value in categorization.items()})
 
         # Add derived fields
-        enriched_data.update({
-            "product_enriched": True,
-            "is_gift_item": categorization["category"] == "gifts",
-            "is_seasonal": self._is_seasonal_product(description),
-            "complexity_score": self._calculate_complexity_score(description),
-            "brand_detected": self._detect_brand(description),
-        })
+        enriched_data.update(
+            {
+                "product_enriched": True,
+                "is_gift_item": categorization["category"] == "gifts",
+                "is_seasonal": self._is_seasonal_product(description),
+                "complexity_score": self._calculate_complexity_score(description),
+                "brand_detected": self._detect_brand(description),
+            }
+        )
 
         # Try to get related words for the main product category
         if categorization["confidence"] > 0.5:
@@ -223,7 +240,18 @@ class ProductAPIClient(BaseAPIClient):
         tags = []
 
         # Color detection
-        colors = ["red", "blue", "green", "yellow", "black", "white", "pink", "purple", "orange", "brown"]
+        colors = [
+            "red",
+            "blue",
+            "green",
+            "yellow",
+            "black",
+            "white",
+            "pink",
+            "purple",
+            "orange",
+            "brown",
+        ]
         for color in colors:
             if color in description:
                 tags.append(f"color_{color}")
@@ -284,8 +312,17 @@ class ProductAPIClient(BaseAPIClient):
     def _is_seasonal_product(self, description: str) -> bool:
         """Detect if product is seasonal."""
         seasonal_keywords = [
-            "christmas", "halloween", "easter", "valentine", "summer", "winter",
-            "spring", "autumn", "holiday", "seasonal", "xmas"
+            "christmas",
+            "halloween",
+            "easter",
+            "valentine",
+            "summer",
+            "winter",
+            "spring",
+            "autumn",
+            "holiday",
+            "seasonal",
+            "xmas",
         ]
         return any(keyword in description.lower() for keyword in seasonal_keywords)
 
@@ -306,8 +343,19 @@ class ProductAPIClient(BaseAPIClient):
         """Attempt to detect brand names in product description."""
         # Common brands in retail datasets (simplified)
         known_brands = [
-            "nike", "adidas", "apple", "samsung", "sony", "canon", "hp", "dell",
-            "coca-cola", "pepsi", "nestlé", "unilever", "procter"
+            "nike",
+            "adidas",
+            "apple",
+            "samsung",
+            "sony",
+            "canon",
+            "hp",
+            "dell",
+            "coca-cola",
+            "pepsi",
+            "nestlé",
+            "unilever",
+            "procter",
         ]
 
         description_lower = description.lower()

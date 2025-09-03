@@ -1,4 +1,5 @@
 """Transaction domain entity and related models."""
+
 from __future__ import annotations
 
 import re
@@ -110,8 +111,7 @@ class TransactionLine(DomainEntity):
         v = v.strip().upper()
 
         # Special codes that are valid
-        special_codes = ["POST", "DOT", "M",
-                         "BANK CHARGES", "PADS", "AMAZONFEE"]
+        special_codes = ["POST", "DOT", "M", "BANK CHARGES", "PADS", "AMAZONFEE"]
         if v in special_codes:
             return v
 
@@ -173,15 +173,13 @@ class TransactionLine(DomainEntity):
         """Calculate derived fields after validation."""
         # Calculate line total
         if self.quantity and self.unit_price:
-            self.line_total = Decimal(
-                str(abs(self.quantity))) * self.unit_price
+            self.line_total = Decimal(str(abs(self.quantity))) * self.unit_price
 
         # Check if return
         self.is_return = self.quantity < 0
 
         # Check if cancelled
-        self.is_cancelled = self.invoice_no.startswith(
-            CANCELLED_INVOICE_PREFIX)
+        self.is_cancelled = self.invoice_no.startswith(CANCELLED_INVOICE_PREFIX)
 
         return self
 
@@ -191,18 +189,13 @@ class TransactionLine(DomainEntity):
 
         # Rule 1: Cancelled invoices should have negative quantities
         if self.is_cancelled and self.quantity > 0:
-            self.add_validation_error(
-                f"Cancelled invoice {self.invoice_no} has positive quantity"
-            )
+            self.add_validation_error(f"Cancelled invoice {self.invoice_no} has positive quantity")
 
         # Rule 2: Stock code should match pattern (unless special)
-        special_codes = ["POST", "DOT", "M",
-                         "BANK CHARGES", "PADS", "AMAZONFEE"]
+        special_codes = ["POST", "DOT", "M", "BANK CHARGES", "PADS", "AMAZONFEE"]
         if self.stock_code not in special_codes:
             if not re.match(STOCK_CODE_PATTERN, self.stock_code):
-                self.add_validation_error(
-                    f"Invalid stock code format: {self.stock_code}"
-                )
+                self.add_validation_error(f"Invalid stock code format: {self.stock_code}")
 
         # Rule 3: Unit price should be positive for normal sales
         if not self.is_cancelled and not self.is_return and self.unit_price <= 0:
@@ -212,15 +205,11 @@ class TransactionLine(DomainEntity):
 
         # Rule 4: Description required for regular products
         if self.stock_code not in special_codes and not self.description:
-            self.add_validation_error(
-                f"Missing description for product {self.stock_code}"
-            )
+            self.add_validation_error(f"Missing description for product {self.stock_code}")
 
         # Rule 5: Customer ID required for non-cancelled transactions
         if not self.is_cancelled and not self.customer_id:
-            self.add_validation_error(
-                "Customer ID required for non-cancelled transactions"
-            )
+            self.add_validation_error("Customer ID required for non-cancelled transactions")
 
         return self.is_valid
 
@@ -277,17 +266,10 @@ class Transaction(DomainEntity):
         """Calculate aggregate fields from line items."""
         if self.lines:
             # Calculate totals
-            total = sum(
-                line.line_total for line in self.lines
-                if line.line_total
-            )
-            self.total_amount = total if total else Decimal('0')
-            self.total_items = sum(
-                abs(line.quantity) for line in self.lines
-            )
-            self.unique_products = len(
-                {line.stock_code for line in self.lines}
-            )
+            total = sum(line.line_total for line in self.lines if line.line_total)
+            self.total_amount = total if total else Decimal("0")
+            self.total_items = sum(abs(line.quantity) for line in self.lines)
+            self.unique_products = len({line.stock_code for line in self.lines})
 
             # Determine status
             if self.invoice_no.startswith(CANCELLED_INVOICE_PREFIX):
@@ -312,33 +294,21 @@ class Transaction(DomainEntity):
         # Validate all line items
         for line in self.lines:
             if not line.validate_business_rules():
-                self.add_validation_error(
-                    f"Line validation failed: {line.validation_errors}"
-                )
+                self.add_validation_error(f"Line validation failed: {line.validation_errors}")
 
         # Rule 1: Transaction should have at least one line
         if not self.lines:
             self.add_validation_error("Transaction has no line items")
 
         # Rule 2: All lines should have same customer
-        customer_ids = {
-            line.customer_id for line in self.lines
-            if line.customer_id
-        }
+        customer_ids = {line.customer_id for line in self.lines if line.customer_id}
         if len(customer_ids) > 1:
-            self.add_validation_error(
-                f"Multiple customer IDs in same transaction: {customer_ids}"
-            )
+            self.add_validation_error(f"Multiple customer IDs in same transaction: {customer_ids}")
 
         # Rule 3: All lines should have same country
-        countries = {
-            line.country for line in self.lines
-            if line.country
-        }
+        countries = {line.country for line in self.lines if line.country}
         if len(countries) > 1:
-            self.add_validation_error(
-                f"Multiple countries in same transaction: {countries}"
-            )
+            self.add_validation_error(f"Multiple countries in same transaction: {countries}")
 
         return self.is_valid
 
@@ -359,6 +329,5 @@ class CancelledTransaction(Transaction):
     def extract_original_invoice(self) -> CancelledTransaction:
         """Extract original invoice number from cancelled invoice."""
         if self.invoice_no.startswith(CANCELLED_INVOICE_PREFIX):
-            self.original_invoice_no = self.invoice_no[len(
-                CANCELLED_INVOICE_PREFIX):]
+            self.original_invoice_no = self.invoice_no[len(CANCELLED_INVOICE_PREFIX) :]
         return self

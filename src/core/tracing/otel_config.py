@@ -2,6 +2,7 @@
 OpenTelemetry Configuration
 Provides centralized configuration for OpenTelemetry tracing infrastructure.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,6 +20,7 @@ try:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
     OTEL_AVAILABLE = True
 except ImportError as e:
     print(f"OpenTelemetry import failed: {e}")
@@ -36,6 +38,7 @@ logger = get_logger(__name__)
 
 class TracingBackend(str, Enum):
     """Supported tracing backends."""
+
     CONSOLE = "console"
     JAEGER = "jaeger"
     OTLP = "otlp"
@@ -86,28 +89,25 @@ class TracingConfig:
         default_propagators = ["tracecontext", "baggage", "b3", "jaeger"]
 
         return cls(
-            enabled=os.getenv('OTEL_ENABLED', 'true').lower() in ('true', '1', 'yes'),
-            service_name=os.getenv('OTEL_SERVICE_NAME', 'retail-etl-pipeline'),
-            service_version=os.getenv('OTEL_SERVICE_VERSION', '1.0.0'),
-            environment=os.getenv('ENVIRONMENT', 'development'),
-
-            backend=TracingBackend(os.getenv('OTEL_BACKEND', 'console')),
-            endpoint=os.getenv('OTEL_EXPORTER_ENDPOINT'),
-
-            sampling_rate=float(os.getenv('OTEL_SAMPLING_RATE', '1.0')),
-
-            export_timeout_seconds=int(os.getenv('OTEL_EXPORT_TIMEOUT', '30')),
-            export_max_batch_size=int(os.getenv('OTEL_EXPORT_BATCH_SIZE', '512')),
-            export_schedule_delay_millis=int(os.getenv('OTEL_EXPORT_DELAY', '5000')),
-
-            auto_instrument=os.getenv('OTEL_AUTO_INSTRUMENT', 'true').lower() in ('true', '1', 'yes'),
-            instrument_db=os.getenv('OTEL_INSTRUMENT_DB', 'true').lower() in ('true', '1', 'yes'),
-            instrument_http=os.getenv('OTEL_INSTRUMENT_HTTP', 'true').lower() in ('true', '1', 'yes'),
-            instrument_redis=os.getenv('OTEL_INSTRUMENT_REDIS', 'true').lower() in ('true', '1', 'yes'),
-
-            propagators=os.getenv('OTEL_PROPAGATORS', ','.join(default_propagators)).split(','),
-
-            resource_attributes=_parse_resource_attributes()
+            enabled=os.getenv("OTEL_ENABLED", "true").lower() in ("true", "1", "yes"),
+            service_name=os.getenv("OTEL_SERVICE_NAME", "retail-etl-pipeline"),
+            service_version=os.getenv("OTEL_SERVICE_VERSION", "1.0.0"),
+            environment=os.getenv("ENVIRONMENT", "development"),
+            backend=TracingBackend(os.getenv("OTEL_BACKEND", "console")),
+            endpoint=os.getenv("OTEL_EXPORTER_ENDPOINT"),
+            sampling_rate=float(os.getenv("OTEL_SAMPLING_RATE", "1.0")),
+            export_timeout_seconds=int(os.getenv("OTEL_EXPORT_TIMEOUT", "30")),
+            export_max_batch_size=int(os.getenv("OTEL_EXPORT_BATCH_SIZE", "512")),
+            export_schedule_delay_millis=int(os.getenv("OTEL_EXPORT_DELAY", "5000")),
+            auto_instrument=os.getenv("OTEL_AUTO_INSTRUMENT", "true").lower()
+            in ("true", "1", "yes"),
+            instrument_db=os.getenv("OTEL_INSTRUMENT_DB", "true").lower() in ("true", "1", "yes"),
+            instrument_http=os.getenv("OTEL_INSTRUMENT_HTTP", "true").lower()
+            in ("true", "1", "yes"),
+            instrument_redis=os.getenv("OTEL_INSTRUMENT_REDIS", "true").lower()
+            in ("true", "1", "yes"),
+            propagators=os.getenv("OTEL_PROPAGATORS", ",".join(default_propagators)).split(","),
+            resource_attributes=_parse_resource_attributes(),
         )
 
 
@@ -116,21 +116,23 @@ def _parse_resource_attributes() -> dict[str, str]:
     attributes = {}
 
     # Parse OTEL_RESOURCE_ATTRIBUTES format: key1=value1,key2=value2
-    resource_attrs = os.getenv('OTEL_RESOURCE_ATTRIBUTES', '')
+    resource_attrs = os.getenv("OTEL_RESOURCE_ATTRIBUTES", "")
     if resource_attrs:
-        for pair in resource_attrs.split(','):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
+        for pair in resource_attrs.split(","):
+            if "=" in pair:
+                key, value = pair.split("=", 1)
                 attributes[key.strip()] = value.strip()
 
     # Add default attributes
-    attributes.update({
-        'service.name': os.getenv('OTEL_SERVICE_NAME', 'retail-etl-pipeline'),
-        'service.version': os.getenv('OTEL_SERVICE_VERSION', '1.0.0'),
-        'deployment.environment': os.getenv('ENVIRONMENT', 'development'),
-        'service.namespace': 'retail-analytics',
-        'service.instance.id': os.getenv('HOSTNAME', 'localhost')
-    })
+    attributes.update(
+        {
+            "service.name": os.getenv("OTEL_SERVICE_NAME", "retail-etl-pipeline"),
+            "service.version": os.getenv("OTEL_SERVICE_VERSION", "1.0.0"),
+            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+            "service.namespace": "retail-analytics",
+            "service.instance.id": os.getenv("HOSTNAME", "localhost"),
+        }
+    )
 
     return attributes
 
@@ -188,7 +190,7 @@ class OpenTelemetryConfigurator:
                 exporter,
                 max_export_batch_size=self.config.export_max_batch_size,
                 schedule_delay_millis=self.config.export_schedule_delay_millis,
-                export_timeout_millis=self.config.export_timeout_seconds * 1000
+                export_timeout_millis=self.config.export_timeout_seconds * 1000,
             )
             self._tracer_provider.add_span_processor(processor)
 
@@ -203,13 +205,13 @@ class OpenTelemetryConfigurator:
             return JaegerExporter(
                 agent_host_name=self._get_host_from_endpoint(),
                 agent_port=self._get_port_from_endpoint(14268),
-                collector_endpoint=self.config.endpoint
+                collector_endpoint=self.config.endpoint,
             )
 
         elif backend == TracingBackend.OTLP:
             return OTLPSpanExporter(
                 endpoint=self.config.endpoint or "http://localhost:4317",
-                headers=self.config.headers
+                headers=self.config.headers,
             )
 
         else:
@@ -222,6 +224,7 @@ class OpenTelemetryConfigurator:
             return "localhost"
 
         from urllib.parse import urlparse
+
         parsed = urlparse(self.config.endpoint)
         return parsed.hostname or "localhost"
 
@@ -231,6 +234,7 @@ class OpenTelemetryConfigurator:
             return default
 
         from urllib.parse import urlparse
+
         parsed = urlparse(self.config.endpoint)
         return parsed.port or default
 
@@ -253,6 +257,7 @@ class OpenTelemetryConfigurator:
 
         if propagators:
             from opentelemetry import propagate
+
             propagate.set_global_textmap(CompositePropagator(propagators))
 
     def shutdown(self) -> None:
@@ -270,10 +275,10 @@ _config: TracingConfig | None = None
 def configure_opentelemetry(config: TracingConfig | None = None) -> bool:
     """
     Configure OpenTelemetry tracing globally.
-    
+
     Args:
         config: Tracing configuration, or None to use environment
-        
+
     Returns:
         True if configuration succeeded
     """
@@ -307,6 +312,6 @@ def is_tracing_enabled() -> bool:
 # Startup hook for automatic configuration
 def auto_configure_tracing() -> bool:
     """Automatically configure tracing from environment."""
-    if os.getenv('OTEL_AUTO_CONFIGURE', 'true').lower() in ('true', '1', 'yes'):
+    if os.getenv("OTEL_AUTO_CONFIGURE", "true").lower() in ("true", "1", "yes"):
         return configure_opentelemetry()
     return False

@@ -2,6 +2,7 @@
 Base Transformation Framework
 Provides abstract base classes and strategy pattern for ETL transformations.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -27,11 +28,11 @@ class TransformationStrategy(ABC):
     def transform(self, data: Any, **kwargs) -> TransformationResult:
         """
         Transform input data according to the strategy.
-        
+
         Args:
             data: Input data to transform
             **kwargs: Additional parameters for transformation
-            
+
         Returns:
             TransformationResult with transformed data
         """
@@ -41,10 +42,10 @@ class TransformationStrategy(ABC):
     def validate_input(self, data: Any) -> bool:
         """
         Validate input data before transformation.
-        
+
         Args:
             data: Input data to validate
-            
+
         Returns:
             True if data is valid for this transformation
         """
@@ -104,12 +105,12 @@ class BasicCleaningStrategy(DataFrameTransformationStrategy):
         cleaned_data = data.drop_duplicates()
 
         # Fill null values with defaults if specified
-        fill_values = kwargs.get('fill_values', {})
+        fill_values = kwargs.get("fill_values", {})
         if fill_values:
             cleaned_data = cleaned_data.fillna(fill_values)
 
         # Drop columns with too many nulls
-        threshold = kwargs.get('null_threshold', 0.5)
+        threshold = kwargs.get("null_threshold", 0.5)
         null_ratios = cleaned_data.isnull().sum() / len(cleaned_data)
         columns_to_drop = null_ratios[null_ratios > threshold].index.tolist()
 
@@ -117,10 +118,10 @@ class BasicCleaningStrategy(DataFrameTransformationStrategy):
             cleaned_data = cleaned_data.drop(columns=columns_to_drop)
 
         metadata = {
-            'original_rows': len(data),
-            'cleaned_rows': len(cleaned_data),
-            'dropped_columns': columns_to_drop,
-            'duplicates_removed': len(data) - len(cleaned_data)
+            "original_rows": len(data),
+            "cleaned_rows": len(cleaned_data),
+            "dropped_columns": columns_to_drop,
+            "duplicates_removed": len(data) - len(cleaned_data),
         }
 
         return TransformationResult(cleaned_data, metadata)
@@ -132,6 +133,6 @@ def create_transformation_engine() -> TransformationEngine:
     engine = TransformationEngine()
 
     # Register default strategies
-    engine.register_strategy('basic_cleaning', BasicCleaningStrategy())
+    engine.register_strategy("basic_cleaning", BasicCleaningStrategy())
 
     return engine

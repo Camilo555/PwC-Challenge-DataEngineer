@@ -2,6 +2,7 @@
 Self-Healing System with Automated Failure Recovery
 Provides autonomous system recovery, health monitoring, and intelligent failure resolution.
 """
+
 import asyncio
 import os
 import signal
@@ -26,6 +27,7 @@ from etl.framework.resilience import CircuitBreaker, CircuitBreakerConfig
 
 class FailureType(Enum):
     """Types of system failures"""
+
     PROCESS_CRASH = "process_crash"
     MEMORY_EXHAUSTION = "memory_exhaustion"
     DISK_FULL = "disk_full"
@@ -42,6 +44,7 @@ class FailureType(Enum):
 
 class RecoveryAction(Enum):
     """Types of recovery actions"""
+
     RESTART_PROCESS = "restart_process"
     RESTART_SERVICE = "restart_service"
     CLEAR_CACHE = "clear_cache"
@@ -58,6 +61,7 @@ class RecoveryAction(Enum):
 
 class SystemHealth(Enum):
     """System health status levels"""
+
     HEALTHY = 0
     DEGRADED = 1
     CRITICAL = 2
@@ -67,19 +71,14 @@ class SystemHealth(Enum):
     @property
     def value_name(self):
         """Get the string name of the health status"""
-        names = {
-            0: "healthy",
-            1: "degraded",
-            2: "critical",
-            3: "failed",
-            4: "recovering"
-        }
+        names = {0: "healthy", 1: "degraded", 2: "critical", 3: "failed", 4: "recovering"}
         return names[self.value]
 
 
 @dataclass
 class HealthMetrics:
     """System health metrics"""
+
     timestamp: datetime
     cpu_usage: float
     memory_usage: float
@@ -96,6 +95,7 @@ class HealthMetrics:
 @dataclass
 class FailureEvent:
     """System failure event record"""
+
     event_id: str
     failure_type: FailureType
     component: str
@@ -113,13 +113,14 @@ class FailureEvent:
 @dataclass
 class RecoveryPlan:
     """Automated recovery plan"""
+
     plan_id: str
     failure_type: FailureType
     component: str
     actions: list[tuple[RecoveryAction, dict[str, Any]]]
     estimated_recovery_time: float
     success_probability: float
-    rollback_plan: Optional['RecoveryPlan'] = None
+    rollback_plan: Optional["RecoveryPlan"] = None
 
 
 class HealthChecker(ABC):
@@ -155,7 +156,7 @@ class SystemHealthChecker(HealthChecker):
         memory_usage = memory.percent
 
         # Disk usage
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
         disk_usage = disk.percent
 
         # Network latency (check periodically)
@@ -166,7 +167,7 @@ class SystemHealthChecker(HealthChecker):
         # Active connections
         try:
             connections = psutil.net_connections()
-            active_connections = len([c for c in connections if c.status == 'ESTABLISHED'])
+            active_connections = len([c for c in connections if c.status == "ESTABLISHED"])
         except (psutil.AccessDenied, psutil.NoSuchProcess):
             active_connections = 0
 
@@ -210,7 +211,7 @@ class SystemHealthChecker(HealthChecker):
             response_time_p95=0.0,  # Would be calculated from metrics
             throughput=0.0,  # Would be calculated from metrics
             health_status=health_status,
-            issues=issues
+            issues=issues,
         )
 
     def get_component_name(self) -> str:
@@ -220,12 +221,14 @@ class SystemHealthChecker(HealthChecker):
         """Check network latency to external services"""
         try:
             import time
+
             start_time = time.time()
 
             # Simple HTTP check to a reliable service
             import httpx
+
             async with httpx.AsyncClient(timeout=10) as client:
-                await client.get('https://httpbin.org/status/200')
+                await client.get("https://httpbin.org/status/200")
 
             latency = (time.time() - start_time) * 1000  # Convert to milliseconds
             return latency
@@ -268,7 +271,7 @@ class DatabaseHealthChecker(HealthChecker):
         except Exception as e:
             issues.append(f"Database connection failed: {str(e)}")
             health_status = SystemHealth.FAILED
-            response_time = float('inf')
+            response_time = float("inf")
 
         return HealthMetrics(
             timestamp=datetime.now(),
@@ -281,7 +284,7 @@ class DatabaseHealthChecker(HealthChecker):
             response_time_p95=response_time,
             throughput=0.0,
             health_status=health_status,
-            issues=issues
+            issues=issues,
         )
 
     def get_component_name(self) -> str:
@@ -295,10 +298,9 @@ class ServiceHealthChecker(HealthChecker):
         self.service_name = service_name
         self.health_endpoint = health_endpoint
         self.logger = get_logger(__name__)
-        self.circuit_breaker = CircuitBreaker(CircuitBreakerConfig(
-            failure_threshold=3,
-            recovery_timeout=30.0
-        ))
+        self.circuit_breaker = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30.0)
+        )
 
     async def check_health(self) -> HealthMetrics:
         """Check external service health"""
@@ -312,6 +314,7 @@ class ServiceHealthChecker(HealthChecker):
 
             async def health_check():
                 import httpx
+
                 async with httpx.AsyncClient(timeout=5) as client:
                     response = await client.get(self.health_endpoint)
                     return response.status_code == 200
@@ -329,7 +332,7 @@ class ServiceHealthChecker(HealthChecker):
         except Exception as e:
             issues.append(f"Service unreachable: {str(e)}")
             health_status = SystemHealth.FAILED
-            response_time = float('inf')
+            response_time = float("inf")
 
         return HealthMetrics(
             timestamp=datetime.now(),
@@ -342,7 +345,7 @@ class ServiceHealthChecker(HealthChecker):
             response_time_p95=response_time,
             throughput=0.0,
             health_status=health_status,
-            issues=issues
+            issues=issues,
         )
 
     def get_component_name(self) -> str:
@@ -356,19 +359,16 @@ class RecoveryActionExecutor:
         self.logger = get_logger(__name__)
 
     async def execute_action(
-        self,
-        action: RecoveryAction,
-        parameters: dict[str, Any],
-        component: str
+        self, action: RecoveryAction, parameters: dict[str, Any], component: str
     ) -> tuple[bool, str]:
         """Execute a recovery action"""
 
         try:
             if action == RecoveryAction.RESTART_PROCESS:
-                return await self._restart_process(parameters.get('process_name', component))
+                return await self._restart_process(parameters.get("process_name", component))
 
             elif action == RecoveryAction.RESTART_SERVICE:
-                return await self._restart_service(parameters.get('service_name', component))
+                return await self._restart_service(parameters.get("service_name", component))
 
             elif action == RecoveryAction.CLEAR_CACHE:
                 return await self._clear_cache(parameters)
@@ -411,9 +411,9 @@ class RecoveryActionExecutor:
         """Restart a system process"""
         try:
             # Find process by name
-            for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] == process_name:
-                    pid = proc.info['pid']
+            for proc in psutil.process_iter(["pid", "name"]):
+                if proc.info["name"] == process_name:
+                    pid = proc.info["pid"]
 
                     # Terminate gracefully first
                     os.kill(pid, signal.SIGTERM)
@@ -436,13 +436,17 @@ class RecoveryActionExecutor:
     async def _restart_service(self, service_name: str) -> tuple[bool, str]:
         """Restart a system service"""
         try:
+            # Validate service name for security
+            if not self._is_safe_service_name(service_name):
+                return False, f"Invalid service name: {service_name}"
+
             # Use systemctl to restart service (Linux)
-            if os.name == 'posix':
+            if os.name == "posix":
                 result = subprocess.run(
-                    ['systemctl', 'restart', service_name],
+                    ["systemctl", "restart", service_name],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
                 )
 
                 if result.returncode == 0:
@@ -452,18 +456,12 @@ class RecoveryActionExecutor:
             else:
                 # Windows service restart
                 result = subprocess.run(
-                    ['sc', 'stop', service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
+                    ["sc", "stop", service_name], capture_output=True, text=True, timeout=30
                 )
                 await asyncio.sleep(2)
 
                 result = subprocess.run(
-                    ['sc', 'start', service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
+                    ["sc", "start", service_name], capture_output=True, text=True, timeout=30
                 )
 
                 if result.returncode == 0:
@@ -474,16 +472,59 @@ class RecoveryActionExecutor:
         except Exception as e:
             return False, f"Service restart failed: {e}"
 
+    def _is_safe_service_name(self, service_name: str) -> bool:
+        """Validate service name to prevent command injection"""
+        import re
+
+        # Allow only alphanumeric, hyphens, underscores, and dots
+        safe_pattern = r"^[a-zA-Z0-9._-]+$"
+
+        if not re.match(safe_pattern, service_name):
+            return False
+
+        # Block dangerous characters and commands
+        dangerous_patterns = [
+            ";",
+            "&",
+            "|",
+            "$",
+            "`",
+            "(",
+            ")",
+            "{",
+            "}",
+            "<",
+            ">",
+            "*",
+            "?",
+            "[",
+            "]",
+            "!",
+            "~",
+            "rm ",
+            "del ",
+            "format ",
+            "shutdown",
+            "reboot",
+        ]
+
+        service_lower = service_name.lower()
+        for pattern in dangerous_patterns:
+            if pattern in service_lower:
+                return False
+
+        return True
+
     async def _clear_cache(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Clear application cache"""
         try:
-            cache_paths = parameters.get('cache_paths', ['/tmp/cache', '/var/cache'])
+            cache_paths = parameters.get("cache_paths", ["/tmp/cache", "/var/cache"])
             cleared_size = 0
 
             for cache_path in cache_paths:
                 path = Path(cache_path)
                 if path.exists():
-                    for file_path in path.rglob('*'):
+                    for file_path in path.rglob("*"):
                         if file_path.is_file():
                             try:
                                 size = file_path.stat().st_size
@@ -503,14 +544,15 @@ class RecoveryActionExecutor:
         try:
             # Force garbage collection
             import gc
+
             collected = gc.collect()
 
             # Clear OS caches (Linux)
-            if os.name == 'posix':
+            if os.name == "posix":
                 try:
-                    subprocess.run(['sync'], check=True)
-                    with open('/proc/sys/vm/drop_caches', 'w') as f:
-                        f.write('3')
+                    subprocess.run(["sync"], check=True)
+                    with open("/proc/sys/vm/drop_caches", "w") as f:
+                        f.write("3")
                 except Exception:
                     pass  # May not have permission
 
@@ -522,8 +564,8 @@ class RecoveryActionExecutor:
     async def _cleanup_temp_files(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Cleanup temporary files"""
         try:
-            temp_dirs = parameters.get('temp_dirs', ['/tmp', '/var/tmp'])
-            max_age_hours = parameters.get('max_age_hours', 24)
+            temp_dirs = parameters.get("temp_dirs", ["/tmp", "/var/tmp"])
+            max_age_hours = parameters.get("max_age_hours", 24)
             cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
 
             deleted_files = 0
@@ -532,7 +574,7 @@ class RecoveryActionExecutor:
             for temp_dir in temp_dirs:
                 path = Path(temp_dir)
                 if path.exists():
-                    for file_path in path.rglob('*'):
+                    for file_path in path.rglob("*"):
                         if file_path.is_file():
                             try:
                                 file_time = datetime.fromtimestamp(file_path.stat().st_mtime)
@@ -553,16 +595,16 @@ class RecoveryActionExecutor:
     async def _reset_connection(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Reset network/database connections"""
         try:
-            connection_type = parameters.get('connection_type', 'database')
+            connection_type = parameters.get("connection_type", "database")
 
-            if connection_type == 'database':
+            if connection_type == "database":
                 # Reset database connection pool
                 # This would depend on the actual database library used
                 return True, "Database connection pool reset"
 
-            elif connection_type == 'network':
+            elif connection_type == "network":
                 # Reset network connections
-                subprocess.run(['ip', 'route', 'flush', 'cache'], check=False)
+                subprocess.run(["ip", "route", "flush", "cache"], check=False)
                 return True, "Network connections reset"
 
             else:
@@ -575,8 +617,8 @@ class RecoveryActionExecutor:
         """Scale system resources"""
         try:
             # This would integrate with container orchestration or cloud APIs
-            scale_type = parameters.get('scale_type', 'horizontal')
-            target_instances = parameters.get('target_instances', 2)
+            scale_type = parameters.get("scale_type", "horizontal")
+            target_instances = parameters.get("target_instances", 2)
 
             # Mock implementation
             return True, f"Scaled resources: {scale_type} scaling to {target_instances} instances"
@@ -587,8 +629,8 @@ class RecoveryActionExecutor:
     async def _switch_fallback(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Switch to fallback service/configuration"""
         try:
-            fallback_type = parameters.get('fallback_type', 'service')
-            fallback_target = parameters.get('fallback_target', 'backup')
+            fallback_type = parameters.get("fallback_type", "service")
+            fallback_target = parameters.get("fallback_target", "backup")
 
             # Mock implementation - would update load balancer/configuration
             return True, f"Switched to fallback {fallback_type}: {fallback_target}"
@@ -599,13 +641,13 @@ class RecoveryActionExecutor:
     async def _reload_configuration(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Reload system configuration"""
         try:
-            config_file = parameters.get('config_file')
+            config_file = parameters.get("config_file")
 
             # Send SIGHUP to reload configuration
-            if parameters.get('process_name'):
-                for proc in psutil.process_iter(['pid', 'name']):
-                    if proc.info['name'] == parameters['process_name']:
-                        os.kill(proc.info['pid'], signal.SIGHUP)
+            if parameters.get("process_name"):
+                for proc in psutil.process_iter(["pid", "name"]):
+                    if proc.info["name"] == parameters["process_name"]:
+                        os.kill(proc.info["pid"], signal.SIGHUP)
                         break
 
             return True, f"Configuration reloaded from {config_file}"
@@ -616,17 +658,14 @@ class RecoveryActionExecutor:
     async def _repair_data(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Repair corrupted data"""
         try:
-            data_path = parameters.get('data_path')
-            repair_type = parameters.get('repair_type', 'filesystem')
+            data_path = parameters.get("data_path")
+            repair_type = parameters.get("repair_type", "filesystem")
 
-            if repair_type == 'filesystem':
+            if repair_type == "filesystem":
                 # Run filesystem check
-                if os.name == 'posix':
+                if os.name == "posix":
                     result = subprocess.run(
-                        ['fsck', '-y', data_path],
-                        capture_output=True,
-                        text=True,
-                        timeout=300
+                        ["fsck", "-y", data_path], capture_output=True, text=True, timeout=300
                     )
 
                     if result.returncode == 0:
@@ -639,7 +678,9 @@ class RecoveryActionExecutor:
         except Exception as e:
             return False, f"Data repair failed: {e}"
 
-    async def _quarantine_component(self, component: str, parameters: dict[str, Any]) -> tuple[bool, str]:
+    async def _quarantine_component(
+        self, component: str, parameters: dict[str, Any]
+    ) -> tuple[bool, str]:
         """Quarantine a failing component"""
         try:
             # Remove component from load balancer
@@ -654,8 +695,8 @@ class RecoveryActionExecutor:
     async def _alert_operators(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """Send alerts to operators"""
         try:
-            message = parameters.get('message', 'System failure detected')
-            severity = parameters.get('severity', 'high')
+            message = parameters.get("message", "System failure detected")
+            severity = parameters.get("severity", "high")
 
             # Send alert via multiple channels
             # - Email
@@ -686,54 +727,56 @@ class FailureAnalyzer:
         """Initialize built-in recovery strategies"""
 
         self.failure_patterns = {
-            'high_memory_usage': {
-                'conditions': {'memory_usage': {'min': 90}},
-                'recovery_actions': [
+            "high_memory_usage": {
+                "conditions": {"memory_usage": {"min": 90}},
+                "recovery_actions": [
                     (RecoveryAction.FREE_MEMORY, {}),
-                    (RecoveryAction.CLEAR_CACHE, {'cache_paths': ['/tmp/cache']}),
-                    (RecoveryAction.CLEANUP_TEMP_FILES, {'max_age_hours': 1})
+                    (RecoveryAction.CLEAR_CACHE, {"cache_paths": ["/tmp/cache"]}),
+                    (RecoveryAction.CLEANUP_TEMP_FILES, {"max_age_hours": 1}),
                 ],
-                'success_rate': 0.8
+                "success_rate": 0.8,
             },
-
-            'high_cpu_usage': {
-                'conditions': {'cpu_usage': {'min': 90}},
-                'recovery_actions': [
-                    (RecoveryAction.SCALE_RESOURCES, {'scale_type': 'horizontal', 'target_instances': 2}),
+            "high_cpu_usage": {
+                "conditions": {"cpu_usage": {"min": 90}},
+                "recovery_actions": [
+                    (
+                        RecoveryAction.SCALE_RESOURCES,
+                        {"scale_type": "horizontal", "target_instances": 2},
+                    ),
                     (RecoveryAction.RESTART_PROCESS, {}),
                 ],
-                'success_rate': 0.7
+                "success_rate": 0.7,
             },
-
-            'disk_full': {
-                'conditions': {'disk_usage': {'min': 95}},
-                'recovery_actions': [
-                    (RecoveryAction.CLEANUP_TEMP_FILES, {'max_age_hours': 24}),
+            "disk_full": {
+                "conditions": {"disk_usage": {"min": 95}},
+                "recovery_actions": [
+                    (RecoveryAction.CLEANUP_TEMP_FILES, {"max_age_hours": 24}),
                     (RecoveryAction.CLEAR_CACHE, {}),
-                    (RecoveryAction.ALERT_OPERATORS, {'message': 'Disk space critical', 'severity': 'high'})
+                    (
+                        RecoveryAction.ALERT_OPERATORS,
+                        {"message": "Disk space critical", "severity": "high"},
+                    ),
                 ],
-                'success_rate': 0.9
+                "success_rate": 0.9,
             },
-
-            'service_unresponsive': {
-                'conditions': {'response_time_p95': {'min': 10000}},  # 10 seconds
-                'recovery_actions': [
+            "service_unresponsive": {
+                "conditions": {"response_time_p95": {"min": 10000}},  # 10 seconds
+                "recovery_actions": [
                     (RecoveryAction.RESTART_SERVICE, {}),
-                    (RecoveryAction.RESET_CONNECTION, {'connection_type': 'network'}),
-                    (RecoveryAction.SWITCH_FALLBACK, {'fallback_type': 'service'})
+                    (RecoveryAction.RESET_CONNECTION, {"connection_type": "network"}),
+                    (RecoveryAction.SWITCH_FALLBACK, {"fallback_type": "service"}),
                 ],
-                'success_rate': 0.75
+                "success_rate": 0.75,
             },
-
-            'database_issues': {
-                'conditions': {'health_status': ['failed', 'critical']},
-                'recovery_actions': [
-                    (RecoveryAction.RESET_CONNECTION, {'connection_type': 'database'}),
-                    (RecoveryAction.RESTART_SERVICE, {'service_name': 'postgresql'}),
-                    (RecoveryAction.REPAIR_DATA, {'repair_type': 'database'})
+            "database_issues": {
+                "conditions": {"health_status": ["failed", "critical"]},
+                "recovery_actions": [
+                    (RecoveryAction.RESET_CONNECTION, {"connection_type": "database"}),
+                    (RecoveryAction.RESTART_SERVICE, {"service_name": "postgresql"}),
+                    (RecoveryAction.REPAIR_DATA, {"repair_type": "database"}),
                 ],
-                'success_rate': 0.6
-            }
+                "success_rate": 0.6,
+            },
         }
 
     def analyze_failure(self, health_metrics: HealthMetrics, component: str) -> RecoveryPlan | None:
@@ -741,18 +784,18 @@ class FailureAnalyzer:
 
         # Convert metrics to comparable format
         metrics_dict = {
-            'cpu_usage': health_metrics.cpu_usage,
-            'memory_usage': health_metrics.memory_usage,
-            'disk_usage': health_metrics.disk_usage,
-            'response_time_p95': health_metrics.response_time_p95,
-            'health_status': health_metrics.health_status.value_name
+            "cpu_usage": health_metrics.cpu_usage,
+            "memory_usage": health_metrics.memory_usage,
+            "disk_usage": health_metrics.disk_usage,
+            "response_time_p95": health_metrics.response_time_p95,
+            "health_status": health_metrics.health_status.value_name,
         }
 
         # Find matching patterns
         matching_patterns = []
 
         for pattern_name, pattern_config in self.failure_patterns.items():
-            if self._matches_pattern(metrics_dict, pattern_config['conditions']):
+            if self._matches_pattern(metrics_dict, pattern_config["conditions"]):
                 matching_patterns.append((pattern_name, pattern_config))
 
         if not matching_patterns:
@@ -760,22 +803,21 @@ class FailureAnalyzer:
             return None
 
         # Select best matching pattern (highest success rate)
-        best_pattern_name, best_pattern = max(
-            matching_patterns,
-            key=lambda x: x[1]['success_rate']
-        )
+        best_pattern_name, best_pattern = max(matching_patterns, key=lambda x: x[1]["success_rate"])
 
         # Create recovery plan
         plan = RecoveryPlan(
             plan_id=str(uuid.uuid4()),
             failure_type=self._infer_failure_type(health_metrics),
             component=component,
-            actions=best_pattern['recovery_actions'],
-            estimated_recovery_time=len(best_pattern['recovery_actions']) * 30.0,  # 30s per action
-            success_probability=best_pattern['success_rate']
+            actions=best_pattern["recovery_actions"],
+            estimated_recovery_time=len(best_pattern["recovery_actions"]) * 30.0,  # 30s per action
+            success_probability=best_pattern["success_rate"],
         )
 
-        self.logger.info(f"Created recovery plan {plan.plan_id} for {component} using pattern {best_pattern_name}")
+        self.logger.info(
+            f"Created recovery plan {plan.plan_id} for {component} using pattern {best_pattern_name}"
+        )
         return plan
 
     def _matches_pattern(self, metrics: dict[str, Any], conditions: dict[str, Any]) -> bool:
@@ -788,9 +830,9 @@ class FailureAnalyzer:
                 continue
 
             if isinstance(condition, dict):
-                if 'min' in condition and metric_value < condition['min']:
+                if "min" in condition and metric_value < condition["min"]:
                     return False
-                if 'max' in condition and metric_value > condition['max']:
+                if "max" in condition and metric_value > condition["max"]:
                     return False
             elif isinstance(condition, list):
                 if metric_value not in condition:
@@ -856,13 +898,11 @@ class SelfHealingOrchestrator:
         """Initialize health checkers for system components"""
 
         # System health checker
-        self.health_checkers['system'] = SystemHealthChecker()
+        self.health_checkers["system"] = SystemHealthChecker()
 
         # Database health checker
-        if hasattr(self.config.base, 'database_url'):
-            self.health_checkers['database'] = DatabaseHealthChecker(
-                self.config.base.database_url
-            )
+        if hasattr(self.config.base, "database_url"):
+            self.health_checkers["database"] = DatabaseHealthChecker(self.config.base.database_url)
 
         # External service health checkers
         # These would be configured based on actual services
@@ -929,10 +969,10 @@ class SelfHealingOrchestrator:
                 network_latency=0.0,
                 active_connections=0,
                 error_rate=1.0,
-                response_time_p95=float('inf'),
+                response_time_p95=float("inf"),
                 throughput=0.0,
                 health_status=SystemHealth.FAILED,
-                issues=[str(e)]
+                issues=[str(e)],
             )
 
     async def _process_health_result(self, component: str, health_metrics: HealthMetrics):
@@ -966,7 +1006,7 @@ class SelfHealingOrchestrator:
                     severity="critical",
                     timestamp=datetime.now(),
                     description=f"Component {component} failed: {', '.join(health_metrics.issues)}",
-                    metrics_at_failure=health_metrics
+                    metrics_at_failure=health_metrics,
                 )
 
                 self.active_failures[component] = failure_event
@@ -980,25 +1020,29 @@ class SelfHealingOrchestrator:
 
         # For now, just log degradation
         # Could implement gradual recovery or preventive actions
-        self.logger.warning(f"Component degradation detected: {component} - {', '.join(health_metrics.issues)}")
+        self.logger.warning(
+            f"Component degradation detected: {component} - {', '.join(health_metrics.issues)}"
+        )
 
     async def _trigger_recovery(self, component: str, failure_event: FailureEvent):
         """Trigger automatic recovery for a failed component"""
 
         # Check concurrent recovery limit
         active_recoveries = sum(
-            1 for event in self.active_failures.values()
+            1
+            for event in self.active_failures.values()
             if event.recovery_actions and not event.recovery_successful
         )
 
         if active_recoveries >= self.max_concurrent_recoveries:
-            self.logger.warning(f"Recovery delayed for {component}: max concurrent recoveries reached")
+            self.logger.warning(
+                f"Recovery delayed for {component}: max concurrent recoveries reached"
+            )
             return
 
         # Analyze failure and create recovery plan
         recovery_plan = self.failure_analyzer.analyze_failure(
-            failure_event.metrics_at_failure,
-            component
+            failure_event.metrics_at_failure, component
         )
 
         if not recovery_plan:
@@ -1073,46 +1117,58 @@ class SelfHealingOrchestrator:
         overall_health = SystemHealth.HEALTHY
         total_issues = []
 
-        for component, health in current_health.items():
+        for _component, health in current_health.items():
             if health.health_status == SystemHealth.FAILED:
                 overall_health = SystemHealth.FAILED
-            elif health.health_status == SystemHealth.CRITICAL and overall_health != SystemHealth.FAILED:
+            elif (
+                health.health_status == SystemHealth.CRITICAL
+                and overall_health != SystemHealth.FAILED
+            ):
                 overall_health = SystemHealth.CRITICAL
-            elif health.health_status == SystemHealth.DEGRADED and overall_health in [SystemHealth.HEALTHY]:
+            elif health.health_status == SystemHealth.DEGRADED and overall_health in [
+                SystemHealth.HEALTHY
+            ]:
                 overall_health = SystemHealth.DEGRADED
 
             total_issues.extend(health.issues)
 
         return {
-            'overall_health': overall_health.value_name,
-            'timestamp': datetime.now().isoformat(),
-            'components': {
+            "overall_health": overall_health.value_name,
+            "timestamp": datetime.now().isoformat(),
+            "components": {
                 name: {
-                    'health_status': health.health_status.value_name,
-                    'cpu_usage': health.cpu_usage,
-                    'memory_usage': health.memory_usage,
-                    'disk_usage': health.disk_usage,
-                    'issues': health.issues,
-                    'last_check': health.timestamp.isoformat()
+                    "health_status": health.health_status.value_name,
+                    "cpu_usage": health.cpu_usage,
+                    "memory_usage": health.memory_usage,
+                    "disk_usage": health.disk_usage,
+                    "issues": health.issues,
+                    "last_check": health.timestamp.isoformat(),
                 }
                 for name, health in current_health.items()
             },
-            'active_failures': {
+            "active_failures": {
                 name: {
-                    'failure_type': event.failure_type.value,
-                    'severity': event.severity,
-                    'timestamp': event.timestamp.isoformat(),
-                    'description': event.description,
-                    'recovery_in_progress': len(event.recovery_actions) > 0 and not event.recovery_successful
+                    "failure_type": event.failure_type.value,
+                    "severity": event.severity,
+                    "timestamp": event.timestamp.isoformat(),
+                    "description": event.description,
+                    "recovery_in_progress": len(event.recovery_actions) > 0
+                    and not event.recovery_successful,
                 }
                 for name, event in active_failures.items()
             },
-            'recovery_statistics': {
-                'total_recoveries': len(recovery_history),
-                'successful_recoveries': len([e for e in recovery_history if e.recovery_successful]),
-                'average_recovery_time_ms': statistics.mean([e.recovery_time_ms for e in recovery_history if e.recovery_time_ms]) if recovery_history else 0
+            "recovery_statistics": {
+                "total_recoveries": len(recovery_history),
+                "successful_recoveries": len(
+                    [e for e in recovery_history if e.recovery_successful]
+                ),
+                "average_recovery_time_ms": statistics.mean(
+                    [e.recovery_time_ms for e in recovery_history if e.recovery_time_ms]
+                )
+                if recovery_history
+                else 0,
             },
-            'system_issues': total_issues
+            "system_issues": total_issues,
         }
 
     def stop_monitoring(self):
@@ -1137,9 +1193,10 @@ def get_self_healing_orchestrator() -> SelfHealingOrchestrator:
 def self_healing(
     recovery_actions: list[tuple[RecoveryAction, dict[str, Any]]] = None,
     max_retries: int = 3,
-    retry_delay: float = 5.0
+    retry_delay: float = 5.0,
 ):
     """Decorator to add self-healing capabilities to functions"""
+
     def decorator(func):
         async def async_wrapper(*args, **kwargs):
             orchestrator = get_self_healing_orchestrator()
@@ -1149,10 +1206,14 @@ def self_healing(
                     return await func(*args, **kwargs)
                 except Exception as e:
                     if attempt == max_retries:
-                        orchestrator.logger.error(f"Function {func.__name__} failed after {max_retries} attempts")
+                        orchestrator.logger.error(
+                            f"Function {func.__name__} failed after {max_retries} attempts"
+                        )
                         raise
 
-                    orchestrator.logger.warning(f"Function {func.__name__} failed (attempt {attempt + 1}): {e}")
+                    orchestrator.logger.warning(
+                        f"Function {func.__name__} failed (attempt {attempt + 1}): {e}"
+                    )
 
                     # Execute recovery actions if provided
                     if recovery_actions:

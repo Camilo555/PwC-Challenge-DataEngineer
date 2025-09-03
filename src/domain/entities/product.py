@@ -1,4 +1,5 @@
 """Product domain entity and related models."""
+
 from __future__ import annotations
 
 import re
@@ -261,8 +262,21 @@ class Product(DomainEntity):
                 self.category = ProductCategory.LIGHTING
 
             # Extract color
-            colors = ["red", "blue", "green", "white", "black", "pink",
-                      "yellow", "purple", "orange", "brown", "grey", "silver", "gold"]
+            colors = [
+                "red",
+                "blue",
+                "green",
+                "white",
+                "black",
+                "pink",
+                "yellow",
+                "purple",
+                "orange",
+                "brown",
+                "grey",
+                "silver",
+                "gold",
+            ]
             for color in colors:
                 if color in desc_lower:
                     self.color = color.title()
@@ -277,8 +291,7 @@ class Product(DomainEntity):
 
             # Generate search keywords
             self.search_keywords = [
-                word for word in self.description.split()
-                if len(word) > 3 and word.isalpha()
+                word for word in self.description.split() if len(word) > 3 and word.isalpha()
             ]
 
             # Generate embedding text
@@ -290,8 +303,7 @@ class Product(DomainEntity):
             if self.category != ProductCategory.OTHER:
                 attributes.append(self.category.value)
 
-            self.embedding_text = f"{self.description} {' '.join(attributes)}".strip(
-            )
+            self.embedding_text = f"{self.description} {' '.join(attributes)}".strip()
 
         return self
 
@@ -301,8 +313,7 @@ class Product(DomainEntity):
         # Calculate return rate
         if self.total_sold and self.total_returned:
             if self.total_sold > 0:
-                self.return_rate = (self.total_returned /
-                                    self.total_sold) * 100
+                self.return_rate = (self.total_returned / self.total_sold) * 100
 
         return self
 
@@ -318,28 +329,21 @@ class Product(DomainEntity):
                 )
 
             if self.base_price < self.min_price or self.base_price > self.max_price:
-                self.add_validation_error(
-                    f"Base price ({self.base_price}) outside of price range"
-                )
+                self.add_validation_error(f"Base price ({self.base_price}) outside of price range")
 
         # Rule 2: Return rate threshold
         if self.return_rate and self.return_rate > 50:
-            self.add_validation_error(
-                f"High return rate: {self.return_rate:.2f}%"
-            )
+            self.add_validation_error(f"High return rate: {self.return_rate:.2f}%")
 
         # Rule 3: Description required
         if not self.description or len(self.description) < 3:
             self.add_validation_error("Product description too short")
 
         # Rule 4: Stock code format
-        special_codes = ["POST", "DOT", "M",
-                         "BANK CHARGES", "PADS", "AMAZONFEE"]
+        special_codes = ["POST", "DOT", "M", "BANK CHARGES", "PADS", "AMAZONFEE"]
         if self.stock_code not in special_codes:
             if not re.match(STOCK_CODE_PATTERN, self.stock_code):
-                self.add_validation_error(
-                    f"Invalid stock code format: {self.stock_code}"
-                )
+                self.add_validation_error(f"Invalid stock code format: {self.stock_code}")
 
         return self.is_valid
 

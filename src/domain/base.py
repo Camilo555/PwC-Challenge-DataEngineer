@@ -1,4 +1,5 @@
 """Base domain model with common functionality."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -21,27 +22,19 @@ class DomainEntity(BaseModel, ABC):
         use_enum_values=True,
         json_encoders={
             datetime: lambda v: v.isoformat(),
-        }
+        },
     )
 
     # Metadata fields
     created_at: datetime | None = Field(
-        default_factory=datetime.utcnow,
-        description="Entity creation timestamp"
+        default_factory=datetime.utcnow, description="Entity creation timestamp"
     )
-    updated_at: datetime | None = Field(
-        default=None,
-        description="Entity last update timestamp"
-    )
+    updated_at: datetime | None = Field(default=None, description="Entity last update timestamp")
 
     # Validation tracking
-    is_valid: bool = Field(
-        default=True,
-        description="Whether entity passed validation"
-    )
+    is_valid: bool = Field(default=True, description="Whether entity passed validation")
     validation_errors: list[str] = Field(
-        default_factory=list,
-        description="List of validation errors"
+        default_factory=list, description="List of validation errors"
     )
 
     @abstractmethod
@@ -77,4 +70,5 @@ class DomainEntity(BaseModel, ABC):
 
     class Meta:
         """Metadata for domain entity."""
+
         abstract: ClassVar[bool] = True

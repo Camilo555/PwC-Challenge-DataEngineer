@@ -4,9 +4,9 @@ DataDog Custom Infrastructure Dashboards
 Creates comprehensive dashboards for enterprise data platform monitoring
 """
 
-import json
 import logging
-from typing import Dict, List, Any
+from typing import Any
+
 from datadog import api, initialize
 
 # Configure logging
@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 class InfrastructureDashboards:
     """Create and manage DataDog infrastructure dashboards"""
-    
+
     def __init__(self, api_key: str, app_key: str, site: str = 'datadoghq.com'):
         """Initialize dashboard manager"""
         initialize(api_key=api_key, app_key=app_key, api_host=f'https://api.{site}')
-        
-    def create_kubernetes_dashboard(self) -> Dict[str, Any]:
+
+    def create_kubernetes_dashboard(self) -> dict[str, Any]:
         """Create comprehensive Kubernetes monitoring dashboard"""
         dashboard = {
             "title": "Enterprise Data Platform - Kubernetes Infrastructure",
@@ -107,7 +107,7 @@ class InfrastructureDashboards:
                             },
                             {
                                 "q": "sum:kubernetes.pods.pending{cluster_name:enterprise-data-platform} by {namespace}",
-                                "aggregator": "last", 
+                                "aggregator": "last",
                                 "alias": "Pending"
                             },
                             {
@@ -159,7 +159,7 @@ class InfrastructureDashboards:
                 }
             ]
         }
-        
+
         try:
             result = api.Dashboard.create(**dashboard)
             logger.info(f"Created Kubernetes dashboard: {result['url']}")
@@ -167,8 +167,8 @@ class InfrastructureDashboards:
         except Exception as e:
             logger.error(f"Error creating Kubernetes dashboard: {e}")
             raise
-    
-    def create_database_dashboard(self) -> Dict[str, Any]:
+
+    def create_database_dashboard(self) -> dict[str, Any]:
         """Create database monitoring dashboard"""
         dashboard = {
             "title": "Enterprise Data Platform - Database Infrastructure",
@@ -275,7 +275,7 @@ class InfrastructureDashboards:
                 },
                 {
                     "definition": {
-                        "type": "timeseries", 
+                        "type": "timeseries",
                         "requests": [
                             {
                                 "q": "avg:elasticsearch.search.query.time{service:elasticsearch,env:production}",
@@ -325,7 +325,7 @@ class InfrastructureDashboards:
                 }
             ]
         }
-        
+
         try:
             result = api.Dashboard.create(**dashboard)
             logger.info(f"Created Database dashboard: {result['url']}")
@@ -333,11 +333,11 @@ class InfrastructureDashboards:
         except Exception as e:
             logger.error(f"Error creating Database dashboard: {e}")
             raise
-    
-    def create_messaging_dashboard(self) -> Dict[str, Any]:
+
+    def create_messaging_dashboard(self) -> dict[str, Any]:
         """Create message queue monitoring dashboard"""
         dashboard = {
-            "title": "Enterprise Data Platform - Messaging Infrastructure", 
+            "title": "Enterprise Data Platform - Messaging Infrastructure",
             "description": "Comprehensive monitoring for RabbitMQ and Kafka message queues",
             "widgets": [
                 # RabbitMQ Overview
@@ -431,7 +431,7 @@ class InfrastructureDashboards:
                             }
                         ],
                         "title": "Kafka Topic Partition Sizes",
-                        "title_size": "16", 
+                        "title_size": "16",
                         "title_align": "left"
                     },
                     "layout": {"x": 6, "y": 5, "width": 6, "height": 3}
@@ -463,7 +463,7 @@ class InfrastructureDashboards:
                 }
             ]
         }
-        
+
         try:
             result = api.Dashboard.create(**dashboard)
             logger.info(f"Created Messaging dashboard: {result['url']}")
@@ -471,8 +471,8 @@ class InfrastructureDashboards:
         except Exception as e:
             logger.error(f"Error creating Messaging dashboard: {e}")
             raise
-    
-    def create_security_dashboard(self) -> Dict[str, Any]:
+
+    def create_security_dashboard(self) -> dict[str, Any]:
         """Create security monitoring dashboard"""
         dashboard = {
             "title": "Enterprise Data Platform - Security Monitoring",
@@ -601,7 +601,7 @@ class InfrastructureDashboards:
                 }
             ]
         }
-        
+
         try:
             result = api.Dashboard.create(**dashboard)
             logger.info(f"Created Security dashboard: {result['url']}")
@@ -609,8 +609,8 @@ class InfrastructureDashboards:
         except Exception as e:
             logger.error(f"Error creating Security dashboard: {e}")
             raise
-    
-    def create_cost_optimization_dashboard(self) -> Dict[str, Any]:
+
+    def create_cost_optimization_dashboard(self) -> dict[str, Any]:
         """Create cost optimization and capacity planning dashboard"""
         dashboard = {
             "title": "Enterprise Data Platform - Cost Optimization & Capacity Planning",
@@ -744,7 +744,7 @@ class InfrastructureDashboards:
                 }
             ]
         }
-        
+
         try:
             result = api.Dashboard.create(**dashboard)
             logger.info(f"Created Cost Optimization dashboard: {result['url']}")
@@ -752,21 +752,21 @@ class InfrastructureDashboards:
         except Exception as e:
             logger.error(f"Error creating Cost Optimization dashboard: {e}")
             raise
-    
-    def create_all_dashboards(self) -> List[Dict[str, Any]]:
+
+    def create_all_dashboards(self) -> list[dict[str, Any]]:
         """Create all infrastructure dashboards"""
         dashboards = []
-        
+
         try:
             dashboards.append(self.create_kubernetes_dashboard())
             dashboards.append(self.create_database_dashboard())
             dashboards.append(self.create_messaging_dashboard())
             dashboards.append(self.create_security_dashboard())
             dashboards.append(self.create_cost_optimization_dashboard())
-            
+
             logger.info(f"Successfully created {len(dashboards)} infrastructure dashboards")
             return dashboards
-            
+
         except Exception as e:
             logger.error(f"Error creating dashboards: {e}")
             raise
@@ -778,22 +778,22 @@ def main():
         'app_key': 'your-datadog-app-key',
         'site': 'datadoghq.com'
     }
-    
+
     dashboard_manager = InfrastructureDashboards(
-        config['api_key'], 
-        config['app_key'], 
+        config['api_key'],
+        config['app_key'],
         config['site']
     )
-    
+
     try:
         dashboards = dashboard_manager.create_all_dashboards()
-        
+
         print("Created DataDog Infrastructure Dashboards:")
         for dashboard in dashboards:
             print(f"- {dashboard['title']}: {dashboard['url']}")
-        
+
         return 0
-        
+
     except Exception as e:
         logger.error(f"Dashboard creation failed: {e}")
         return 1

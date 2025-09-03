@@ -2,6 +2,7 @@
 Enhanced Spark-based Bronze Layer with Advanced Features
 Provides enterprise-grade data ingestion with comprehensive monitoring
 """
+
 from __future__ import annotations
 
 import uuid
@@ -31,29 +32,29 @@ class EnhancedBronzeProcessor:
         self.quality_checker = DataQualityChecker()
         self.schema_manager = SchemaEvolutionManager()
 
-    def process(self,
-                input_path: Path | None = None,
-                output_path: Path | None = None,
-                enable_schema_evolution: bool = True,
-                enable_data_profiling: bool = True) -> dict[str, Any]:
+    def process(
+        self,
+        input_path: Path | None = None,
+        output_path: Path | None = None,
+        enable_schema_evolution: bool = True,
+        enable_data_profiling: bool = True,
+    ) -> dict[str, Any]:
         """
         Process Bronze layer with advanced features.
-        
+
         Args:
             input_path: Input data path (defaults to config.raw_data_path)
             output_path: Output path (defaults to config.bronze_path)
             enable_schema_evolution: Enable automatic schema evolution
             enable_data_profiling: Enable comprehensive data profiling
-            
+
         Returns:
             Processing results and metrics
         """
         try:
             # Initialize Spark session
             self.spark = create_optimized_session(
-                app_name="Enhanced-Bronze-Layer",
-                processing_type="batch",
-                data_size="medium"
+                app_name="Enhanced-Bronze-Layer", processing_type="batch", data_size="medium"
             )
 
             input_path = input_path or self.config.raw_data_path
@@ -99,7 +100,7 @@ class EnhancedBronzeProcessor:
                 output_count=partitioned_df.count(),
                 output_path=output_path,
                 quality_report=quality_report,
-                write_stats=write_stats
+                write_stats=write_stats,
             )
 
             logger.info("Enhanced Bronze layer processing completed successfully")
@@ -126,11 +127,13 @@ class EnhancedBronzeProcessor:
                     "extension": file_path.suffix.lower(),
                     "size_bytes": file_path.stat().st_size,
                     "modified_time": datetime.fromtimestamp(file_path.stat().st_mtime),
-                    "relative_path": str(file_path.relative_to(input_path))
+                    "relative_path": str(file_path.relative_to(input_path)),
                 }
                 discovered_files.append(file_info)
 
-        logger.info(f"Discovered {len(discovered_files)} files: {[f['name'] for f in discovered_files]}")
+        logger.info(
+            f"Discovered {len(discovered_files)} files: {[f['name'] for f in discovered_files]}"
+        )
         return discovered_files
 
     def _read_raw_data(self, input_files: list[dict[str, Any]]) -> DataFrame:
@@ -185,24 +188,26 @@ class EnhancedBronzeProcessor:
 
     def _read_csv_file(self, file_path: str) -> DataFrame:
         """Read CSV file with advanced options."""
-        return (self.spark.read
-                .option("header", "true")
-                .option("inferSchema", "true")
-                .option("timestampFormat", "M/d/yyyy H:mm")
-                .option("dateFormat", "M/d/yyyy")
-                .option("multiLine", "true")
-                .option("escape", '"')
-                .option("ignoreLeadingWhiteSpace", "true")
-                .option("ignoreTrailingWhiteSpace", "true")
-                .csv(file_path))
+        return (
+            self.spark.read.option("header", "true")
+            .option("inferSchema", "true")
+            .option("timestampFormat", "M/d/yyyy H:mm")
+            .option("dateFormat", "M/d/yyyy")
+            .option("multiLine", "true")
+            .option("escape", '"')
+            .option("ignoreLeadingWhiteSpace", "true")
+            .option("ignoreTrailingWhiteSpace", "true")
+            .csv(file_path)
+        )
 
     def _read_json_file(self, file_path: str) -> DataFrame:
         """Read JSON file with error handling."""
-        return (self.spark.read
-                .option("multiLine", "true")
-                .option("allowComments", "true")
-                .option("allowUnquotedFieldNames", "true")
-                .json(file_path))
+        return (
+            self.spark.read.option("multiLine", "true")
+            .option("allowComments", "true")
+            .option("allowUnquotedFieldNames", "true")
+            .json(file_path)
+        )
 
     def _read_parquet_file(self, file_path: str) -> DataFrame:
         """Read Parquet file."""
@@ -212,6 +217,7 @@ class EnhancedBronzeProcessor:
         """Read Excel file (requires pandas conversion)."""
         try:
             import pandas as pd
+
             pandas_df = pd.read_excel(file_path)
             return self.spark.createDataFrame(pandas_df)
         except ImportError:
@@ -273,7 +279,7 @@ class EnhancedBronzeProcessor:
             "CustomerID": "customer_id",
             "customerid": "customer_id",
             "customer": "customer_id",
-            "Country": "country"
+            "Country": "country",
         }
 
         # Apply mappings
@@ -305,12 +311,13 @@ class EnhancedBronzeProcessor:
 
         for col_name, target_type in type_mappings.items():
             if col_name in df.columns:
-                if isinstance(target_type, (IntegerType, DoubleType)):
+                if isinstance(target_type, IntegerType | DoubleType):
                     # Numeric columns with error handling
                     df = df.withColumn(
                         col_name,
-                        F.when(F.col(col_name).rlike(r"^\d*\.?\d*$"), F.col(col_name).cast(target_type))
-                        .otherwise(None)
+                        F.when(
+                            F.col(col_name).rlike(r"^\d*\.?\d*$"), F.col(col_name).cast(target_type)
+                        ).otherwise(None),
                     )
                 else:
                     # String columns
@@ -324,8 +331,8 @@ class EnhancedBronzeProcessor:
                     F.to_timestamp(F.col("invoice_timestamp"), "M/d/yyyy H:mm"),
                     F.to_timestamp(F.col("invoice_timestamp"), "yyyy-MM-dd HH:mm:ss"),
                     F.to_timestamp(F.col("invoice_timestamp"), "yyyy-MM-dd"),
-                    F.to_timestamp(F.col("invoice_timestamp"))
-                )
+                    F.to_timestamp(F.col("invoice_timestamp")),
+                ),
             )
 
         return df
@@ -333,23 +340,37 @@ class EnhancedBronzeProcessor:
     def _apply_business_rules(self, df: DataFrame) -> DataFrame:
         """Apply business rules and create derived columns."""
         # Add data quality flags
-        df = df.withColumn("_is_valid_quantity",
-                          F.when(F.col("quantity").isNull() | (F.col("quantity") <= 0), False).otherwise(True))
-        df = df.withColumn("_is_valid_price",
-                          F.when(F.col("unit_price").isNull() | (F.col("unit_price") < 0), False).otherwise(True))
-        df = df.withColumn("_has_invoice_no",
-                          F.when(F.col("invoice_no").isNull() | (F.trim(F.col("invoice_no")) == ""), False).otherwise(True))
+        df = df.withColumn(
+            "_is_valid_quantity",
+            F.when(F.col("quantity").isNull() | (F.col("quantity") <= 0), False).otherwise(True),
+        )
+        df = df.withColumn(
+            "_is_valid_price",
+            F.when(F.col("unit_price").isNull() | (F.col("unit_price") < 0), False).otherwise(True),
+        )
+        df = df.withColumn(
+            "_has_invoice_no",
+            F.when(
+                F.col("invoice_no").isNull() | (F.trim(F.col("invoice_no")) == ""), False
+            ).otherwise(True),
+        )
 
         # Calculate quality score
-        df = df.withColumn("_quality_score",
-                          (F.col("_is_valid_quantity").cast("int") +
-                           F.col("_is_valid_price").cast("int") +
-                           F.col("_has_invoice_no").cast("int")) / 3.0)
+        df = df.withColumn(
+            "_quality_score",
+            (
+                F.col("_is_valid_quantity").cast("int")
+                + F.col("_is_valid_price").cast("int")
+                + F.col("_has_invoice_no").cast("int")
+            )
+            / 3.0,
+        )
 
         # Add transaction type detection
         if "invoice_no" in df.columns:
-            df = df.withColumn("_is_return",
-                              F.when(F.col("invoice_no").startswith("C"), True).otherwise(False))
+            df = df.withColumn(
+                "_is_return", F.when(F.col("invoice_no").startswith("C"), True).otherwise(False)
+            )
 
         return df
 
@@ -361,7 +382,9 @@ class EnhancedBronzeProcessor:
         df = df.withColumn("_bronze_schema_version", F.lit("2.0"))
         df = df.withColumn("_processing_date", F.current_date())
         df = df.withColumn("_total_source_files", F.lit(len(input_files)))
-        df = df.withColumn("_row_hash", F.hash(*[col for col in df.columns if not col.startswith("_")]))
+        df = df.withColumn(
+            "_row_hash", F.hash(*[col for col in df.columns if not col.startswith("_")])
+        )
 
         return df
 
@@ -375,7 +398,9 @@ class EnhancedBronzeProcessor:
         logger.info("=== Data Quality Report ===")
         logger.info(f"Total records: {quality_report.total_records}")
         logger.info(f"Overall quality score: {quality_report.overall_score:.2%}")
-        logger.info(f"High quality records: {quality_report.high_quality_records} ({quality_report.high_quality_percentage:.1f}%)")
+        logger.info(
+            f"High quality records: {quality_report.high_quality_records} ({quality_report.high_quality_percentage:.1f}%)"
+        )
 
         for dimension, score in quality_report.dimension_scores.items():
             logger.info(f"{dimension.title()}: {score:.2%}")
@@ -402,11 +427,12 @@ class EnhancedBronzeProcessor:
         # Write with partitioning
         write_start = datetime.now()
 
-        (df.write
-         .mode("overwrite")
-         .option("compression", "snappy")
-         .partitionBy("year", "month")
-         .parquet(str(output_path)))
+        (
+            df.write.mode("overwrite")
+            .option("compression", "snappy")
+            .partitionBy("year", "month")
+            .parquet(str(output_path))
+        )
 
         write_duration = (datetime.now() - write_start).total_seconds()
 
@@ -419,10 +445,14 @@ class EnhancedBronzeProcessor:
             "output_files": len(written_files),
             "total_size_bytes": total_size_bytes,
             "total_size_mb": total_size_bytes / (1024 * 1024),
-            "average_throughput_mb_per_second": (total_size_bytes / (1024 * 1024)) / write_duration if write_duration > 0 else 0
+            "average_throughput_mb_per_second": (total_size_bytes / (1024 * 1024)) / write_duration
+            if write_duration > 0
+            else 0,
         }
 
-        logger.info(f"Write completed in {write_duration:.1f}s, {write_stats['total_size_mb']:.1f}MB written")
+        logger.info(
+            f"Write completed in {write_duration:.1f}s, {write_stats['total_size_mb']:.1f}MB written"
+        )
         return write_stats
 
     def _generate_processing_report(self, **kwargs) -> dict[str, Any]:
@@ -435,15 +465,13 @@ class EnhancedBronzeProcessor:
                 "environment": self.config.environment.value,
                 "processing_engine": self.config.processing_engine.value,
             },
-            **kwargs
+            **kwargs,
         }
 
 
 # Convenience functions
 def process_bronze_enhanced(
-    input_path: Path | None = None,
-    output_path: Path | None = None,
-    **kwargs
+    input_path: Path | None = None, output_path: Path | None = None, **kwargs
 ) -> dict[str, Any]:
     """Process Bronze layer with enhanced features."""
     processor = EnhancedBronzeProcessor()
@@ -462,7 +490,9 @@ def main() -> None:
 
         print("Enhanced Bronze layer processing completed successfully")
         print(f"Processed {result.get('output_count', 0)} records")
-        print(f"Overall quality score: {result.get('quality_report', {}).get('overall_score', 0):.2%}")
+        print(
+            f"Overall quality score: {result.get('quality_report', {}).get('overall_score', 0):.2%}"
+        )
 
     except Exception as e:
         print(f"Enhanced Bronze layer processing failed: {e}")

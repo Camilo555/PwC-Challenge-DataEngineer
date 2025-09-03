@@ -2,25 +2,33 @@
 Advanced Prometheus Metrics Collection
 Provides comprehensive metrics collection for enterprise observability.
 """
+
 from __future__ import annotations
 
-import asyncio
-import json
 import threading
 import time
-import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any
 
 try:
     from prometheus_client import (
-        Counter, Gauge, Histogram, Summary, Info, Enum as PrometheusEnum,
-        CollectorRegistry, generate_latest, start_http_server, CONTENT_TYPE_LATEST
+        CONTENT_TYPE_LATEST,
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        Info,
+        Summary,
+        generate_latest,
+        start_http_server,
     )
+    from prometheus_client import Enum as PrometheusEnum
     from prometheus_client.core import REGISTRY
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -35,6 +43,7 @@ logger = get_logger(__name__)
 
 class MetricType(Enum):
     """Types of Prometheus metrics."""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -45,6 +54,7 @@ class MetricType(Enum):
 
 class BusinessDomain(Enum):
     """Business domains for metric categorization."""
+
     SALES = "sales"
     INVENTORY = "inventory"
     CUSTOMER = "customer"
@@ -56,13 +66,14 @@ class BusinessDomain(Enum):
 @dataclass
 class MetricDefinition:
     """Definition of a Prometheus metric."""
+
     name: str
     description: str
     metric_type: MetricType
-    labels: List[str] = field(default_factory=list)
-    buckets: Optional[List[float]] = None
-    objectives: Optional[Dict[float, float]] = None
-    business_domain: Optional[BusinessDomain] = None
+    labels: list[str] = field(default_factory=list)
+    buckets: list[float] | None = None
+    objectives: dict[float, float] | None = None
+    business_domain: BusinessDomain | None = None
     unit: str = ""
     help_text: str = ""
 
@@ -70,32 +81,33 @@ class MetricDefinition:
 @dataclass
 class BusinessMetric:
     """Business-specific metric with KPI information."""
+
     name: str
     value: float
-    labels: Dict[str, str]
+    labels: dict[str, str]
     timestamp: datetime
     business_domain: BusinessDomain
-    target_value: Optional[float] = None
-    threshold_warning: Optional[float] = None
-    threshold_critical: Optional[float] = None
+    target_value: float | None = None
+    threshold_warning: float | None = None
+    threshold_critical: float | None = None
 
 
 class EnterprisePrometheusCollector:
     """Enterprise-grade Prometheus metrics collector."""
-    
-    def __init__(self, registry: Optional[CollectorRegistry] = None):
+
+    def __init__(self, registry: CollectorRegistry | None = None):
         self.registry = registry or (REGISTRY if PROMETHEUS_AVAILABLE else None)
-        self.metrics: Dict[str, Any] = {}
-        self.business_metrics: Dict[str, BusinessMetric] = {}
-        self.metric_definitions: Dict[str, MetricDefinition] = {}
+        self.metrics: dict[str, Any] = {}
+        self.business_metrics: dict[str, BusinessMetric] = {}
+        self.metric_definitions: dict[str, MetricDefinition] = {}
         self.lock = threading.RLock()
         self.logger = get_logger(self.__class__.__name__)
-        
+
         if PROMETHEUS_AVAILABLE:
             self._initialize_core_metrics()
             self._initialize_business_metrics()
             self._initialize_infrastructure_metrics()
-            
+
     def _initialize_core_metrics(self):
         """Initialize core application metrics."""
         core_metrics = [
@@ -104,35 +116,51 @@ class EnterprisePrometheusCollector:
                 description="Total number of application requests",
                 metric_type=MetricType.COUNTER,
                 labels=["method", "endpoint", "status", "service"],
-                help_text="Tracks all incoming requests to the application"
+                help_text="Tracks all incoming requests to the application",
             ),
             MetricDefinition(
                 name="app_request_duration_seconds",
                 description="Application request duration in seconds",
                 metric_type=MetricType.HISTOGRAM,
                 labels=["method", "endpoint", "service"],
-                buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0],
-                help_text="Measures request processing time distribution"
+                buckets=[
+                    0.001,
+                    0.005,
+                    0.01,
+                    0.025,
+                    0.05,
+                    0.075,
+                    0.1,
+                    0.25,
+                    0.5,
+                    0.75,
+                    1.0,
+                    2.5,
+                    5.0,
+                    7.5,
+                    10.0,
+                ],
+                help_text="Measures request processing time distribution",
             ),
             MetricDefinition(
                 name="app_active_connections",
                 description="Number of active connections",
                 metric_type=MetricType.GAUGE,
                 labels=["service", "connection_type"],
-                help_text="Current number of active connections"
+                help_text="Current number of active connections",
             ),
             MetricDefinition(
                 name="app_errors_total",
                 description="Total application errors",
                 metric_type=MetricType.COUNTER,
                 labels=["error_type", "service", "severity"],
-                help_text="Count of application errors by type"
+                help_text="Count of application errors by type",
             ),
         ]
-        
+
         for metric_def in core_metrics:
             self._create_metric(metric_def)
-            
+
     def _initialize_business_metrics(self):
         """Initialize business-specific metrics."""
         business_metrics = [
@@ -143,7 +171,7 @@ class EnterprisePrometheusCollector:
                 labels=["currency", "product_category", "region", "channel"],
                 business_domain=BusinessDomain.SALES,
                 unit="currency",
-                help_text="Total revenue from sales transactions"
+                help_text="Total revenue from sales transactions",
             ),
             MetricDefinition(
                 name="business_active_customers",
@@ -151,7 +179,7 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.GAUGE,
                 labels=["segment", "region", "tier"],
                 business_domain=BusinessDomain.CUSTOMER,
-                help_text="Current count of active customers"
+                help_text="Current count of active customers",
             ),
             MetricDefinition(
                 name="business_order_value",
@@ -161,7 +189,7 @@ class EnterprisePrometheusCollector:
                 buckets=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
                 business_domain=BusinessDomain.SALES,
                 unit="currency",
-                help_text="Distribution of individual order values"
+                help_text="Distribution of individual order values",
             ),
             MetricDefinition(
                 name="business_inventory_levels",
@@ -170,7 +198,7 @@ class EnterprisePrometheusCollector:
                 labels=["product_id", "warehouse", "category"],
                 business_domain=BusinessDomain.INVENTORY,
                 unit="units",
-                help_text="Current stock levels for products"
+                help_text="Current stock levels for products",
             ),
             MetricDefinition(
                 name="business_conversion_rate",
@@ -179,13 +207,13 @@ class EnterprisePrometheusCollector:
                 labels=["channel", "campaign", "product_category"],
                 business_domain=BusinessDomain.MARKETING,
                 unit="percentage",
-                help_text="Customer conversion rates"
+                help_text="Customer conversion rates",
             ),
         ]
-        
+
         for metric_def in business_metrics:
             self._create_metric(metric_def)
-            
+
     def _initialize_infrastructure_metrics(self):
         """Initialize infrastructure and system metrics."""
         infrastructure_metrics = [
@@ -195,7 +223,7 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.GAUGE,
                 labels=["cpu_core", "host"],
                 unit="percentage",
-                help_text="CPU utilization per core"
+                help_text="CPU utilization per core",
             ),
             MetricDefinition(
                 name="system_memory_usage_bytes",
@@ -203,7 +231,7 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.GAUGE,
                 labels=["memory_type", "host"],
                 unit="bytes",
-                help_text="Memory usage breakdown"
+                help_text="Memory usage breakdown",
             ),
             MetricDefinition(
                 name="database_query_duration_seconds",
@@ -211,7 +239,7 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.HISTOGRAM,
                 labels=["database", "operation", "table"],
                 buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
-                help_text="Database query performance metrics"
+                help_text="Database query performance metrics",
             ),
             MetricDefinition(
                 name="etl_processing_duration_seconds",
@@ -219,14 +247,14 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.HISTOGRAM,
                 labels=["stage", "dataset", "partition"],
                 buckets=[1, 5, 10, 30, 60, 120, 300, 600, 1200, 3600],
-                help_text="ETL pipeline processing times"
+                help_text="ETL pipeline processing times",
             ),
             MetricDefinition(
                 name="etl_records_processed_total",
                 description="Total ETL records processed",
                 metric_type=MetricType.COUNTER,
                 labels=["stage", "dataset", "status"],
-                help_text="Count of records processed through ETL"
+                help_text="Count of records processed through ETL",
             ),
             MetricDefinition(
                 name="cache_hit_ratio",
@@ -234,123 +262,129 @@ class EnterprisePrometheusCollector:
                 metric_type=MetricType.GAUGE,
                 labels=["cache_name", "cache_type"],
                 unit="ratio",
-                help_text="Cache effectiveness ratio"
+                help_text="Cache effectiveness ratio",
             ),
         ]
-        
+
         for metric_def in infrastructure_metrics:
             self._create_metric(metric_def)
-            
+
     def _create_metric(self, metric_def: MetricDefinition):
         """Create a Prometheus metric from definition."""
         if not PROMETHEUS_AVAILABLE:
             return
-            
+
         try:
             with self.lock:
                 if metric_def.name in self.metrics:
                     self.logger.debug(f"Metric {metric_def.name} already exists")
                     return
-                    
+
                 kwargs = {
-                    'name': metric_def.name,
-                    'documentation': metric_def.description,
-                    'labelnames': metric_def.labels,
-                    'registry': self.registry
+                    "name": metric_def.name,
+                    "documentation": metric_def.description,
+                    "labelnames": metric_def.labels,
+                    "registry": self.registry,
                 }
-                
+
                 if metric_def.metric_type == MetricType.COUNTER:
                     metric = Counter(**kwargs)
                 elif metric_def.metric_type == MetricType.GAUGE:
                     metric = Gauge(**kwargs)
                 elif metric_def.metric_type == MetricType.HISTOGRAM:
                     if metric_def.buckets:
-                        kwargs['buckets'] = metric_def.buckets
+                        kwargs["buckets"] = metric_def.buckets
                     metric = Histogram(**kwargs)
                 elif metric_def.metric_type == MetricType.SUMMARY:
                     if metric_def.objectives:
-                        kwargs['objectives'] = metric_def.objectives
+                        kwargs["objectives"] = metric_def.objectives
                     metric = Summary(**kwargs)
                 elif metric_def.metric_type == MetricType.INFO:
                     metric = Info(**kwargs)
                 elif metric_def.metric_type == MetricType.ENUM:
                     # Enum metrics need states parameter
-                    kwargs['states'] = ['active', 'inactive', 'error']
+                    kwargs["states"] = ["active", "inactive", "error"]
                     metric = PrometheusEnum(**kwargs)
                 else:
                     self.logger.error(f"Unsupported metric type: {metric_def.metric_type}")
                     return
-                    
+
                 self.metrics[metric_def.name] = metric
                 self.metric_definitions[metric_def.name] = metric_def
                 self.logger.info(f"Created metric: {metric_def.name}")
-                
+
         except Exception as e:
             self.logger.error(f"Failed to create metric {metric_def.name}: {e}")
-            
-    def increment_counter(self, name: str, value: float = 1, labels: Optional[Dict[str, str]] = None):
+
+    def increment_counter(self, name: str, value: float = 1, labels: dict[str, str] | None = None):
         """Increment a counter metric."""
         if not PROMETHEUS_AVAILABLE or name not in self.metrics:
             return
-            
+
         try:
             metric = self.metrics[name]
-            if hasattr(metric, 'inc'):
+            if hasattr(metric, "inc"):
                 if labels:
                     metric.labels(**labels).inc(value)
                 else:
                     metric.inc(value)
         except Exception as e:
             self.logger.error(f"Failed to increment counter {name}: {e}")
-            
-    def set_gauge(self, name: str, value: float, labels: Optional[Dict[str, str]] = None):
+
+    def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None):
         """Set a gauge metric value."""
         if not PROMETHEUS_AVAILABLE or name not in self.metrics:
             return
-            
+
         try:
             metric = self.metrics[name]
-            if hasattr(metric, 'set'):
+            if hasattr(metric, "set"):
                 if labels:
                     metric.labels(**labels).set(value)
                 else:
                     metric.set(value)
         except Exception as e:
             self.logger.error(f"Failed to set gauge {name}: {e}")
-            
-    def observe_histogram(self, name: str, value: float, labels: Optional[Dict[str, str]] = None):
+
+    def observe_histogram(self, name: str, value: float, labels: dict[str, str] | None = None):
         """Observe a value in histogram metric."""
         if not PROMETHEUS_AVAILABLE or name not in self.metrics:
             return
-            
+
         try:
             metric = self.metrics[name]
-            if hasattr(metric, 'observe'):
+            if hasattr(metric, "observe"):
                 if labels:
                     metric.labels(**labels).observe(value)
                 else:
                     metric.observe(value)
         except Exception as e:
             self.logger.error(f"Failed to observe histogram {name}: {e}")
-            
+
     def record_business_metric(self, business_metric: BusinessMetric):
         """Record a business-specific metric."""
         with self.lock:
             self.business_metrics[business_metric.name] = business_metric
-            
+
         # Update corresponding Prometheus metric if it exists
         if business_metric.name in self.metrics:
             metric_def = self.metric_definitions.get(business_metric.name)
             if metric_def:
                 if metric_def.metric_type == MetricType.COUNTER:
-                    self.increment_counter(business_metric.name, business_metric.value, business_metric.labels)
+                    self.increment_counter(
+                        business_metric.name, business_metric.value, business_metric.labels
+                    )
                 elif metric_def.metric_type == MetricType.GAUGE:
-                    self.set_gauge(business_metric.name, business_metric.value, business_metric.labels)
+                    self.set_gauge(
+                        business_metric.name, business_metric.value, business_metric.labels
+                    )
                 elif metric_def.metric_type == MetricType.HISTOGRAM:
-                    self.observe_histogram(business_metric.name, business_metric.value, business_metric.labels)
-                    
+                    self.observe_histogram(
+                        business_metric.name, business_metric.value, business_metric.labels
+                    )
+
     @contextmanager
-    def time_operation(self, name: str, labels: Optional[Dict[str, str]] = None):
+    def time_operation(self, name: str, labels: dict[str, str] | None = None):
         """Context manager to time operations."""
         start_time = time.time()
         try:
@@ -358,43 +392,49 @@ class EnterprisePrometheusCollector:
         finally:
             duration = time.time() - start_time
             self.observe_histogram(name, duration, labels)
-            
-    def get_metrics_summary(self) -> Dict[str, Any]:
+
+    def get_metrics_summary(self) -> dict[str, Any]:
         """Get summary of all registered metrics."""
         with self.lock:
             return {
-                'total_metrics': len(self.metrics),
-                'business_metrics': len(self.business_metrics),
-                'metric_types': {
-                    metric_type.value: sum(1 for def_ in self.metric_definitions.values() 
-                                         if def_.metric_type == metric_type)
+                "total_metrics": len(self.metrics),
+                "business_metrics": len(self.business_metrics),
+                "metric_types": {
+                    metric_type.value: sum(
+                        1
+                        for def_ in self.metric_definitions.values()
+                        if def_.metric_type == metric_type
+                    )
                     for metric_type in MetricType
                 },
-                'business_domains': {
-                    domain.value: sum(1 for def_ in self.metric_definitions.values() 
-                                    if def_.business_domain == domain)
+                "business_domains": {
+                    domain.value: sum(
+                        1
+                        for def_ in self.metric_definitions.values()
+                        if def_.business_domain == domain
+                    )
                     for domain in BusinessDomain
                 },
-                'last_updated': datetime.utcnow().isoformat()
+                "last_updated": datetime.utcnow().isoformat(),
             }
-            
+
     def export_metrics(self) -> str:
         """Export metrics in Prometheus format."""
         if not PROMETHEUS_AVAILABLE:
             return "# Prometheus not available"
-            
+
         try:
-            return generate_latest(self.registry).decode('utf-8')
+            return generate_latest(self.registry).decode("utf-8")
         except Exception as e:
             self.logger.error(f"Failed to export metrics: {e}")
             return f"# Error exporting metrics: {e}"
-            
-    def start_metrics_server(self, port: int = 8000, addr: str = '0.0.0.0'):
+
+    def start_metrics_server(self, port: int = 8000, addr: str = "0.0.0.0"):
         """Start HTTP server for metrics scraping."""
         if not PROMETHEUS_AVAILABLE:
             self.logger.warning("Cannot start metrics server: Prometheus client not available")
             return False
-            
+
         try:
             start_http_server(port, addr=addr, registry=self.registry)
             self.logger.info(f"Metrics server started on {addr}:{port}")
@@ -406,115 +446,122 @@ class EnterprisePrometheusCollector:
 
 class CustomMetricsCollector:
     """Collector for custom application-specific metrics."""
-    
+
     def __init__(self, prometheus_collector: EnterprisePrometheusCollector):
         self.prometheus = prometheus_collector
         self.logger = get_logger(self.__class__.__name__)
-        
-    def collect_api_metrics(self, method: str, endpoint: str, status_code: int, 
-                           duration: float, service: str = "api"):
+
+    def collect_api_metrics(
+        self, method: str, endpoint: str, status_code: int, duration: float, service: str = "api"
+    ):
         """Collect API-specific metrics."""
         labels = {
-            'method': method,
-            'endpoint': endpoint,
-            'status': str(status_code),
-            'service': service
+            "method": method,
+            "endpoint": endpoint,
+            "status": str(status_code),
+            "service": service,
         }
-        
+
         # Increment request counter
-        self.prometheus.increment_counter('app_requests_total', 1, labels)
-        
+        self.prometheus.increment_counter("app_requests_total", 1, labels)
+
         # Record request duration
-        duration_labels = {k: v for k, v in labels.items() if k != 'status'}
-        self.prometheus.observe_histogram('app_request_duration_seconds', duration, duration_labels)
-        
+        duration_labels = {k: v for k, v in labels.items() if k != "status"}
+        self.prometheus.observe_histogram("app_request_duration_seconds", duration, duration_labels)
+
         # Increment error counter if status indicates error
         if status_code >= 400:
             error_labels = {
-                'error_type': 'http_error',
-                'service': service,
-                'severity': 'high' if status_code >= 500 else 'medium'
+                "error_type": "http_error",
+                "service": service,
+                "severity": "high" if status_code >= 500 else "medium",
             }
-            self.prometheus.increment_counter('app_errors_total', 1, error_labels)
-            
-    def collect_database_metrics(self, database: str, operation: str, 
-                               table: str, duration: float, success: bool = True):
+            self.prometheus.increment_counter("app_errors_total", 1, error_labels)
+
+    def collect_database_metrics(
+        self, database: str, operation: str, table: str, duration: float, success: bool = True
+    ):
         """Collect database operation metrics."""
-        labels = {
-            'database': database,
-            'operation': operation,
-            'table': table
-        }
-        
+        labels = {"database": database, "operation": operation, "table": table}
+
         # Record query duration
-        self.prometheus.observe_histogram('database_query_duration_seconds', duration, labels)
-        
+        self.prometheus.observe_histogram("database_query_duration_seconds", duration, labels)
+
         # Record error if operation failed
         if not success:
             error_labels = {
-                'error_type': 'database_error',
-                'service': 'database',
-                'severity': 'high'
+                "error_type": "database_error",
+                "service": "database",
+                "severity": "high",
             }
-            self.prometheus.increment_counter('app_errors_total', 1, error_labels)
-            
-    def collect_etl_metrics(self, stage: str, dataset: str, partition: str,
-                           duration: float, records_processed: int, success: bool = True):
+            self.prometheus.increment_counter("app_errors_total", 1, error_labels)
+
+    def collect_etl_metrics(
+        self,
+        stage: str,
+        dataset: str,
+        partition: str,
+        duration: float,
+        records_processed: int,
+        success: bool = True,
+    ):
         """Collect ETL pipeline metrics."""
-        duration_labels = {
-            'stage': stage,
-            'dataset': dataset,
-            'partition': partition
-        }
-        
+        duration_labels = {"stage": stage, "dataset": dataset, "partition": partition}
+
         records_labels = {
-            'stage': stage,
-            'dataset': dataset,
-            'status': 'success' if success else 'failed'
+            "stage": stage,
+            "dataset": dataset,
+            "status": "success" if success else "failed",
         }
-        
+
         # Record processing duration
-        self.prometheus.observe_histogram('etl_processing_duration_seconds', duration, duration_labels)
-        
+        self.prometheus.observe_histogram(
+            "etl_processing_duration_seconds", duration, duration_labels
+        )
+
         # Record processed records count
-        self.prometheus.increment_counter('etl_records_processed_total', records_processed, records_labels)
-        
+        self.prometheus.increment_counter(
+            "etl_records_processed_total", records_processed, records_labels
+        )
+
         # Record error if ETL failed
         if not success:
-            error_labels = {
-                'error_type': 'etl_error',
-                'service': 'etl',
-                'severity': 'high'
-            }
-            self.prometheus.increment_counter('app_errors_total', 1, error_labels)
-            
-    def collect_business_sales_metrics(self, revenue: float, currency: str, 
-                                     product_category: str, region: str, 
-                                     channel: str, order_value: float = None):
+            error_labels = {"error_type": "etl_error", "service": "etl", "severity": "high"}
+            self.prometheus.increment_counter("app_errors_total", 1, error_labels)
+
+    def collect_business_sales_metrics(
+        self,
+        revenue: float,
+        currency: str,
+        product_category: str,
+        region: str,
+        channel: str,
+        order_value: float = None,
+    ):
         """Collect business sales metrics."""
         revenue_labels = {
-            'currency': currency,
-            'product_category': product_category,
-            'region': region,
-            'channel': channel
+            "currency": currency,
+            "product_category": product_category,
+            "region": region,
+            "channel": channel,
         }
-        
+
         # Record revenue
-        self.prometheus.increment_counter('business_sales_revenue_total', revenue, revenue_labels)
-        
+        self.prometheus.increment_counter("business_sales_revenue_total", revenue, revenue_labels)
+
         # Record order value distribution if provided
         if order_value is not None:
             order_labels = {
-                'currency': currency,
-                'product_category': product_category,
-                'customer_tier': 'standard'  # Could be determined dynamically
+                "currency": currency,
+                "product_category": product_category,
+                "customer_tier": "standard",  # Could be determined dynamically
             }
-            self.prometheus.observe_histogram('business_order_value', order_value, order_labels)
+            self.prometheus.observe_histogram("business_order_value", order_value, order_labels)
 
 
 # Global collector instance
-_prometheus_collector: Optional[EnterprisePrometheusCollector] = None
-_custom_collector: Optional[CustomMetricsCollector] = None
+_prometheus_collector: EnterprisePrometheusCollector | None = None
+_custom_collector: CustomMetricsCollector | None = None
 
 
 def get_prometheus_collector() -> EnterprisePrometheusCollector:
@@ -539,26 +586,27 @@ def initialize_prometheus_monitoring(port: int = 8000) -> bool:
     try:
         collector = get_prometheus_collector()
         success = collector.start_metrics_server(port)
-        
+
         if success:
             logger.info("Prometheus monitoring initialized successfully")
         else:
             logger.warning("Prometheus monitoring initialization failed")
-            
+
         return success
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize Prometheus monitoring: {e}")
         return False
 
 
 # Decorator for automatic metric collection
-def monitor_performance(metric_name: str, labels: Optional[Dict[str, str]] = None):
+def monitor_performance(metric_name: str, labels: dict[str, str] | None = None):
     """Decorator to automatically monitor function performance."""
+
     def decorator(func: Callable) -> Callable:
         def wrapper(*args, **kwargs):
             collector = get_prometheus_collector()
-            
+
             with collector.time_operation(metric_name, labels):
                 try:
                     result = func(*args, **kwargs)
@@ -566,12 +614,13 @@ def monitor_performance(metric_name: str, labels: Optional[Dict[str, str]] = Non
                 except Exception as e:
                     # Record error metric
                     error_labels = {
-                        'error_type': type(e).__name__.lower(),
-                        'service': 'application',
-                        'severity': 'medium'
+                        "error_type": type(e).__name__.lower(),
+                        "service": "application",
+                        "severity": "medium",
                     }
-                    collector.increment_counter('app_errors_total', 1, error_labels)
+                    collector.increment_counter("app_errors_total", 1, error_labels)
                     raise
-                    
+
         return wrapper
+
     return decorator

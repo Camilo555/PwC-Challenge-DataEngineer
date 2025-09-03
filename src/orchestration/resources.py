@@ -68,6 +68,7 @@ class EnrichmentServiceResource(ConfigurableResource):
             yield service
         finally:
             import asyncio
+
             asyncio.run(service.close_all_clients())
 
 

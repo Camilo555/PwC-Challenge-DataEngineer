@@ -3,6 +3,7 @@ Backup and Recovery Monitoring System
 
 Real-time monitoring, metrics collection, and alerting for backup and recovery operations.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -18,6 +19,7 @@ logger = get_logger(__name__)
 
 class AlertSeverity(str, Enum):
     """Alert severity levels."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -27,6 +29,7 @@ class AlertSeverity(str, Enum):
 
 class MetricType(str, Enum):
     """Types of backup metrics."""
+
     BACKUP_SUCCESS_RATE = "backup_success_rate"
     BACKUP_DURATION = "backup_duration"
     BACKUP_SIZE = "backup_size"
@@ -40,6 +43,7 @@ class MetricType(str, Enum):
 @dataclass
 class BackupMetric:
     """Individual backup metric."""
+
     metric_type: MetricType
     value: float
     unit: str
@@ -50,18 +54,19 @@ class BackupMetric:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'metric_type': self.metric_type.value,
-            'value': self.value,
-            'unit': self.unit,
-            'timestamp': self.timestamp.isoformat(),
-            'tags': self.tags,
-            'metadata': self.metadata
+            "metric_type": self.metric_type.value,
+            "value": self.value,
+            "unit": self.unit,
+            "timestamp": self.timestamp.isoformat(),
+            "tags": self.tags,
+            "metadata": self.metadata,
         }
 
 
 @dataclass
 class BackupAlert:
     """Backup system alert."""
+
     alert_id: str
     severity: AlertSeverity
     title: str
@@ -76,23 +81,23 @@ class BackupAlert:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'alert_id': self.alert_id,
-            'severity': self.severity.value,
-            'title': self.title,
-            'message': self.message,
-            'component': self.component,
-            'timestamp': self.timestamp.isoformat(),
-            'resolved': self.resolved,
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
-            'tags': self.tags,
-            'metadata': self.metadata
+            "alert_id": self.alert_id,
+            "severity": self.severity.value,
+            "title": self.title,
+            "message": self.message,
+            "component": self.component,
+            "timestamp": self.timestamp.isoformat(),
+            "resolved": self.resolved,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "tags": self.tags,
+            "metadata": self.metadata,
         }
 
 
 class BackupMonitor:
     """
     Comprehensive backup and recovery monitoring system.
-    
+
     Features:
     - Real-time metrics collection
     - Threshold-based alerting
@@ -113,11 +118,11 @@ class BackupMonitor:
         self.thresholds = {
             MetricType.BACKUP_SUCCESS_RATE: {"warning": 95.0, "critical": 90.0},
             MetricType.BACKUP_DURATION: {"warning": 3600, "critical": 7200},  # seconds
-            MetricType.RECOVERY_TIME: {"warning": 1800, "critical": 3600},   # seconds
+            MetricType.RECOVERY_TIME: {"warning": 1800, "critical": 3600},  # seconds
             MetricType.STORAGE_UTILIZATION: {"warning": 80.0, "critical": 90.0},  # percentage
             MetricType.VALIDATION_ERRORS: {"warning": 5, "critical": 10},
             MetricType.RTO_COMPLIANCE: {"warning": 95.0, "critical": 90.0},  # percentage
-            MetricType.RPO_COMPLIANCE: {"warning": 95.0, "critical": 90.0}   # percentage
+            MetricType.RPO_COMPLIANCE: {"warning": 95.0, "critical": 90.0},  # percentage
         }
 
         # Update with custom thresholds
@@ -139,8 +144,8 @@ class BackupMonitor:
                 "backup_id": backup_id,
                 "component": component,
                 "backup_type": backup_type,
-                "phase": "started"
-            }
+                "phase": "started",
+            },
         )
 
         logger.debug(f"Recorded backup start: {backup_id}")
@@ -152,7 +157,7 @@ class BackupMonitor:
         backup_type: str,
         duration_seconds: float,
         size_bytes: int,
-        success: bool
+        success: bool,
     ) -> None:
         """Record backup operation completion."""
         # Record duration metric
@@ -164,8 +169,8 @@ class BackupMonitor:
                 "backup_id": backup_id,
                 "component": component,
                 "backup_type": backup_type,
-                "success": str(success).lower()
-            }
+                "success": str(success).lower(),
+            },
         )
 
         # Record size metric
@@ -173,11 +178,7 @@ class BackupMonitor:
             MetricType.BACKUP_SIZE,
             size_bytes,
             "bytes",
-            tags={
-                "backup_id": backup_id,
-                "component": component,
-                "backup_type": backup_type
-            }
+            tags={"backup_id": backup_id, "component": component, "backup_type": backup_type},
         )
 
         # Update success rate
@@ -185,14 +186,13 @@ class BackupMonitor:
 
         # Check thresholds and generate alerts if needed
         await self._check_thresholds_and_alert(
-            MetricType.BACKUP_DURATION,
-            duration_seconds,
-            component,
-            backup_id
+            MetricType.BACKUP_DURATION, duration_seconds, component, backup_id
         )
 
-        logger.info(f"Recorded backup completion: {backup_id} "
-                   f"(duration: {duration_seconds:.1f}s, size: {size_bytes} bytes, success: {success})")
+        logger.info(
+            f"Recorded backup completion: {backup_id} "
+            f"(duration: {duration_seconds:.1f}s, size: {size_bytes} bytes, success: {success})"
+        )
 
     async def record_recovery_operation(
         self,
@@ -200,7 +200,7 @@ class BackupMonitor:
         component: str,
         recovery_type: str,
         duration_seconds: float,
-        success: bool
+        success: bool,
     ) -> None:
         """Record recovery operation metrics."""
         await self._record_metric(
@@ -211,65 +211,50 @@ class BackupMonitor:
                 "recovery_id": recovery_id,
                 "component": component,
                 "recovery_type": recovery_type,
-                "success": str(success).lower()
-            }
+                "success": str(success).lower(),
+            },
         )
 
         # Check RTO compliance
         await self._check_rto_compliance(component, duration_seconds)
 
-        logger.info(f"Recorded recovery operation: {recovery_id} "
-                   f"(duration: {duration_seconds:.1f}s, success: {success})")
+        logger.info(
+            f"Recorded recovery operation: {recovery_id} "
+            f"(duration: {duration_seconds:.1f}s, success: {success})"
+        )
 
     async def record_validation_result(
-        self,
-        backup_id: str,
-        component: str,
-        validation_errors: int,
-        validation_duration: float
+        self, backup_id: str, component: str, validation_errors: int, validation_duration: float
     ) -> None:
         """Record backup validation results."""
         await self._record_metric(
             MetricType.VALIDATION_ERRORS,
             validation_errors,
             "count",
-            tags={
-                "backup_id": backup_id,
-                "component": component
-            }
+            tags={"backup_id": backup_id, "component": component},
         )
 
         # Alert on validation errors
         if validation_errors > 0:
             await self._check_thresholds_and_alert(
-                MetricType.VALIDATION_ERRORS,
-                validation_errors,
-                component,
-                backup_id
+                MetricType.VALIDATION_ERRORS, validation_errors, component, backup_id
             )
 
-        logger.debug(f"Recorded validation result: {backup_id} "
-                    f"({validation_errors} errors, {validation_duration:.1f}s)")
+        logger.debug(
+            f"Recorded validation result: {backup_id} "
+            f"({validation_errors} errors, {validation_duration:.1f}s)"
+        )
 
     async def record_storage_utilization(
-        self,
-        storage_backend: str,
-        utilization_percentage: float,
-        total_bytes: int,
-        used_bytes: int
+        self, storage_backend: str, utilization_percentage: float, total_bytes: int, used_bytes: int
     ) -> None:
         """Record storage utilization metrics."""
         await self._record_metric(
             MetricType.STORAGE_UTILIZATION,
             utilization_percentage,
             "percentage",
-            tags={
-                "storage_backend": storage_backend
-            },
-            metadata={
-                "total_bytes": total_bytes,
-                "used_bytes": used_bytes
-            }
+            tags={"storage_backend": storage_backend},
+            metadata={"total_bytes": total_bytes, "used_bytes": used_bytes},
         )
 
         # Check storage utilization thresholds
@@ -277,11 +262,12 @@ class BackupMonitor:
             MetricType.STORAGE_UTILIZATION,
             utilization_percentage,
             f"storage_{storage_backend}",
-            storage_backend
+            storage_backend,
         )
 
-        logger.debug(f"Recorded storage utilization: {storage_backend} "
-                    f"({utilization_percentage:.1f}%)")
+        logger.debug(
+            f"Recorded storage utilization: {storage_backend} ({utilization_percentage:.1f}%)"
+        )
 
     async def generate_alert(
         self,
@@ -290,7 +276,7 @@ class BackupMonitor:
         message: str,
         component: str,
         tags: dict[str, str] | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> BackupAlert:
         """Generate a new alert."""
         alert_id = f"alert_{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}"
@@ -303,7 +289,7 @@ class BackupMonitor:
             component=component,
             timestamp=datetime.utcnow(),
             tags=tags or {},
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Store alert
@@ -328,10 +314,7 @@ class BackupMonitor:
         return False
 
     async def get_metrics_summary(
-        self,
-        metric_type: MetricType | None = None,
-        component: str | None = None,
-        hours: int = 24
+        self, metric_type: MetricType | None = None, component: str | None = None, hours: int = 24
     ) -> dict[str, Any]:
         """Get metrics summary for specified period."""
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
@@ -364,7 +347,7 @@ class BackupMonitor:
             "latest": filtered_metrics[-1].value if filtered_metrics else 0,
             "period_hours": hours,
             "metric_type": metric_type.value if metric_type else "all",
-            "component": component or "all"
+            "component": component or "all",
         }
 
         return summary
@@ -381,26 +364,23 @@ class BackupMonitor:
             "periods": {
                 "24_hours": await self._calculate_sla_compliance(last_24h, now),
                 "7_days": await self._calculate_sla_compliance(last_7d, now),
-                "30_days": await self._calculate_sla_compliance(last_30d, now)
+                "30_days": await self._calculate_sla_compliance(last_30d, now),
             },
             "current_alerts": len([a for a in self.alerts.values() if not a.resolved]),
-            "total_alerts": len(self.alerts)
+            "total_alerts": len(self.alerts),
         }
 
         return report
 
-    async def get_active_alerts(self, severity: AlertSeverity | None = None) -> list[dict[str, Any]]:
+    async def get_active_alerts(
+        self, severity: AlertSeverity | None = None
+    ) -> list[dict[str, Any]]:
         """Get active alerts, optionally filtered by severity."""
-        active_alerts = [
-            alert.to_dict()
-            for alert in self.alerts.values()
-            if not alert.resolved
-        ]
+        active_alerts = [alert.to_dict() for alert in self.alerts.values() if not alert.resolved]
 
         if severity:
             active_alerts = [
-                alert for alert in active_alerts
-                if alert["severity"] == severity.value
+                alert for alert in active_alerts if alert["severity"] == severity.value
             ]
 
         # Sort by timestamp (newest first)
@@ -424,7 +404,7 @@ class BackupMonitor:
             "initial_count": initial_count,
             "final_count": final_count,
             "cleaned_count": cleaned_count,
-            "retention_days": self.metrics_retention_days
+            "retention_days": self.metrics_retention_days,
         }
 
     def add_alert_handler(self, handler: Callable) -> None:
@@ -438,7 +418,7 @@ class BackupMonitor:
         value: float,
         unit: str,
         tags: dict[str, str] | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a metric."""
         metric = BackupMetric(
@@ -447,7 +427,7 @@ class BackupMonitor:
             unit=unit,
             timestamp=datetime.utcnow(),
             tags=tags or {},
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         self.metrics.append(metric)
@@ -458,41 +438,38 @@ class BackupMonitor:
         recent_cutoff = datetime.utcnow() - timedelta(hours=24)
 
         recent_backups = [
-            m for m in self.metrics
-            if (m.metric_type == MetricType.BACKUP_DURATION and
-                m.timestamp >= recent_cutoff and
-                m.tags.get("component") == component)
+            m
+            for m in self.metrics
+            if (
+                m.metric_type == MetricType.BACKUP_DURATION
+                and m.timestamp >= recent_cutoff
+                and m.tags.get("component") == component
+            )
         ]
 
         if recent_backups:
-            successful_backups = sum(
-                1 for m in recent_backups
-                if m.tags.get("success") == "true"
-            )
+            successful_backups = sum(1 for m in recent_backups if m.tags.get("success") == "true")
             success_rate = (successful_backups / len(recent_backups)) * 100
 
             await self._record_metric(
                 MetricType.BACKUP_SUCCESS_RATE,
                 success_rate,
                 "percentage",
-                tags={"component": component}
+                tags={"component": component},
             )
 
             # Check success rate thresholds
             await self._check_thresholds_and_alert(
-                MetricType.BACKUP_SUCCESS_RATE,
-                success_rate,
-                component,
-                f"success_rate_{component}"
+                MetricType.BACKUP_SUCCESS_RATE, success_rate, component, f"success_rate_{component}"
             )
 
     async def _check_rto_compliance(self, component: str, recovery_duration: float) -> None:
         """Check RTO compliance for recovery operation."""
         # Default RTO targets (in seconds)
         rto_targets = {
-            "database": 3600,      # 1 hour
+            "database": 3600,  # 1 hour
             "configuration": 1800,  # 30 minutes
-            "data_lake": 7200      # 2 hours
+            "data_lake": 7200,  # 2 hours
         }
 
         target_rto = rto_targets.get(component, 3600)  # Default 1 hour
@@ -503,7 +480,7 @@ class BackupMonitor:
             compliance,
             "percentage",
             tags={"component": component},
-            metadata={"target_rto": target_rto, "actual_duration": recovery_duration}
+            metadata={"target_rto": target_rto, "actual_duration": recovery_duration},
         )
 
         if compliance < 100.0:
@@ -512,15 +489,11 @@ class BackupMonitor:
                 f"RTO Violation - {component}",
                 f"Recovery took {recovery_duration:.0f}s, exceeding RTO of {target_rto:.0f}s",
                 component,
-                tags={"alert_type": "rto_violation"}
+                tags={"alert_type": "rto_violation"},
             )
 
     async def _check_thresholds_and_alert(
-        self,
-        metric_type: MetricType,
-        value: float,
-        component: str,
-        context_id: str
+        self, metric_type: MetricType, value: float, component: str, context_id: str
     ) -> None:
         """Check metric against thresholds and generate alerts."""
         if metric_type not in self.thresholds:
@@ -530,7 +503,11 @@ class BackupMonitor:
         severity = None
 
         # Determine severity based on thresholds
-        if metric_type in [MetricType.BACKUP_SUCCESS_RATE, MetricType.RTO_COMPLIANCE, MetricType.RPO_COMPLIANCE]:
+        if metric_type in [
+            MetricType.BACKUP_SUCCESS_RATE,
+            MetricType.RTO_COMPLIANCE,
+            MetricType.RPO_COMPLIANCE,
+        ]:
             # Higher is better - alert if below threshold
             if value <= thresholds.get("critical", 0):
                 severity = AlertSeverity.CRITICAL
@@ -538,9 +515,9 @@ class BackupMonitor:
                 severity = AlertSeverity.HIGH
         else:
             # Lower is better - alert if above threshold
-            if value >= thresholds.get("critical", float('inf')):
+            if value >= thresholds.get("critical", float("inf")):
                 severity = AlertSeverity.CRITICAL
-            elif value >= thresholds.get("warning", float('inf')):
+            elif value >= thresholds.get("warning", float("inf")):
                 severity = AlertSeverity.HIGH
 
         if severity:
@@ -555,9 +532,9 @@ class BackupMonitor:
                 tags={
                     "metric_type": metric_type.value,
                     "context_id": context_id,
-                    "threshold_type": "automatic"
+                    "threshold_type": "automatic",
                 },
-                metadata={"value": value, "thresholds": thresholds}
+                metadata={"value": value, "thresholds": thresholds},
             )
 
     async def _send_alert(self, alert: BackupAlert) -> None:
@@ -568,12 +545,11 @@ class BackupMonitor:
             except Exception as e:
                 logger.error(f"Alert handler failed: {e}")
 
-    async def _calculate_sla_compliance(self, start_time: datetime, end_time: datetime) -> dict[str, Any]:
+    async def _calculate_sla_compliance(
+        self, start_time: datetime, end_time: datetime
+    ) -> dict[str, Any]:
         """Calculate SLA compliance for a time period."""
-        period_metrics = [
-            m for m in self.metrics
-            if start_time <= m.timestamp <= end_time
-        ]
+        period_metrics = [m for m in self.metrics if start_time <= m.timestamp <= end_time]
 
         compliance = {
             "backup_success_rate": 100.0,
@@ -582,45 +558,35 @@ class BackupMonitor:
             "total_backups": 0,
             "failed_backups": 0,
             "total_recoveries": 0,
-            "rto_violations": 0
+            "rto_violations": 0,
         }
 
         # Calculate backup success rate
-        backup_metrics = [
-            m for m in period_metrics
-            if m.metric_type == MetricType.BACKUP_DURATION
-        ]
+        backup_metrics = [m for m in period_metrics if m.metric_type == MetricType.BACKUP_DURATION]
 
         if backup_metrics:
             compliance["total_backups"] = len(backup_metrics)
             compliance["failed_backups"] = sum(
-                1 for m in backup_metrics
-                if m.tags.get("success") == "false"
+                1 for m in backup_metrics if m.tags.get("success") == "false"
             )
 
             if compliance["total_backups"] > 0:
                 compliance["backup_success_rate"] = (
-                    (compliance["total_backups"] - compliance["failed_backups"]) /
-                    compliance["total_backups"]
+                    (compliance["total_backups"] - compliance["failed_backups"])
+                    / compliance["total_backups"]
                 ) * 100
 
         # Calculate RTO compliance
-        rto_metrics = [
-            m for m in period_metrics
-            if m.metric_type == MetricType.RTO_COMPLIANCE
-        ]
+        rto_metrics = [m for m in period_metrics if m.metric_type == MetricType.RTO_COMPLIANCE]
 
         if rto_metrics:
             compliance["total_recoveries"] = len(rto_metrics)
-            compliance["rto_violations"] = sum(
-                1 for m in rto_metrics
-                if m.value < 100.0
-            )
+            compliance["rto_violations"] = sum(1 for m in rto_metrics if m.value < 100.0)
 
             if compliance["total_recoveries"] > 0:
                 compliance["rto_compliance"] = (
-                    (compliance["total_recoveries"] - compliance["rto_violations"]) /
-                    compliance["total_recoveries"]
+                    (compliance["total_recoveries"] - compliance["rto_violations"])
+                    / compliance["total_recoveries"]
                 ) * 100
 
         return compliance

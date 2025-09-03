@@ -4,6 +4,7 @@ Enterprise Backup Manager
 Comprehensive backup system supporting multiple backup types, strategies,
 and storage backends with automated scheduling and validation.
 """
+
 from __future__ import annotations
 
 import gzip
@@ -24,6 +25,7 @@ logger = get_logger(__name__)
 
 class BackupType(str, Enum):
     """Types of backups supported by the system."""
+
     FULL = "full"
     INCREMENTAL = "incremental"
     DIFFERENTIAL = "differential"
@@ -32,14 +34,16 @@ class BackupType(str, Enum):
 
 class BackupStrategy(str, Enum):
     """Backup strategies for different scenarios."""
-    AGGRESSIVE = "aggressive"    # Frequent backups, high redundancy
-    BALANCED = "balanced"        # Standard backup schedule
-    MINIMAL = "minimal"          # Basic backup coverage
-    CUSTOM = "custom"           # User-defined strategy
+
+    AGGRESSIVE = "aggressive"  # Frequent backups, high redundancy
+    BALANCED = "balanced"  # Standard backup schedule
+    MINIMAL = "minimal"  # Basic backup coverage
+    CUSTOM = "custom"  # User-defined strategy
 
 
 class BackupStatus(str, Enum):
     """Status of backup operations."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -51,6 +55,7 @@ class BackupStatus(str, Enum):
 @dataclass
 class BackupMetadata:
     """Metadata for backup operations."""
+
     backup_id: str
     backup_type: BackupType
     timestamp: datetime
@@ -67,25 +72,25 @@ class BackupMetadata:
     def to_dict(self) -> dict[str, Any]:
         """Convert metadata to dictionary for serialization."""
         return {
-            'backup_id': self.backup_id,
-            'backup_type': self.backup_type.value,
-            'timestamp': self.timestamp.isoformat(),
-            'source_path': str(self.source_path),
-            'destination_path': str(self.destination_path),
-            'size_bytes': self.size_bytes,
-            'checksum': self.checksum,
-            'compression_ratio': self.compression_ratio,
-            'duration_seconds': self.duration_seconds,
-            'status': self.status.value,
-            'error_message': self.error_message,
-            'tags': self.tags
+            "backup_id": self.backup_id,
+            "backup_type": self.backup_type.value,
+            "timestamp": self.timestamp.isoformat(),
+            "source_path": str(self.source_path),
+            "destination_path": str(self.destination_path),
+            "size_bytes": self.size_bytes,
+            "checksum": self.checksum,
+            "compression_ratio": self.compression_ratio,
+            "duration_seconds": self.duration_seconds,
+            "status": self.status.value,
+            "error_message": self.error_message,
+            "tags": self.tags,
         }
 
 
 class BackupManager:
     """
     Enterprise backup manager with comprehensive backup and recovery capabilities.
-    
+
     Features:
     - Multiple backup types (full, incremental, differential, snapshot)
     - Compression and encryption support
@@ -109,7 +114,7 @@ class BackupManager:
             self.backup_root / "data_lake",
             self.backup_root / "configuration",
             self.backup_root / "logs",
-            self.backup_root / "metadata"
+            self.backup_root / "metadata",
         ]
 
         for directory in directories:
@@ -121,16 +126,16 @@ class BackupManager:
         self,
         backup_type: BackupType = BackupType.FULL,
         compress: bool = True,
-        validate: bool = True
+        validate: bool = True,
     ) -> BackupMetadata:
         """
         Backup database with comprehensive options.
-        
+
         Args:
             backup_type: Type of backup to perform
             compress: Whether to compress backup files
             validate: Whether to validate backup integrity
-            
+
         Returns:
             Backup metadata with operation results
         """
@@ -145,7 +150,7 @@ class BackupManager:
             timestamp=datetime.utcnow(),
             source_path=Path(self.config.get_database_url().replace("sqlite:///", "")),
             destination_path=self.backup_root / "database" / f"{backup_id}.db",
-            tags={"component": "database", "environment": self.config.environment.value}
+            tags={"component": "database", "environment": self.config.environment.value},
         )
 
         start_time = datetime.utcnow()
@@ -194,11 +199,13 @@ class BackupManager:
 
         # Copy database file
         if compress:
-            destination = metadata.destination_path.with_suffix(metadata.destination_path.suffix + ".gz")
+            destination = metadata.destination_path.with_suffix(
+                metadata.destination_path.suffix + ".gz"
+            )
             metadata.destination_path = destination
 
-            with open(metadata.source_path, 'rb') as f_in:
-                with gzip.open(destination, 'wb') as f_out:
+            with open(metadata.source_path, "rb") as f_in:
+                with gzip.open(destination, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
         else:
             shutil.copy2(metadata.source_path, metadata.destination_path)
@@ -225,12 +232,15 @@ class BackupManager:
         if metadata.source_path.stat().st_mtime <= last_backup.timestamp.timestamp():
             # No changes, create a reference backup
             metadata.destination_path = metadata.destination_path.with_suffix(".ref")
-            with open(metadata.destination_path, 'w') as f:
-                json.dump({
-                    "type": "reference",
-                    "references": last_backup.backup_id,
-                    "timestamp": datetime.utcnow().isoformat()
-                }, f)
+            with open(metadata.destination_path, "w") as f:
+                json.dump(
+                    {
+                        "type": "reference",
+                        "references": last_backup.backup_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                    f,
+                )
             metadata.size_bytes = metadata.destination_path.stat().st_size
         else:
             # Changes detected, perform full backup
@@ -240,16 +250,16 @@ class BackupManager:
         self,
         backup_type: BackupType = BackupType.FULL,
         layers: list[str] | None = None,
-        compress: bool = True
+        compress: bool = True,
     ) -> list[BackupMetadata]:
         """
         Backup medallion architecture data lake layers.
-        
+
         Args:
             backup_type: Type of backup to perform
             layers: Specific layers to backup (bronze, silver, gold)
             compress: Whether to compress backup files
-            
+
         Returns:
             List of backup metadata for each layer
         """
@@ -274,7 +284,7 @@ class BackupManager:
                     timestamp=datetime.utcnow(),
                     source_path=layer_path,
                     destination_path=self.backup_root / "data_lake" / f"{backup_id}",
-                    tags={"component": "data_lake", "layer": layer}
+                    tags={"component": "data_lake", "layer": layer},
                 )
 
                 start_time = datetime.utcnow()
@@ -307,10 +317,10 @@ class BackupManager:
     async def backup_configuration(self, compress: bool = True) -> BackupMetadata:
         """
         Backup system configuration and settings.
-        
+
         Args:
             compress: Whether to compress configuration backup
-            
+
         Returns:
             Backup metadata
         """
@@ -322,7 +332,7 @@ class BackupManager:
             timestamp=datetime.utcnow(),
             source_path=self.config.project_root,
             destination_path=self.backup_root / "configuration" / f"{backup_id}",
-            tags={"component": "configuration"}
+            tags={"component": "configuration"},
         )
 
         start_time = datetime.utcnow()
@@ -336,7 +346,7 @@ class BackupManager:
                 "docker-compose.yml",
                 "docker-compose.production.yml",
                 "src/core/config/",
-                ".env.example"
+                ".env.example",
             ]
 
             # Create configuration backup directory
@@ -361,10 +371,10 @@ class BackupManager:
                 "processing_engine": self.config.processing_engine.value,
                 "orchestration_engine": self.config.orchestration_engine.value,
                 "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
-                "platform": __import__('platform').system(),
+                "platform": __import__("platform").system(),
             }
 
-            with open(config_backup_dir / "system_snapshot.json", 'w') as f:
+            with open(config_backup_dir / "system_snapshot.json", "w") as f:
                 json.dump(system_config, f, indent=2)
 
             # Compress if requested
@@ -392,17 +402,15 @@ class BackupManager:
         return metadata
 
     async def perform_full_system_backup(
-        self,
-        compress: bool = True,
-        validate: bool = True
+        self, compress: bool = True, validate: bool = True
     ) -> dict[str, Any]:
         """
         Perform comprehensive full system backup.
-        
+
         Args:
             compress: Whether to compress backup files
             validate: Whether to validate backup integrity
-            
+
         Returns:
             Dictionary with all backup results and summary
         """
@@ -420,17 +428,15 @@ class BackupManager:
                 "successful_backups": 0,
                 "failed_backups": 0,
                 "total_size_bytes": 0,
-                "total_duration_seconds": 0.0
-            }
+                "total_duration_seconds": 0.0,
+            },
         }
 
         try:
             # Backup database
             try:
                 db_backup = await self.backup_database(
-                    backup_type=BackupType.FULL,
-                    compress=compress,
-                    validate=validate
+                    backup_type=BackupType.FULL, compress=compress, validate=validate
                 )
                 backup_results["database"] = db_backup.to_dict()
                 backup_results["summary"]["successful_backups"] += 1
@@ -443,12 +449,13 @@ class BackupManager:
             # Backup data lake
             try:
                 datalake_backups = await self.backup_data_lake(
-                    backup_type=BackupType.FULL,
-                    compress=compress
+                    backup_type=BackupType.FULL, compress=compress
                 )
                 backup_results["data_lake"] = [b.to_dict() for b in datalake_backups]
                 backup_results["summary"]["successful_backups"] += len(datalake_backups)
-                backup_results["summary"]["total_size_bytes"] += sum(b.size_bytes for b in datalake_backups)
+                backup_results["summary"]["total_size_bytes"] += sum(
+                    b.size_bytes for b in datalake_backups
+                )
             except Exception as e:
                 logger.error(f"Data lake backup failed: {e}")
                 backup_results["data_lake"] = [{"error": str(e)}]
@@ -467,21 +474,29 @@ class BackupManager:
 
             # Calculate totals
             end_time = datetime.utcnow()
-            backup_results["summary"]["total_duration_seconds"] = (end_time - start_time).total_seconds()
+            backup_results["summary"]["total_duration_seconds"] = (
+                end_time - start_time
+            ).total_seconds()
             backup_results["summary"]["total_backups"] = (
-                backup_results["summary"]["successful_backups"] +
-                backup_results["summary"]["failed_backups"]
+                backup_results["summary"]["successful_backups"]
+                + backup_results["summary"]["failed_backups"]
             )
 
             # Save full system backup metadata
-            with open(self.backup_root / "metadata" / f"{backup_results['backup_id']}.json", 'w') as f:
+            with open(
+                self.backup_root / "metadata" / f"{backup_results['backup_id']}.json", "w"
+            ) as f:
                 json.dump(backup_results, f, indent=2)
 
-            success_rate = (backup_results["summary"]["successful_backups"] /
-                          backup_results["summary"]["total_backups"]) * 100
+            success_rate = (
+                backup_results["summary"]["successful_backups"]
+                / backup_results["summary"]["total_backups"]
+            ) * 100
 
-            logger.info(f"Full system backup completed: {backup_results['backup_id']} "
-                       f"({success_rate:.1f}% success rate)")
+            logger.info(
+                f"Full system backup completed: {backup_results['backup_id']} "
+                f"({success_rate:.1f}% success rate)"
+            )
 
         except Exception as e:
             logger.error(f"Full system backup failed: {e}")
@@ -489,14 +504,16 @@ class BackupManager:
 
         return backup_results
 
-    def get_backup_history(self, component: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def get_backup_history(
+        self, component: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
         """
         Get backup history with optional filtering.
-        
+
         Args:
             component: Filter by component (database, data_lake, configuration)
             limit: Maximum number of backups to return
-            
+
         Returns:
             List of backup metadata dictionaries
         """
@@ -513,18 +530,27 @@ class BackupManager:
                     # If it's a full system backup, extract individual components
                     if "summary" in backup_data:
                         if component is None or component == "database":
-                            if backup_data.get("database") and "error" not in backup_data["database"]:
+                            if (
+                                backup_data.get("database")
+                                and "error" not in backup_data["database"]
+                            ):
                                 backups.append(backup_data["database"])
                         if component is None or component == "data_lake":
                             for dl_backup in backup_data.get("data_lake", []):
                                 if "error" not in dl_backup:
                                     backups.append(dl_backup)
                         if component is None or component == "configuration":
-                            if backup_data.get("configuration") and "error" not in backup_data["configuration"]:
+                            if (
+                                backup_data.get("configuration")
+                                and "error" not in backup_data["configuration"]
+                            ):
                                 backups.append(backup_data["configuration"])
                     else:
                         # Individual backup
-                        if component is None or backup_data.get("tags", {}).get("component") == component:
+                        if (
+                            component is None
+                            or backup_data.get("tags", {}).get("component") == component
+                        ):
                             backups.append(backup_data)
 
                 except Exception as e:
@@ -553,7 +579,7 @@ class BackupManager:
             # For compressed files, try to read the header
             if metadata.destination_path.suffix == ".gz":
                 try:
-                    with gzip.open(metadata.destination_path, 'rb') as f:
+                    with gzip.open(metadata.destination_path, "rb") as f:
                         f.read(1024)  # Read first 1KB to verify it's readable
                 except Exception as e:
                     raise ValueError(f"Compressed backup file is corrupted: {e}")
@@ -569,7 +595,10 @@ class BackupManager:
         history = self.get_backup_history(component=component, limit=10)
 
         for backup_data in history:
-            if backup_data.get("status") in [BackupStatus.COMPLETED.value, BackupStatus.VALIDATED.value]:
+            if backup_data.get("status") in [
+                BackupStatus.COMPLETED.value,
+                BackupStatus.VALIDATED.value,
+            ]:
                 # Convert back to BackupMetadata for consistency
                 try:
                     return BackupMetadata(
@@ -583,7 +612,7 @@ class BackupManager:
                         compression_ratio=backup_data.get("compression_ratio", 1.0),
                         duration_seconds=backup_data.get("duration_seconds", 0.0),
                         status=BackupStatus(backup_data["status"]),
-                        tags=backup_data.get("tags", {})
+                        tags=backup_data.get("tags", {}),
                     )
                 except Exception as e:
                     logger.warning(f"Could not parse backup metadata: {e}")
@@ -595,7 +624,7 @@ class BackupManager:
         """Save backup metadata to file."""
         metadata_file = self.backup_root / "metadata" / f"{metadata.backup_id}.json"
 
-        with open(metadata_file, 'w') as f:
+        with open(metadata_file, "w") as f:
             json.dump(metadata.to_dict(), f, indent=2)
 
     async def _calculate_checksum(self, file_path: Path) -> str:
@@ -621,7 +650,7 @@ class BackupManager:
             return path.stat().st_size
 
         total_size = 0
-        for dirpath, dirnames, filenames in path.walk():
+        for dirpath, _dirnames, filenames in path.walk():
             for filename in filenames:
                 file_path = dirpath / filename
                 try:

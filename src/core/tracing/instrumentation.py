@@ -2,6 +2,7 @@
 Automatic Instrumentation for OpenTelemetry
 Provides automatic instrumentation for common libraries and frameworks.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -11,8 +12,9 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 try:
     from opentelemetry import trace
@@ -35,15 +37,24 @@ try:
     from opentelemetry.instrumentation.urllib import URLLibInstrumentor
     from opentelemetry.propagate import extract, inject
     from opentelemetry.trace import Status, StatusCode, get_current_span
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
     AutoInstrumentor = None
-    get_current_span = lambda: None
+
+    def get_current_span():
+        return None
+
     Status = None
     StatusCode = None
-    extract = lambda *args: {}
-    inject = lambda *args: None
+
+    def extract(*args):
+        return {}
+
+    def inject(*args):
+        return None
+
 
 from core.logging import get_logger
 
@@ -60,72 +71,85 @@ class InstrumentationManager:
     def _load_config(self) -> dict[str, Any]:
         """Load instrumentation configuration from environment."""
         return {
-            'fastapi': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_FASTAPI', 'true').lower() in ('true', '1', 'yes'),
-                'server_request_hook': None,
-                'client_request_hook': None,
-                'excluded_urls': os.getenv('OTEL_FASTAPI_EXCLUDED_URLS', '').split(',') if os.getenv('OTEL_FASTAPI_EXCLUDED_URLS') else []
+            "fastapi": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_FASTAPI", "true").lower()
+                in ("true", "1", "yes"),
+                "server_request_hook": None,
+                "client_request_hook": None,
+                "excluded_urls": os.getenv("OTEL_FASTAPI_EXCLUDED_URLS", "").split(",")
+                if os.getenv("OTEL_FASTAPI_EXCLUDED_URLS")
+                else [],
             },
-            'sqlalchemy': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_SQLALCHEMY', 'true').lower() in ('true', '1', 'yes'),
-                'enable_commenter': True,
-                'commenter_options': {},
+            "sqlalchemy": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_SQLALCHEMY", "true").lower()
+                in ("true", "1", "yes"),
+                "enable_commenter": True,
+                "commenter_options": {},
             },
-            'requests': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_REQUESTS', 'true').lower() in ('true', '1', 'yes'),
-                'excluded_urls': os.getenv('OTEL_REQUESTS_EXCLUDED_URLS', '').split(',') if os.getenv('OTEL_REQUESTS_EXCLUDED_URLS') else []
+            "requests": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_REQUESTS", "true").lower()
+                in ("true", "1", "yes"),
+                "excluded_urls": os.getenv("OTEL_REQUESTS_EXCLUDED_URLS", "").split(",")
+                if os.getenv("OTEL_REQUESTS_EXCLUDED_URLS")
+                else [],
             },
-            'redis': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_REDIS', 'true').lower() in ('true', '1', 'yes'),
+            "redis": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_REDIS", "true").lower()
+                in ("true", "1", "yes"),
             },
-            'psycopg2': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_PSYCOPG2', 'true').lower() in ('true', '1', 'yes'),
+            "psycopg2": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_PSYCOPG2", "true").lower()
+                in ("true", "1", "yes"),
             },
-            'sqlite3': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_SQLITE3', 'true').lower() in ('true', '1', 'yes'),
+            "sqlite3": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_SQLITE3", "true").lower()
+                in ("true", "1", "yes"),
             },
-            'httpx': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_HTTPX', 'true').lower() in ('true', '1', 'yes'),
+            "httpx": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_HTTPX", "true").lower()
+                in ("true", "1", "yes"),
             },
-            'urllib': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_URLLIB', 'true').lower() in ('true', '1', 'yes'),
+            "urllib": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_URLLIB", "true").lower()
+                in ("true", "1", "yes"),
             },
-            'logging': {
-                'enabled': os.getenv('OTEL_INSTRUMENT_LOGGING', 'true').lower() in ('true', '1', 'yes'),
-                'set_logging_format': True,
-                'log_level': os.getenv('OTEL_LOGGING_LEVEL', 'INFO').upper()
-            }
+            "logging": {
+                "enabled": os.getenv("OTEL_INSTRUMENT_LOGGING", "true").lower()
+                in ("true", "1", "yes"),
+                "set_logging_format": True,
+                "log_level": os.getenv("OTEL_LOGGING_LEVEL", "INFO").upper(),
+            },
         }
 
     def instrument_fastapi(self, app=None) -> bool:
         """Instrument FastAPI application."""
-        if not OTEL_AVAILABLE or not self.instrumentation_config['fastapi']['enabled']:
+        if not OTEL_AVAILABLE or not self.instrumentation_config["fastapi"]["enabled"]:
             return False
 
-        if 'fastapi' in self.instrumented_libraries:
+        if "fastapi" in self.instrumented_libraries:
             logger.debug("FastAPI already instrumented")
             return True
 
         try:
-            config = self.instrumentation_config['fastapi']
+            config = self.instrumentation_config["fastapi"]
 
             if app:
                 # Instrument specific app instance
                 FastAPIInstrumentor.instrument_app(
                     app,
-                    server_request_hook=config.get('server_request_hook'),
-                    client_request_hook=config.get('client_request_hook'),
-                    excluded_urls=config.get('excluded_urls')
+                    server_request_hook=config.get("server_request_hook"),
+                    client_request_hook=config.get("client_request_hook"),
+                    excluded_urls=config.get("excluded_urls"),
                 )
             else:
                 # Instrument all FastAPI apps
                 FastAPIInstrumentor().instrument(
-                    server_request_hook=config.get('server_request_hook'),
-                    client_request_hook=config.get('client_request_hook'),
-                    excluded_urls=config.get('excluded_urls')
+                    server_request_hook=config.get("server_request_hook"),
+                    client_request_hook=config.get("client_request_hook"),
+                    excluded_urls=config.get("excluded_urls"),
                 )
 
-            self.instrumented_libraries.add('fastapi')
+            self.instrumented_libraries.add("fastapi")
             logger.info("FastAPI instrumentation enabled")
             return True
 
@@ -135,31 +159,31 @@ class InstrumentationManager:
 
     def instrument_sqlalchemy(self, engine=None) -> bool:
         """Instrument SQLAlchemy database operations."""
-        if not OTEL_AVAILABLE or not self.instrumentation_config['sqlalchemy']['enabled']:
+        if not OTEL_AVAILABLE or not self.instrumentation_config["sqlalchemy"]["enabled"]:
             return False
 
-        if 'sqlalchemy' in self.instrumented_libraries:
+        if "sqlalchemy" in self.instrumented_libraries:
             logger.debug("SQLAlchemy already instrumented")
             return True
 
         try:
-            config = self.instrumentation_config['sqlalchemy']
+            config = self.instrumentation_config["sqlalchemy"]
 
             if engine:
                 # Instrument specific engine
                 SQLAlchemyInstrumentor.instrument(
                     engine=engine,
-                    enable_commenter=config.get('enable_commenter', True),
-                    commenter_options=config.get('commenter_options', {})
+                    enable_commenter=config.get("enable_commenter", True),
+                    commenter_options=config.get("commenter_options", {}),
                 )
             else:
                 # Instrument all SQLAlchemy engines
                 SQLAlchemyInstrumentor().instrument(
-                    enable_commenter=config.get('enable_commenter', True),
-                    commenter_options=config.get('commenter_options', {})
+                    enable_commenter=config.get("enable_commenter", True),
+                    commenter_options=config.get("commenter_options", {}),
                 )
 
-            self.instrumented_libraries.add('sqlalchemy')
+            self.instrumented_libraries.add("sqlalchemy")
             logger.info("SQLAlchemy instrumentation enabled")
             return True
 
@@ -169,21 +193,19 @@ class InstrumentationManager:
 
     def instrument_requests(self) -> bool:
         """Instrument requests library."""
-        if not OTEL_AVAILABLE or not self.instrumentation_config['requests']['enabled']:
+        if not OTEL_AVAILABLE or not self.instrumentation_config["requests"]["enabled"]:
             return False
 
-        if 'requests' in self.instrumented_libraries:
+        if "requests" in self.instrumented_libraries:
             logger.debug("Requests already instrumented")
             return True
 
         try:
-            config = self.instrumentation_config['requests']
+            config = self.instrumentation_config["requests"]
 
-            RequestsInstrumentor().instrument(
-                excluded_urls=config.get('excluded_urls')
-            )
+            RequestsInstrumentor().instrument(excluded_urls=config.get("excluded_urls"))
 
-            self.instrumented_libraries.add('requests')
+            self.instrumented_libraries.add("requests")
             logger.info("Requests library instrumentation enabled")
             return True
 
@@ -193,17 +215,17 @@ class InstrumentationManager:
 
     def instrument_redis(self) -> bool:
         """Instrument Redis operations."""
-        if not OTEL_AVAILABLE or not self.instrumentation_config['redis']['enabled']:
+        if not OTEL_AVAILABLE or not self.instrumentation_config["redis"]["enabled"]:
             return False
 
-        if 'redis' in self.instrumented_libraries:
+        if "redis" in self.instrumented_libraries:
             logger.debug("Redis already instrumented")
             return True
 
         try:
             RedisInstrumentor().instrument()
 
-            self.instrumented_libraries.add('redis')
+            self.instrumented_libraries.add("redis")
             logger.info("Redis instrumentation enabled")
             return True
 
@@ -216,22 +238,22 @@ class InstrumentationManager:
         success = True
 
         # PostgreSQL (psycopg2)
-        if OTEL_AVAILABLE and self.instrumentation_config['psycopg2']['enabled']:
-            if 'psycopg2' not in self.instrumented_libraries:
+        if OTEL_AVAILABLE and self.instrumentation_config["psycopg2"]["enabled"]:
+            if "psycopg2" not in self.instrumented_libraries:
                 try:
                     Psycopg2Instrumentor().instrument()
-                    self.instrumented_libraries.add('psycopg2')
+                    self.instrumented_libraries.add("psycopg2")
                     logger.info("psycopg2 instrumentation enabled")
                 except Exception as e:
                     logger.error(f"Failed to instrument psycopg2: {e}")
                     success = False
 
         # SQLite3
-        if OTEL_AVAILABLE and self.instrumentation_config['sqlite3']['enabled']:
-            if 'sqlite3' not in self.instrumented_libraries:
+        if OTEL_AVAILABLE and self.instrumentation_config["sqlite3"]["enabled"]:
+            if "sqlite3" not in self.instrumented_libraries:
                 try:
                     SQLite3Instrumentor().instrument()
-                    self.instrumented_libraries.add('sqlite3')
+                    self.instrumented_libraries.add("sqlite3")
                     logger.info("sqlite3 instrumentation enabled")
                 except Exception as e:
                     logger.error(f"Failed to instrument sqlite3: {e}")
@@ -244,22 +266,22 @@ class InstrumentationManager:
         success = True
 
         # HTTPX
-        if OTEL_AVAILABLE and self.instrumentation_config['httpx']['enabled']:
-            if 'httpx' not in self.instrumented_libraries:
+        if OTEL_AVAILABLE and self.instrumentation_config["httpx"]["enabled"]:
+            if "httpx" not in self.instrumented_libraries:
                 try:
                     HTTPXClientInstrumentor().instrument()
-                    self.instrumented_libraries.add('httpx')
+                    self.instrumented_libraries.add("httpx")
                     logger.info("HTTPX instrumentation enabled")
                 except Exception as e:
                     logger.error(f"Failed to instrument HTTPX: {e}")
                     success = False
 
         # urllib
-        if OTEL_AVAILABLE and self.instrumentation_config['urllib']['enabled']:
-            if 'urllib' not in self.instrumented_libraries:
+        if OTEL_AVAILABLE and self.instrumentation_config["urllib"]["enabled"]:
+            if "urllib" not in self.instrumented_libraries:
                 try:
                     URLLibInstrumentor().instrument()
-                    self.instrumented_libraries.add('urllib')
+                    self.instrumented_libraries.add("urllib")
                     logger.info("urllib instrumentation enabled")
                 except Exception as e:
                     logger.error(f"Failed to instrument urllib: {e}")
@@ -269,22 +291,22 @@ class InstrumentationManager:
 
     def instrument_logging(self) -> bool:
         """Instrument Python logging to correlate with traces."""
-        if not OTEL_AVAILABLE or not self.instrumentation_config['logging']['enabled']:
+        if not OTEL_AVAILABLE or not self.instrumentation_config["logging"]["enabled"]:
             return False
 
-        if 'logging' in self.instrumented_libraries:
+        if "logging" in self.instrumented_libraries:
             logger.debug("Logging already instrumented")
             return True
 
         try:
-            config = self.instrumentation_config['logging']
+            config = self.instrumentation_config["logging"]
 
             LoggingInstrumentor().instrument(
-                set_logging_format=config.get('set_logging_format', True),
-                logging_level=config.get('log_level', 'INFO')
+                set_logging_format=config.get("set_logging_format", True),
+                logging_level=config.get("log_level", "INFO"),
             )
 
-            self.instrumented_libraries.add('logging')
+            self.instrumented_libraries.add("logging")
             logger.info("Logging instrumentation enabled")
             return True
 
@@ -295,11 +317,11 @@ class InstrumentationManager:
     def auto_instrument_all(self, app=None, engine=None) -> dict[str, bool]:
         """
         Automatically instrument all enabled libraries.
-        
+
         Args:
             app: FastAPI app instance (optional)
             engine: SQLAlchemy engine instance (optional)
-            
+
         Returns:
             Dictionary with instrumentation results
         """
@@ -310,13 +332,13 @@ class InstrumentationManager:
             return results
 
         # Instrument libraries
-        results['fastapi'] = self.instrument_fastapi(app)
-        results['sqlalchemy'] = self.instrument_sqlalchemy(engine)
-        results['requests'] = self.instrument_requests()
-        results['redis'] = self.instrument_redis()
-        results['database_drivers'] = self.instrument_database_drivers()
-        results['http_clients'] = self.instrument_http_clients()
-        results['logging'] = self.instrument_logging()
+        results["fastapi"] = self.instrument_fastapi(app)
+        results["sqlalchemy"] = self.instrument_sqlalchemy(engine)
+        results["requests"] = self.instrument_requests()
+        results["redis"] = self.instrument_redis()
+        results["database_drivers"] = self.instrument_database_drivers()
+        results["http_clients"] = self.instrument_http_clients()
+        results["logging"] = self.instrument_logging()
 
         successful = sum(1 for success in results.values() if success)
         total = len(results)
@@ -328,23 +350,23 @@ class InstrumentationManager:
     def uninstrument_all(self) -> dict[str, bool]:
         """Uninstrument all previously instrumented libraries."""
         results = {}
-        
+
         if not OTEL_AVAILABLE:
             return results
-            
+
         # List of instrumentors to uninstrument
         instrumentors = [
-            ('fastapi', FastAPIInstrumentor),
-            ('sqlalchemy', SQLAlchemyInstrumentor),
-            ('requests', RequestsInstrumentor),
-            ('redis', RedisInstrumentor),
-            ('psycopg2', Psycopg2Instrumentor),
-            ('sqlite3', SQLite3Instrumentor),
-            ('httpx', HTTPXClientInstrumentor),
-            ('urllib', URLLibInstrumentor),
-            ('logging', LoggingInstrumentor),
+            ("fastapi", FastAPIInstrumentor),
+            ("sqlalchemy", SQLAlchemyInstrumentor),
+            ("requests", RequestsInstrumentor),
+            ("redis", RedisInstrumentor),
+            ("psycopg2", Psycopg2Instrumentor),
+            ("sqlite3", SQLite3Instrumentor),
+            ("httpx", HTTPXClientInstrumentor),
+            ("urllib", URLLibInstrumentor),
+            ("logging", LoggingInstrumentor),
         ]
-        
+
         for name, instrumentor_class in instrumentors:
             if name in self.instrumented_libraries:
                 try:
@@ -357,7 +379,7 @@ class InstrumentationManager:
                     results[name] = False
             else:
                 results[name] = True  # Not instrumented, so "success"
-                
+
         return results
 
     def get_instrumented_libraries(self) -> list[str]:
@@ -425,15 +447,15 @@ def get_instrumentation_status() -> dict[str, Any]:
     manager = get_instrumentation_manager()
 
     return {
-        'otel_available': OTEL_AVAILABLE,
-        'instrumented_libraries': manager.get_instrumented_libraries(),
-        'configuration': manager.instrumentation_config
+        "otel_available": OTEL_AVAILABLE,
+        "instrumented_libraries": manager.get_instrumented_libraries(),
+        "configuration": manager.instrumentation_config,
     }
 
 
 class InstrumentationScope:
     """Defines instrumentation scope for different components."""
-    
+
     WEB = "web"
     DATABASE = "database"
     CACHE = "cache"
@@ -448,21 +470,21 @@ class InstrumentationScope:
 
 class EnterpriseInstrumentation:
     """Enterprise-grade instrumentation for all system components."""
-    
+
     def __init__(self):
         self._instrumented = set()
         self._custom_instrumentors = {}
         self.logger = get_logger(self.__class__.__name__)
-        
+
     def instrument_all_enterprise(self, enable_auto_instrumentation: bool = True) -> bool:
         """Enable comprehensive enterprise instrumentation for all supported components."""
         if not OTEL_AVAILABLE:
             self.logger.warning("OpenTelemetry not available, instrumentation disabled")
             return False
-            
+
         success_count = 0
         total_count = 0
-        
+
         # Auto-instrumentation for common libraries
         if enable_auto_instrumentation:
             instrumentors = [
@@ -483,7 +505,7 @@ class EnterpriseInstrumentation:
                 ("SQLite3", SQLite3Instrumentor),
                 ("urllib", URLLibInstrumentor),
             ]
-            
+
             for name, instrumentor_class in instrumentors:
                 total_count += 1
                 try:
@@ -494,15 +516,17 @@ class EnterpriseInstrumentation:
                         self.logger.info(f"Instrumented {name}")
                 except Exception as e:
                     self.logger.warning(f"Failed to instrument {name}: {e}")
-        
-        self.logger.info(f"Enterprise instrumentation complete: {success_count}/{total_count} successful")
+
+        self.logger.info(
+            f"Enterprise instrumentation complete: {success_count}/{total_count} successful"
+        )
         return success_count > 0
-    
+
     def uninstrument_all_enterprise(self) -> None:
         """Disable all enterprise instrumentation."""
         if not OTEL_AVAILABLE:
             return
-            
+
         try:
             # Uninstrument common libraries
             instrumentors = [
@@ -523,150 +547,162 @@ class EnterpriseInstrumentation:
                 SQLite3Instrumentor,
                 URLLibInstrumentor,
             ]
-            
+
             for instrumentor_class in instrumentors:
                 try:
                     instrumentor_class().uninstrument()
                 except Exception as e:
-                    self.logger.warning(f"Failed to uninstrument {instrumentor_class.__name__}: {e}")
-            
+                    self.logger.warning(
+                        f"Failed to uninstrument {instrumentor_class.__name__}: {e}"
+                    )
+
             self._instrumented.clear()
             self.logger.info("All enterprise instrumentation disabled")
-            
+
         except Exception as e:
             self.logger.error(f"Error during enterprise uninstrumentation: {e}")
 
 
 class TraceCorrelation:
     """Advanced trace correlation for distributed systems."""
-    
+
     def __init__(self):
         self.logger = get_logger(self.__class__.__name__)
-        
+
     @staticmethod
     def generate_correlation_id() -> str:
         """Generate a unique correlation ID."""
         return str(uuid.uuid4())
-    
+
     @staticmethod
-    def get_trace_context() -> Dict[str, Any]:
+    def get_trace_context() -> dict[str, Any]:
         """Get current trace context information."""
         if not OTEL_AVAILABLE:
             return {}
-            
+
         span = get_current_span()
         if span:
             span_context = span.get_span_context()
             return {
-                'trace_id': format(span_context.trace_id, '032x'),
-                'span_id': format(span_context.span_id, '016x'),
-                'trace_flags': span_context.trace_flags,
-                'is_valid': span_context.is_valid,
+                "trace_id": format(span_context.trace_id, "032x"),
+                "span_id": format(span_context.span_id, "016x"),
+                "trace_flags": span_context.trace_flags,
+                "is_valid": span_context.is_valid,
             }
         return {}
-    
+
     @staticmethod
-    def inject_trace_context(carrier: Dict[str, str]) -> None:
+    def inject_trace_context(carrier: dict[str, str]) -> None:
         """Inject trace context into carrier (e.g., HTTP headers)."""
         if OTEL_AVAILABLE:
             inject(carrier)
-    
+
     @staticmethod
-    def extract_trace_context(carrier: Dict[str, str]) -> Dict[str, Any]:
+    def extract_trace_context(carrier: dict[str, str]) -> dict[str, Any]:
         """Extract trace context from carrier (e.g., HTTP headers)."""
         if OTEL_AVAILABLE:
             return extract(carrier)
         return {}
-    
+
     @staticmethod
-    def add_span_attributes(attributes: Dict[str, Any]) -> None:
+    def add_span_attributes(attributes: dict[str, Any]) -> None:
         """Add attributes to current span."""
         if not OTEL_AVAILABLE:
             return
-            
+
         span = get_current_span()
         if span:
             for key, value in attributes.items():
                 if value is not None:
                     span.set_attribute(key, value)
-    
+
     @staticmethod
-    def add_span_event(name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
+    def add_span_event(name: str, attributes: dict[str, Any] | None = None) -> None:
         """Add event to current span."""
         if not OTEL_AVAILABLE:
             return
-            
+
         span = get_current_span()
         if span:
             span.add_event(name, attributes or {})
-    
+
     @staticmethod
     def set_span_error(exception: Exception) -> None:
         """Set span as error with exception details."""
         if not OTEL_AVAILABLE:
             return
-            
+
         span = get_current_span()
         if span:
             span.set_status(Status(StatusCode.ERROR, str(exception)))
             span.set_attribute("error.type", type(exception).__name__)
             span.set_attribute("error.message", str(exception))
-            span.add_event("exception", {
-                "exception.type": type(exception).__name__,
-                "exception.message": str(exception),
-            })
+            span.add_event(
+                "exception",
+                {
+                    "exception.type": type(exception).__name__,
+                    "exception.message": str(exception),
+                },
+            )
 
 
-def trace_method(scope: str, operation: Optional[str] = None, 
-                capture_args: bool = False, capture_result: bool = False):
+def trace_method(
+    scope: str,
+    operation: str | None = None,
+    capture_args: bool = False,
+    capture_result: bool = False,
+):
     """Decorator for tracing methods with comprehensive metadata."""
+
     def decorator(func: Callable) -> Callable:
         if not OTEL_AVAILABLE:
             return func
-            
+
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
             tracer = trace.get_tracer(__name__)
             operation_name = operation or f"{func.__module__}.{func.__qualname__}"
-            
+
             with tracer.start_as_current_span(operation_name) as span:
                 try:
                     # Add method metadata
                     span.set_attribute("instrumentation.scope", scope)
                     span.set_attribute("code.function", func.__name__)
                     span.set_attribute("code.namespace", func.__module__)
-                    
+
                     # Capture arguments if requested
                     if capture_args:
                         try:
                             sig = inspect.signature(func)
                             bound_args = sig.bind(*args, **kwargs)
                             bound_args.apply_defaults()
-                            
+
                             for param_name, param_value in bound_args.arguments.items():
-                                if param_name != 'self' and not param_name.startswith('_'):
+                                if param_name != "self" and not param_name.startswith("_"):
                                     # Convert complex types to string representation
-                                    if isinstance(param_value, (dict, list, tuple)):
+                                    if isinstance(param_value, dict | list | tuple):
                                         param_value = json.dumps(param_value, default=str)[:1000]
-                                    elif hasattr(param_value, '__dict__'):
+                                    elif hasattr(param_value, "__dict__"):
                                         param_value = str(param_value)[:1000]
-                                    
-                                    span.set_attribute(f"args.{param_name}", str(param_value)[:1000])
+
+                                    span.set_attribute(
+                                        f"args.{param_name}", str(param_value)[:1000]
+                                    )
                         except Exception as e:
                             span.set_attribute("args.capture_error", str(e))
-                    
+
                     # Execute function
                     start_time = time.time()
                     result = func(*args, **kwargs)
                     execution_time = time.time() - start_time
-                    
+
                     # Add performance metrics
                     span.set_attribute("performance.execution_time_ms", execution_time * 1000)
-                    
+
                     # Capture result if requested
                     if capture_result and result is not None:
                         try:
-                            if isinstance(result, (dict, list, tuple)):
+                            if isinstance(result, dict | list | tuple):
                                 result_str = json.dumps(result, default=str)[:1000]
                             else:
                                 result_str = str(result)[:1000]
@@ -674,19 +710,19 @@ def trace_method(scope: str, operation: Optional[str] = None,
                             span.set_attribute("result.type", type(result).__name__)
                         except Exception as e:
                             span.set_attribute("result.capture_error", str(e))
-                    
+
                     span.set_status(Status(StatusCode.OK))
                     return result
-                    
+
                 except Exception as e:
                     TraceCorrelation.set_span_error(e)
                     raise
-                    
+
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             tracer = trace.get_tracer(__name__)
             operation_name = operation or f"{func.__module__}.{func.__qualname__}"
-            
+
             with tracer.start_as_current_span(operation_name) as span:
                 try:
                     # Add method metadata
@@ -694,38 +730,40 @@ def trace_method(scope: str, operation: Optional[str] = None,
                     span.set_attribute("code.function", func.__name__)
                     span.set_attribute("code.namespace", func.__module__)
                     span.set_attribute("code.async", True)
-                    
+
                     # Capture arguments if requested
                     if capture_args:
                         try:
                             sig = inspect.signature(func)
                             bound_args = sig.bind(*args, **kwargs)
                             bound_args.apply_defaults()
-                            
+
                             for param_name, param_value in bound_args.arguments.items():
-                                if param_name != 'self' and not param_name.startswith('_'):
+                                if param_name != "self" and not param_name.startswith("_"):
                                     # Convert complex types to string representation
-                                    if isinstance(param_value, (dict, list, tuple)):
+                                    if isinstance(param_value, dict | list | tuple):
                                         param_value = json.dumps(param_value, default=str)[:1000]
-                                    elif hasattr(param_value, '__dict__'):
+                                    elif hasattr(param_value, "__dict__"):
                                         param_value = str(param_value)[:1000]
-                                    
-                                    span.set_attribute(f"args.{param_name}", str(param_value)[:1000])
+
+                                    span.set_attribute(
+                                        f"args.{param_name}", str(param_value)[:1000]
+                                    )
                         except Exception as e:
                             span.set_attribute("args.capture_error", str(e))
-                    
+
                     # Execute function
                     start_time = time.time()
                     result = await func(*args, **kwargs)
                     execution_time = time.time() - start_time
-                    
+
                     # Add performance metrics
                     span.set_attribute("performance.execution_time_ms", execution_time * 1000)
-                    
+
                     # Capture result if requested
                     if capture_result and result is not None:
                         try:
-                            if isinstance(result, (dict, list, tuple)):
+                            if isinstance(result, dict | list | tuple):
                                 result_str = json.dumps(result, default=str)[:1000]
                             else:
                                 result_str = str(result)[:1000]
@@ -733,50 +771,50 @@ def trace_method(scope: str, operation: Optional[str] = None,
                             span.set_attribute("result.type", type(result).__name__)
                         except Exception as e:
                             span.set_attribute("result.capture_error", str(e))
-                    
+
                     span.set_status(Status(StatusCode.OK))
                     return result
-                    
+
                 except Exception as e:
                     TraceCorrelation.set_span_error(e)
                     raise
-        
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
-            
+
     return decorator
 
 
 @contextmanager
-def trace_context(operation_name: str, scope: str, attributes: Optional[Dict[str, Any]] = None):
+def trace_context(operation_name: str, scope: str, attributes: dict[str, Any] | None = None):
     """Context manager for manual span creation."""
     if not OTEL_AVAILABLE:
         yield
         return
-        
+
     tracer = trace.get_tracer(__name__)
-    
+
     with tracer.start_as_current_span(operation_name) as span:
         try:
             span.set_attribute("instrumentation.scope", scope)
-            
+
             if attributes:
                 for key, value in attributes.items():
                     if value is not None:
                         span.set_attribute(key, value)
-                        
+
             yield span
-            
+
         except Exception as e:
             TraceCorrelation.set_span_error(e)
             raise
 
 
 # Global enterprise instrumentation instance
-_enterprise_instrumentation: Optional[EnterpriseInstrumentation] = None
-_trace_correlation: Optional[TraceCorrelation] = None
+_enterprise_instrumentation: EnterpriseInstrumentation | None = None
+_trace_correlation: TraceCorrelation | None = None
 
 
 def get_enterprise_instrumentation() -> EnterpriseInstrumentation:
@@ -800,14 +838,14 @@ def initialize_enterprise_tracing() -> bool:
     try:
         instrumentation = get_enterprise_instrumentation()
         success = instrumentation.instrument_all_enterprise()
-        
+
         if success:
             logger.info("Enterprise tracing initialized successfully")
         else:
             logger.warning("Enterprise tracing initialization had issues")
-            
+
         return success
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize enterprise tracing: {e}")
         return False
@@ -816,16 +854,16 @@ def initialize_enterprise_tracing() -> bool:
 def shutdown_enterprise_tracing() -> None:
     """Shutdown all enterprise tracing components."""
     global _enterprise_instrumentation, _trace_correlation
-    
+
     try:
         if _enterprise_instrumentation:
             _enterprise_instrumentation.uninstrument_all_enterprise()
-            
+
         _enterprise_instrumentation = None
         _trace_correlation = None
-        
+
         logger.info("Enterprise tracing shutdown complete")
-        
+
     except Exception as e:
         logger.error(f"Error during enterprise tracing shutdown: {e}")
 

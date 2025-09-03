@@ -1,0 +1,409 @@
+# Configuration Management for Multi-Cloud Data Platform
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-retail-app-config
+  namespace: pwc-retail-data-platform-prod
+  labels:
+    app.kubernetes.io/name: pwc-retail-platform
+    app.kubernetes.io/component: config
+    app.kubernetes.io/version: "1.0.0"
+    environment: production
+data:
+  # Application Configuration
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  WORKERS: "4"
+  MAX_WORKERS: "8"
+  TIMEOUT: "300"
+  KEEPALIVE_TIMEOUT: "65"
+  
+  # Database Configuration
+  DB_POOL_SIZE: "20"
+  DB_MAX_OVERFLOW: "30"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "3600"
+  DB_ECHO: "false"
+  
+  # Data Processing Configuration
+  PROCESSING_ENGINE: "spark"
+  BATCH_SIZE: "10000"
+  MAX_RETRIES: "3"
+  RETRY_DELAY: "5"
+  
+  # Caching Configuration
+  ENABLE_CACHING: "true"
+  CACHE_TTL: "3600"
+  CACHE_MAX_SIZE: "1000"
+  REDIS_POOL_SIZE: "10"
+  REDIS_TIMEOUT: "5"
+  
+  # Monitoring Configuration
+  ENABLE_MONITORING: "true"
+  METRICS_PORT: "9090"
+  HEALTH_CHECK_INTERVAL: "30"
+  ENABLE_TRACING: "true"
+  TRACE_SAMPLE_RATE: "0.1"
+  
+  # Security Configuration
+  ENABLE_CSRF: "true"
+  ENABLE_CORS: "false"
+  SESSION_TIMEOUT: "3600"
+  MAX_LOGIN_ATTEMPTS: "5"
+  
+  # Data Quality Configuration
+  ENABLE_DATA_QUALITY: "true"
+  QUALITY_CHECK_INTERVAL: "300"
+  QUALITY_THRESHOLD: "0.95"
+  
+  # Streaming Configuration
+  KAFKA_AUTO_OFFSET_RESET: "earliest"
+  KAFKA_ENABLE_AUTO_COMMIT: "false"
+  KAFKA_SESSION_TIMEOUT: "30000"
+  KAFKA_MAX_POLL_INTERVAL: "300000"
+  
+  # Backup Configuration
+  BACKUP_ENABLED: "true"
+  BACKUP_SCHEDULE: "0 2 * * *"
+  BACKUP_RETENTION_DAYS: "30"
+  
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-retail-spark-config
+  namespace: pwc-retail-data-platform-prod
+  labels:
+    app.kubernetes.io/name: pwc-retail-platform
+    app.kubernetes.io/component: spark-config
+    app.kubernetes.io/version: "1.0.0"
+data:
+  spark-defaults.conf: |
+    spark.master=k8s://https://kubernetes.default.svc:443
+    spark.app.name=PwC-Retail-ETL
+    spark.kubernetes.namespace=pwc-retail-data-platform-prod
+    spark.kubernetes.authenticate.driver.serviceAccountName=spark-driver
+    spark.kubernetes.container.image=ghcr.io/pwc-challenge-dataengineer/spark:latest
+    
+    # Resource Configuration
+    spark.executor.instances=3
+    spark.executor.cores=2
+    spark.executor.memory=4g
+    spark.executor.memoryFraction=0.8
+    spark.driver.cores=1
+    spark.driver.memory=2g
+    spark.driver.maxResultSize=1g
+    
+    # Performance Tuning
+    spark.sql.adaptive.enabled=true
+    spark.sql.adaptive.coalescePartitions.enabled=true
+    spark.sql.adaptive.coalescePartitions.minPartitionNum=1
+    spark.sql.adaptive.advisoryPartitionSizeInBytes=64MB
+    spark.sql.adaptive.skewJoin.enabled=true
+    spark.sql.adaptive.localShuffleReader.enabled=true
+    
+    # Storage Configuration
+    spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+    spark.hadoop.fs.s3a.block.size=128MB
+    spark.hadoop.fs.s3a.multipart.size=104857600
+    spark.hadoop.fs.s3a.fast.upload=true
+    
+    # Serialization
+    spark.serializer=org.apache.spark.serializer.KryoSerializer
+    spark.sql.execution.arrow.pyspark.enabled=true
+    
+    # Dynamic Allocation
+    spark.dynamicAllocation.enabled=true
+    spark.dynamicAllocation.minExecutors=1
+    spark.dynamicAllocation.maxExecutors=10
+    spark.dynamicAllocation.initialExecutors=3
+    
+    # Monitoring and Logging
+    spark.eventLog.enabled=true
+    spark.eventLog.dir=/tmp/spark-events
+    spark.history.fs.logDirectory=/tmp/spark-events
+    spark.kubernetes.executor.deleteOnTermination=false
+    
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-retail-airflow-config
+  namespace: pwc-retail-data-platform-prod
+  labels:
+    app.kubernetes.io/name: pwc-retail-platform
+    app.kubernetes.io/component: airflow-config
+    app.kubernetes.io/version: "1.0.0"
+data:
+  airflow.cfg: |
+    [core]
+    dags_folder = /opt/airflow/dags
+    hostname_callable = airflow.utils.net.getfqdn
+    default_timezone = UTC
+    executor = KubernetesExecutor
+    parallelism = 32
+    dag_concurrency = 16
+    dags_are_paused_at_creation = False
+    max_active_runs_per_dag = 16
+    load_examples = False
+    plugins_folder = /opt/airflow/plugins
+    
+    [kubernetes]
+    namespace = pwc-retail-data-platform-prod
+    airflow_configmap = pwc-retail-airflow-config
+    worker_container_repository = ghcr.io/pwc-challenge-dataengineer/airflow-worker
+    worker_container_tag = latest
+    worker_service_account_name = airflow-worker
+    delete_worker_pods = False
+    delete_worker_pods_on_failure = False
+    
+    [webserver]
+    base_url = http://localhost:8080
+    web_server_port = 8080
+    web_server_host = 0.0.0.0
+    secret_key = ${AIRFLOW_WEBSERVER_SECRET_KEY}
+    workers = 4
+    worker_timeout = 120
+    worker_refresh_batch_size = 1
+    worker_refresh_interval = 30
+    
+    [scheduler]
+    job_heartbeat_sec = 5
+    scheduler_heartbeat_sec = 5
+    run_duration = -1
+    min_file_process_interval = 0
+    dag_dir_list_interval = 300
+    print_stats_interval = 30
+    child_process_log_directory = /opt/airflow/logs/scheduler
+    
+    [logging]
+    logging_level = INFO
+    remote_logging = True
+    remote_base_log_folder = s3://pwc-retail-logs/airflow
+    remote_log_conn_id = aws_s3_default
+    encrypt_s3_logs = True
+    
+    [metrics]
+    statsd_on = True
+    statsd_host = datadog-agent
+    statsd_port = 8125
+    statsd_prefix = airflow
+    
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-retail-dbt-config
+  namespace: pwc-retail-data-platform-prod
+  labels:
+    app.kubernetes.io/name: pwc-retail-platform
+    app.kubernetes.io/component: dbt-config
+    app.kubernetes.io/version: "1.0.0"
+data:
+  profiles.yml: |
+    pwc_retail:
+      outputs:
+        dev:
+          type: postgres
+          host: postgres-service
+          user: "{{ env_var('DBT_USER') }}"
+          password: "{{ env_var('DBT_PASSWORD') }}"
+          port: 5432
+          dbname: "{{ env_var('DBT_DATABASE') }}"
+          schema: bronze
+          threads: 4
+          keepalives_idle: 0
+          search_path: "bronze,silver,gold"
+        
+        staging:
+          type: postgres
+          host: postgres-service
+          user: "{{ env_var('DBT_USER') }}"
+          password: "{{ env_var('DBT_PASSWORD') }}"
+          port: 5432
+          dbname: "{{ env_var('DBT_DATABASE') }}"
+          schema: silver
+          threads: 8
+          keepalives_idle: 0
+          search_path: "bronze,silver,gold"
+        
+        prod:
+          type: postgres
+          host: postgres-service
+          user: "{{ env_var('DBT_USER') }}"
+          password: "{{ env_var('DBT_PASSWORD') }}"
+          port: 5432
+          dbname: "{{ env_var('DBT_DATABASE') }}"
+          schema: gold
+          threads: 16
+          keepalives_idle: 0
+          search_path: "bronze,silver,gold"
+      
+      target: "{{ env_var('DBT_TARGET', 'dev') }}"
+      
+  dbt_project.yml: |
+    name: 'pwc_retail'
+    version: '1.0.0'
+    config-version: 2
+    
+    model-paths: ["models"]
+    analysis-paths: ["analyses"]
+    test-paths: ["tests"]
+    seed-paths: ["seeds"]
+    macro-paths: ["macros"]
+    snapshot-paths: ["snapshots"]
+    
+    target-path: "target"
+    clean-targets:
+      - "target"
+      - "dbt_packages"
+    
+    models:
+      pwc_retail:
+        bronze:
+          +materialized: table
+          +schema: bronze
+          +pre-hook: "{{ logging.log_model_start_end(this, 'start') }}"
+          +post-hook: "{{ logging.log_model_start_end(this, 'end') }}"
+        
+        silver:
+          +materialized: table
+          +schema: silver
+          +pre-hook: "{{ logging.log_model_start_end(this, 'start') }}"
+          +post-hook: "{{ logging.log_model_start_end(this, 'end') }}"
+        
+        gold:
+          +materialized: table
+          +schema: gold
+          +pre-hook: "{{ logging.log_model_start_end(this, 'start') }}"
+          +post-hook: "{{ logging.log_model_start_end(this, 'end') }}"
+    
+    vars:
+      start_date: '2010-01-01'
+      end_date: '2011-12-31'
+      batch_size: 10000
+      data_quality_threshold: 0.95
+    
+    on-run-start:
+      - "{{ logging.log_run_start() }}"
+    
+    on-run-end:
+      - "{{ logging.log_run_end() }}"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-retail-prometheus-config
+  namespace: pwc-retail-data-platform-prod
+  labels:
+    app.kubernetes.io/name: pwc-retail-platform
+    app.kubernetes.io/component: monitoring-config
+    app.kubernetes.io/version: "1.0.0"
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'pwc-retail-platform'
+        environment: 'production'
+    
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+    
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+    
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+      
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+        - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+      
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+      
+      - job_name: 'pwc-retail-api'
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+          action: keep
+          regex: pwc-retail-api
+        - source_labels: [__meta_kubernetes_service_port_name]
+          action: keep
+          regex: metrics
+      
+      - job_name: 'pwc-retail-etl'
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+          action: keep
+          regex: pwc-retail-etl
+        - source_labels: [__meta_kubernetes_service_port_name]
+          action: keep
+          regex: metrics
+      
+      - job_name: 'kafka-exporter'
+        static_configs:
+          - targets: ['kafka-exporter:9308']
+      
+      - job_name: 'redis-exporter'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+      
+      - job_name: 'postgres-exporter'
+        static_configs:
+          - targets: ['postgres-exporter:9187']

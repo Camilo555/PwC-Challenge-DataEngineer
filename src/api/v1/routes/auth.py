@@ -44,13 +44,13 @@ async def login(login_request: LoginRequest) -> TokenResponse:
         access_token=access_token,
         token_type="bearer",
         expires_in=auth_service.security_config.jwt_expiration_hours * 3600,
-        permissions=permissions
+        permissions=permissions,
     )
 
 
 @router.post("/auth/token", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def create_token_basic_auth(
-    credentials: Annotated[HTTPBasicCredentials, Depends(security)]
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
 ) -> TokenResponse:
     if not auth_service.authenticate_user(credentials.username, credentials.password):
         raise HTTPException(
@@ -66,7 +66,7 @@ async def create_token_basic_auth(
         access_token=access_token,
         token_type="bearer",
         expires_in=auth_service.security_config.jwt_expiration_hours * 3600,
-        permissions=permissions
+        permissions=permissions,
     )
 
 
@@ -86,7 +86,7 @@ async def refresh_token(refresh_request: RefreshTokenRequest) -> TokenResponse:
         access_token=new_token,
         token_type="bearer",
         expires_in=auth_service.security_config.jwt_expiration_hours * 3600,
-        permissions=token_data.permissions
+        permissions=token_data.permissions,
     )
 
 
@@ -103,5 +103,5 @@ async def validate_token(token: str) -> dict:
         "valid": True,
         "username": token_data.username,
         "expires_at": token_data.expires_at,
-        "permissions": token_data.permissions
+        "permissions": token_data.permissions,
     }

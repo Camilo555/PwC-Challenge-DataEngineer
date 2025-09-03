@@ -2,6 +2,7 @@
 Base Configuration Classes
 Provides foundational configuration management
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -50,6 +51,7 @@ class BaseConfig(BaseSettings):
 
     # Data paths (medallion architecture)
     data_path: Path = Field(default_factory=lambda: Path.cwd() / "data")
+    logs_path: Path = Field(default_factory=lambda: Path.cwd() / "logs")
     raw_data_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "raw")
     bronze_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "bronze")
     silver_path: Path = Field(default_factory=lambda: Path.cwd() / "data" / "silver")
@@ -80,13 +82,10 @@ class BaseConfig(BaseSettings):
     ELASTICSEARCH_INDEX_PREFIX: str = Field(default="pwc-retail")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
-    @field_validator("project_root", "src_path", "data_path", mode="before")
+    @field_validator("project_root", "src_path", "data_path", "logs_path", mode="before")
     @classmethod
     def resolve_paths(cls, v: Any) -> Path:
         """Resolve paths to absolute paths."""
@@ -106,7 +105,7 @@ class BaseConfig(BaseSettings):
             self.raw_data_path,
             self.bronze_path,
             self.silver_path,
-            self.gold_path
+            self.gold_path,
         ]
 
         for path in paths_to_check:
@@ -135,7 +134,7 @@ class BaseConfig(BaseSettings):
                 "batch_size": 5000,
                 "enable_monitoring": True,
                 "enable_caching": True,
-            }
+            },
         }
 
         return config_overrides.get(self.environment, {})
@@ -161,10 +160,9 @@ class BaseConfig(BaseSettings):
             "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
             "spark.sql.adaptive.enabled": "true",
             "spark.sql.adaptive.coalescePartitions.enabled": "true",
-            "spark.jars.packages": ",".join([
-                "org.xerial:sqlite-jdbc:3.45.3.0",
-                "org.postgresql:postgresql:42.7.3"
-            ]),
+            "spark.jars.packages": ",".join(
+                ["org.xerial:sqlite-jdbc:3.45.3.0", "org.postgresql:postgresql:42.7.3"]
+            ),
         }
 
     def get_database_url(self, async_mode: bool = False) -> str:
@@ -180,6 +178,7 @@ class BaseConfig(BaseSettings):
     def get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
         from datetime import datetime
+
         return datetime.utcnow().isoformat()
 
     @property

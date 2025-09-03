@@ -1,4 +1,5 @@
 """Invoice domain entity and related models."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -193,8 +194,7 @@ class Invoice(DomainEntity):
             self.invoice_type = InvoiceType.CREDIT_NOTE
 
             # Extract original invoice number
-            self.original_invoice_no = self.invoice_no[len(
-                CANCELLED_INVOICE_PREFIX):]
+            self.original_invoice_no = self.invoice_no[len(CANCELLED_INVOICE_PREFIX) :]
 
             # Add tag
             if "cancelled" not in self.tags:
@@ -237,27 +237,19 @@ class Invoice(DomainEntity):
 
         # Rule 2: Future dates not allowed
         if self.invoice_date > datetime.utcnow():
-            self.add_validation_error(
-                f"Invoice date is in the future: {self.invoice_date}"
-            )
+            self.add_validation_error(f"Invoice date is in the future: {self.invoice_date}")
 
         # Rule 3: Total amount validation
         if self.total_amount < 0 and self.invoice_type == InvoiceType.SALE:
-            self.add_validation_error(
-                "Sale invoice cannot have negative total"
-            )
+            self.add_validation_error("Sale invoice cannot have negative total")
 
         # Rule 4: Customer required for completed invoices
         if self.status == InvoiceStatus.COMPLETED and not self.customer_id:
-            self.add_validation_error(
-                "Completed invoice requires customer ID"
-            )
+            self.add_validation_error("Completed invoice requires customer ID")
 
         # Rule 5: Items required
         if self.total_items == 0 and self.status == InvoiceStatus.COMPLETED:
-            self.add_validation_error(
-                "Completed invoice must have items"
-            )
+            self.add_validation_error("Completed invoice must have items")
 
         return self.is_valid
 

@@ -2,6 +2,7 @@
 Secret Management Initialization
 Provides automated secret setup and initialization for production deployments.
 """
+
 from __future__ import annotations
 
 import os
@@ -22,28 +23,28 @@ class SecretInitializer:
     def __init__(self):
         self.manager = get_secret_manager()
         self.required_secrets = [
-            'SECRET_KEY',
-            'JWT_SECRET_KEY',
-            'DATABASE_URL',
-            'BASIC_AUTH_PASSWORD'
+            "SECRET_KEY",
+            "JWT_SECRET_KEY",
+            "DATABASE_URL",
+            "BASIC_AUTH_PASSWORD",
         ]
         self.optional_secrets = [
-            'TYPESENSE_API_KEY',
-            'SPARK_AUTH_SECRET',
-            'REDIS_PASSWORD',
-            'GRAFANA_ADMIN_PASSWORD',
-            'SMTP_PASSWORD',
-            'AWS_ACCESS_KEY_ID',
-            'AWS_SECRET_ACCESS_KEY'
+            "TYPESENSE_API_KEY",
+            "SPARK_AUTH_SECRET",
+            "REDIS_PASSWORD",
+            "GRAFANA_ADMIN_PASSWORD",
+            "SMTP_PASSWORD",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
         ]
 
     async def initialize_secrets(self, force_regenerate: bool = False) -> dict[str, str]:
         """
         Initialize all required secrets.
-        
+
         Args:
             force_regenerate: Whether to regenerate existing secrets
-            
+
         Returns:
             Dictionary of initialized secrets (values masked for security)
         """
@@ -88,10 +89,10 @@ class SecretInitializer:
     async def rotate_secrets(self, secret_keys: list[str] | None = None) -> dict[str, str]:
         """
         Rotate (regenerate) specified secrets.
-        
+
         Args:
             secret_keys: List of secrets to rotate, or None for all secrets
-            
+
         Returns:
             Dictionary of rotated secrets (values masked)
         """
@@ -109,9 +110,9 @@ class SecretInitializer:
                 generate_strong_password,
             )
 
-            if 'SECRET_KEY' in secret_key or 'JWT' in secret_key:
+            if "SECRET_KEY" in secret_key or "JWT" in secret_key:
                 new_value = generate_secret_key()
-            elif 'API_KEY' in secret_key:
+            elif "API_KEY" in secret_key:
                 new_value = generate_api_key()
             else:
                 new_value = generate_strong_password()
@@ -126,13 +127,13 @@ class SecretInitializer:
 
         return rotated
 
-    async def export_secrets_for_deployment(self, output_format: str = 'env') -> str:
+    async def export_secrets_for_deployment(self, output_format: str = "env") -> str:
         """
         Export secrets in deployment-ready format.
-        
+
         Args:
             output_format: Format to export ('env', 'json', 'yaml')
-            
+
         Returns:
             Formatted secret export string
         """
@@ -146,13 +147,15 @@ class SecretInitializer:
             if value:
                 secrets[secret_key] = value
 
-        if output_format == 'env':
+        if output_format == "env":
             return self._format_as_env_file(secrets)
-        elif output_format == 'json':
+        elif output_format == "json":
             import json
+
             return json.dumps(secrets, indent=2)
-        elif output_format == 'yaml':
+        elif output_format == "yaml":
             import yaml
+
             return yaml.dump(secrets, default_flow_style=False)
         else:
             raise ValueError(f"Unsupported output format: {output_format}")
@@ -179,15 +182,15 @@ class SecretInitializer:
         logger.info("Performing secret management health check...")
 
         results = {
-            'provider': self.manager.config.provider,
-            'status': 'healthy',
-            'issues': [],
-            'secret_counts': {
-                'required': 0,
-                'optional': 0,
-                'missing_required': 0,
-                'missing_optional': 0
-            }
+            "provider": self.manager.config.provider,
+            "status": "healthy",
+            "issues": [],
+            "secret_counts": {
+                "required": 0,
+                "optional": 0,
+                "missing_required": 0,
+                "missing_optional": 0,
+            },
         }
 
         try:
@@ -195,28 +198,28 @@ class SecretInitializer:
             for secret_key in self.required_secrets:
                 value = await self.manager.get_secret(secret_key)
                 if value:
-                    results['secret_counts']['required'] += 1
+                    results["secret_counts"]["required"] += 1
                 else:
-                    results['secret_counts']['missing_required'] += 1
-                    results['issues'].append(f"Missing required secret: {secret_key}")
+                    results["secret_counts"]["missing_required"] += 1
+                    results["issues"].append(f"Missing required secret: {secret_key}")
 
             # Check optional secrets
             for secret_key in self.optional_secrets:
                 value = await self.manager.get_secret(secret_key)
                 if value:
-                    results['secret_counts']['optional'] += 1
+                    results["secret_counts"]["optional"] += 1
                 else:
-                    results['secret_counts']['missing_optional'] += 1
+                    results["secret_counts"]["missing_optional"] += 1
 
             # Determine overall status
-            if results['secret_counts']['missing_required'] > 0:
-                results['status'] = 'unhealthy'
-            elif results['secret_counts']['missing_optional'] > 0:
-                results['status'] = 'degraded'
+            if results["secret_counts"]["missing_required"] > 0:
+                results["status"] = "unhealthy"
+            elif results["secret_counts"]["missing_optional"] > 0:
+                results["status"] = "degraded"
 
         except Exception as e:
-            results['status'] = 'error'
-            results['issues'].append(f"Health check failed: {str(e)}")
+            results["status"] = "error"
+            results["issues"].append(f"Health check failed: {str(e)}")
 
         logger.info(f"Secret management health check completed: {results['status']}")
         return results
@@ -288,20 +291,26 @@ async def cli_health_check() -> None:
         result = await perform_secret_health_check()
 
         status_symbols = {
-            'healthy': '[OK]',
-            'degraded': '[WARN]',
-            'unhealthy': '[ERROR]',
-            'error': '[FAIL]'
+            "healthy": "[OK]",
+            "degraded": "[WARN]",
+            "unhealthy": "[ERROR]",
+            "error": "[FAIL]",
         }
 
-        print(f"{status_symbols.get(result['status'], '[?]')} Secret Management Status: {result['status'].upper()}")
+        print(
+            f"{status_symbols.get(result['status'], '[?]')} Secret Management Status: {result['status'].upper()}"
+        )
         print(f"Provider: {result['provider']}")
-        print(f"Required secrets: {result['secret_counts']['required']}/{len(get_secret_initializer().required_secrets)}")
-        print(f"Optional secrets: {result['secret_counts']['optional']}/{len(get_secret_initializer().optional_secrets)}")
+        print(
+            f"Required secrets: {result['secret_counts']['required']}/{len(get_secret_initializer().required_secrets)}"
+        )
+        print(
+            f"Optional secrets: {result['secret_counts']['optional']}/{len(get_secret_initializer().optional_secrets)}"
+        )
 
-        if result['issues']:
+        if result["issues"]:
             print("\nIssues detected:")
-            for issue in result['issues']:
+            for issue in result["issues"]:
                 print(f"  - {issue}")
 
     except Exception as e:

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -28,7 +27,7 @@ async def list_sales(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     sort: str = Query("invoice_date:desc"),
-    service: SalesService = Depends(get_sales_service)
+    service: SalesService = Depends(get_sales_service),
 ) -> PaginatedSales:
     """Get paginated sales data with proper dependency injection."""
     items: list[SaleItem]

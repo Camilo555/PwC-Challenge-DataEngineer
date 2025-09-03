@@ -3,6 +3,7 @@ Simple Backup and Disaster Recovery Command Line Interface
 
 Simplified CLI for backup and disaster recovery operations without external dependencies.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,8 +24,7 @@ class SimpleBackupCLI:
 
     def __init__(self, config_path: Path | None = None):
         self.config = BaseConfig(
-            environment=Environment.PRODUCTION,
-            project_root=config_path or Path.cwd()
+            environment=Environment.PRODUCTION, project_root=config_path or Path.cwd()
         )
 
         self.orchestrator: BackupOrchestrator | None = None
@@ -44,20 +44,20 @@ class SimpleBackupCLI:
             print("Starting full system backup...")
 
             results = await orchestrator.trigger_full_system_backup(
-                mode=OrchestrationMode.MANUAL,
-                validate=validate,
-                multi_storage=False
+                mode=OrchestrationMode.MANUAL, validate=validate, multi_storage=False
             )
 
             if results["success"]:
                 print("[SUCCESS] Full system backup completed successfully!")
                 print(f"   Operation ID: {results['operation_id']}")
                 print(f"   Duration: {results['duration_seconds']:.1f} seconds")
-                size_mb = results['backup_results']['summary']['total_size_bytes'] / 1024 / 1024
+                size_mb = results["backup_results"]["summary"]["total_size_bytes"] / 1024 / 1024
                 print(f"   Size: {size_mb:.1f} MB")
             else:
                 print("[FAILED] Full system backup completed with issues!")
-                print(f"   Failed backups: {results['backup_results']['summary']['failed_backups']}")
+                print(
+                    f"   Failed backups: {results['backup_results']['summary']['failed_backups']}"
+                )
 
         except Exception as e:
             print(f"[ERROR] Full system backup failed: {e}")
@@ -72,18 +72,17 @@ class SimpleBackupCLI:
 
             if component == "database":
                 from .backup_manager import BackupType
+
                 result = await orchestrator.backup_manager.backup_database(
-                    backup_type=BackupType(backup_type),
-                    compress=True,
-                    validate=True
+                    backup_type=BackupType(backup_type), compress=True, validate=True
                 )
                 print(f"[SUCCESS] Database backup completed: {result.backup_id}")
 
             elif component == "data_lake":
                 from .backup_manager import BackupType
+
                 results = await orchestrator.backup_manager.backup_data_lake(
-                    backup_type=BackupType(backup_type),
-                    compress=True
+                    backup_type=BackupType(backup_type), compress=True
                 )
                 print(f"[SUCCESS] Data lake backup completed: {len(results)} layer(s) backed up")
 
@@ -104,8 +103,7 @@ class SimpleBackupCLI:
 
         try:
             backups = orchestrator.backup_manager.get_backup_history(
-                component=component,
-                limit=limit
+                component=component, limit=limit
             )
 
             if not backups:
@@ -114,18 +112,28 @@ class SimpleBackupCLI:
 
             print(f"\nAvailable Backups ({len(backups)} found):")
             print("-" * 80)
-            print("| Backup ID               | Component    | Type      | Created         | Size    | Status    |")
+            print(
+                "| Backup ID               | Component    | Type      | Created         | Size    | Status    |"
+            )
             print("-" * 80)
 
             for backup in backups:
                 size_mb = backup.get("size_bytes", 0) / 1024 / 1024
                 component_name = backup.get("tags", {}).get("component", "unknown")
-                status_icon = "[OK]" if backup.get("status") in ["completed", "validated"] else "[FAIL]"
+                status_icon = (
+                    "[OK]" if backup.get("status") in ["completed", "validated"] else "[FAIL]"
+                )
                 created = backup["timestamp"][:19].replace("T", " ")
-                backup_id = backup['backup_id'][:22] + "..." if len(backup['backup_id']) > 25 else backup['backup_id']
+                backup_id = (
+                    backup["backup_id"][:22] + "..."
+                    if len(backup["backup_id"]) > 25
+                    else backup["backup_id"]
+                )
 
-                print(f"| {status_icon} {backup_id:<20} | {component_name:<12} | {backup.get('backup_type', 'unknown'):<9} | "
-                      f"{created} | {size_mb:>6.1f}MB | {backup.get('status', 'unknown'):<9} |")
+                print(
+                    f"| {status_icon} {backup_id:<20} | {component_name:<12} | {backup.get('backup_type', 'unknown'):<9} | "
+                    f"{created} | {size_mb:>6.1f}MB | {backup.get('status', 'unknown'):<9} |"
+                )
 
             print("-" * 80)
 
@@ -142,18 +150,27 @@ class SimpleBackupCLI:
 
             # System health
             health = status["system_health"]
-            health_icon = {"healthy": "[HEALTHY]", "warning": "[WARNING]", "critical": "[CRITICAL]", "unknown": "[UNKNOWN]"}
+            health_icon = {
+                "healthy": "[HEALTHY]",
+                "warning": "[WARNING]",
+                "critical": "[CRITICAL]",
+                "unknown": "[UNKNOWN]",
+            }
 
             print(f"\nSystem Health: {health_icon.get(health, '[UNKNOWN]')} {health.upper()}")
             print(f"Active Operations: {status['active_operations']}")
 
             # Last operations
             if status.get("last_full_backup"):
-                last_backup = datetime.fromisoformat(status["last_full_backup"]).strftime("%Y-%m-%d %H:%M:%S")
+                last_backup = datetime.fromisoformat(status["last_full_backup"]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 print(f"Last Full Backup: {last_backup}")
 
             if status.get("last_dr_test"):
-                last_test = datetime.fromisoformat(status["last_dr_test"]).strftime("%Y-%m-%d %H:%M:%S")
+                last_test = datetime.fromisoformat(status["last_dr_test"]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 print(f"Last DR Test: {last_test}")
 
             # Scheduler status
@@ -176,8 +193,10 @@ class SimpleBackupCLI:
                         print(f"   {backend_id}: [ERROR] {backend_stats['error']}")
                     else:
                         total_size_mb = backend_stats.get("total_size_bytes", 0) / 1024 / 1024
-                        print(f"   {backend_id}: {backend_stats.get('total_files', 0)} files, "
-                              f"{total_size_mb:.1f} MB")
+                        print(
+                            f"   {backend_id}: {backend_stats.get('total_files', 0)} files, "
+                            f"{total_size_mb:.1f} MB"
+                        )
 
         except Exception as e:
             print(f"[ERROR] Failed to get system status: {e}")
@@ -216,7 +235,7 @@ async def main():
     """Main CLI entry point."""
     args = sys.argv[1:]
 
-    if not args or args[0] in ['help', '-h', '--help']:
+    if not args or args[0] in ["help", "-h", "--help"]:
         print_help()
         return
 
@@ -226,7 +245,7 @@ async def main():
     try:
         if command == "test":
             print("Testing backup system initialization...")
-            orchestrator = await backup_cli._ensure_orchestrator()
+            await backup_cli._ensure_orchestrator()
             print("[SUCCESS] Backup system initialized successfully!")
 
         elif command == "backup-full":

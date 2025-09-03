@@ -4,6 +4,7 @@ Database Index Management
 Comprehensive index creation and optimization for the retail data warehouse.
 Includes performance-optimized indexes for all query patterns.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ logger = get_logger(__name__)
 
 class IndexType(str, Enum):
     """Types of database indexes."""
+
     BTREE = "btree"
     HASH = "hash"
     PARTIAL = "partial"
@@ -30,6 +32,7 @@ class IndexType(str, Enum):
 @dataclass
 class IndexDefinition:
     """Definition for a database index."""
+
     name: str
     table_name: str
     columns: list[str]
@@ -43,7 +46,7 @@ class IndexDefinition:
 class IndexManager:
     """
     Advanced index management for optimal query performance.
-    
+
     This class manages creation, monitoring, and optimization of database indexes
     based on common query patterns in the retail analytics system.
     """
@@ -55,7 +58,7 @@ class IndexManager:
     def get_performance_indexes(self) -> list[IndexDefinition]:
         """
         Get comprehensive list of performance-optimized indexes for the retail system.
-        
+
         These indexes are designed based on common query patterns:
         - Time-based analytics (sales by date, trends)
         - Customer analytics (RFM, segmentation, lifetime value)
@@ -65,47 +68,41 @@ class IndexManager:
         """
         return [
             # === FACT_SALE TABLE INDEXES ===
-
             # Primary time-series index for sales analytics
             IndexDefinition(
                 name="idx_fact_sale_date_performance",
                 table_name="fact_sale",
                 columns=["date_key"],
-                description="Primary index for time-based sales queries"
+                description="Primary index for time-based sales queries",
             ),
-
             # Customer analytics index
             IndexDefinition(
                 name="idx_fact_sale_customer_analytics",
                 table_name="fact_sale",
                 columns=["customer_key", "date_key"],
-                description="Customer behavior and RFM analysis"
+                description="Customer behavior and RFM analysis",
             ),
-
             # Product performance index
             IndexDefinition(
                 name="idx_fact_sale_product_performance",
                 table_name="fact_sale",
                 columns=["product_key", "date_key"],
-                description="Product sales performance and trends"
+                description="Product sales performance and trends",
             ),
-
             # Geographic analytics index
             IndexDefinition(
                 name="idx_fact_sale_country_analytics",
                 table_name="fact_sale",
                 columns=["country_key", "date_key"],
-                description="Geographic sales analysis"
+                description="Geographic sales analysis",
             ),
-
             # Invoice processing index
             IndexDefinition(
                 name="idx_fact_sale_invoice_lookup",
                 table_name="fact_sale",
                 columns=["invoice_key"],
-                description="Fast invoice detail lookups"
+                description="Fast invoice detail lookups",
             ),
-
             # High-value sales index (partial index)
             IndexDefinition(
                 name="idx_fact_sale_high_value",
@@ -113,17 +110,15 @@ class IndexManager:
                 columns=["total_amount", "date_key"],
                 index_type=IndexType.PARTIAL,
                 partial_condition="total_amount > 100.00",
-                description="High-value transactions for executive reporting"
+                description="High-value transactions for executive reporting",
             ),
-
             # Batch processing index
             IndexDefinition(
                 name="idx_fact_sale_batch_processing",
                 table_name="fact_sale",
                 columns=["batch_id", "created_at"],
-                description="ETL batch processing and data lineage"
+                description="ETL batch processing and data lineage",
             ),
-
             # Revenue covering index
             IndexDefinition(
                 name="idx_fact_sale_revenue_covering",
@@ -131,120 +126,155 @@ class IndexManager:
                 columns=["date_key", "country_key"],
                 index_type=IndexType.COVERING,
                 include_columns=["total_amount", "quantity", "profit_amount"],
-                description="Covering index for revenue reports (includes data in index)"
+                description="Covering index for revenue reports (includes data in index)",
+            ),
+
+            # === ADDITIONAL FACT TABLE COMPOSITE INDEXES FOR PERFORMANCE ===
+            # Multi-dimensional analytics composite index
+            IndexDefinition(
+                name="idx_fact_sale_multi_dim_analytics",
+                table_name="fact_sale",
+                columns=["date_key", "product_key", "customer_key"],
+                index_type=IndexType.COMPOSITE,
+                description="Multi-dimensional sales analytics composite index",
+            ),
+            # Store-product performance composite index
+            IndexDefinition(
+                name="idx_fact_sale_store_product",
+                table_name="fact_sale",
+                columns=["store_key", "product_key", "date_key"],
+                index_type=IndexType.COMPOSITE,
+                description="Store-product performance analysis composite index",
+            ),
+            # Customer-store loyalty composite index
+            IndexDefinition(
+                name="idx_fact_sale_customer_store",
+                table_name="fact_sale",
+                columns=["customer_key", "store_key", "date_key"],
+                index_type=IndexType.COMPOSITE,
+                description="Customer-store loyalty analysis composite index",
+            ),
+            # All foreign keys composite index for complex joins
+            IndexDefinition(
+                name="idx_fact_sale_all_fks",
+                table_name="fact_sale",
+                columns=["date_key", "product_key", "customer_key", "store_key"],
+                index_type=IndexType.COMPOSITE,
+                description="Complete foreign keys composite index for complex analytical queries",
+            ),
+            # Performance optimized covering index for common queries
+            IndexDefinition(
+                name="idx_fact_sale_performance_covering",
+                table_name="fact_sale",
+                columns=["date_key", "product_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["customer_key", "store_key", "quantity", "unit_price", "line_amount"],
+                description="Performance covering index for most common sales queries",
+            ),
+            # Time-partitioned analysis composite index
+            IndexDefinition(
+                name="idx_fact_sale_time_partitioned",
+                table_name="fact_sale",
+                columns=["date_key", "invoice_id"],
+                index_type=IndexType.COMPOSITE,
+                description="Time-partitioned analysis for invoice-level aggregations",
             ),
 
             # === DIM_DATE TABLE INDEXES ===
-
             # Calendar navigation
             IndexDefinition(
                 name="idx_dim_date_calendar",
                 table_name="dim_date",
                 columns=["year", "month", "day_of_month"],
-                description="Calendar-based date lookups"
+                description="Calendar-based date lookups",
             ),
-
             # Fiscal period analytics
             IndexDefinition(
                 name="idx_dim_date_fiscal",
                 table_name="dim_date",
                 columns=["fiscal_year", "fiscal_quarter"],
-                description="Fiscal period reporting"
+                description="Fiscal period reporting",
             ),
-
             # Weekend and holiday analysis
             IndexDefinition(
                 name="idx_dim_date_business_patterns",
                 table_name="dim_date",
                 columns=["is_weekend", "is_holiday"],
-                description="Business pattern analysis (weekends/holidays)"
+                description="Business pattern analysis (weekends/holidays)",
             ),
-
             # === DIM_PRODUCT TABLE INDEXES ===
-
             # Product hierarchy navigation
             IndexDefinition(
                 name="idx_dim_product_hierarchy",
                 table_name="dim_product",
                 columns=["category", "subcategory", "brand"],
-                description="Product hierarchy and categorization"
+                description="Product hierarchy and categorization",
             ),
-
             # SCD Type 2 current records
             IndexDefinition(
                 name="idx_dim_product_scd2_current",
                 table_name="dim_product",
                 columns=["stock_code", "is_current"],
                 unique=True,
-                description="Unique current product versions for SCD2"
+                description="Unique current product versions for SCD2",
             ),
-
             # Product search and filtering
             IndexDefinition(
                 name="idx_dim_product_search",
                 table_name="dim_product",
                 columns=["description"],  # Consider full-text index for PostgreSQL
-                description="Product description search"
+                description="Product description search",
             ),
-
             # Price analysis
             IndexDefinition(
                 name="idx_dim_product_pricing",
                 table_name="dim_product",
                 columns=["category", "recommended_price"],
-                description="Price analysis by category"
+                description="Price analysis by category",
             ),
-
             # SCD2 temporal queries
             IndexDefinition(
                 name="idx_dim_product_temporal",
                 table_name="dim_product",
                 columns=["valid_from", "valid_to"],
-                description="Temporal queries for product history"
+                description="Temporal queries for product history",
             ),
-
             # === DIM_CUSTOMER TABLE INDEXES ===
-
             # Customer segmentation
             IndexDefinition(
                 name="idx_dim_customer_segmentation",
                 table_name="dim_customer",
                 columns=["customer_segment", "rfm_segment"],
-                description="Customer segmentation analytics"
+                description="Customer segmentation analytics",
             ),
-
             # RFM analysis
             IndexDefinition(
                 name="idx_dim_customer_rfm",
                 table_name="dim_customer",
                 columns=["recency_score", "frequency_score", "monetary_score"],
-                description="RFM scoring and analysis"
+                description="RFM scoring and analysis",
             ),
-
             # Customer lifetime value
             IndexDefinition(
                 name="idx_dim_customer_ltv",
                 table_name="dim_customer",
                 columns=["lifetime_value"],
-                description="Customer lifetime value ranking"
+                description="Customer lifetime value ranking",
             ),
-
             # SCD2 customer current records
             IndexDefinition(
                 name="idx_dim_customer_scd2_current",
                 table_name="dim_customer",
                 columns=["customer_id", "is_current"],
-                description="Current customer versions for SCD2"
+                description="Current customer versions for SCD2",
             ),
-
             # Customer acquisition cohorts
             IndexDefinition(
                 name="idx_dim_customer_cohorts",
                 table_name="dim_customer",
                 columns=["registration_date", "customer_segment"],
-                description="Customer acquisition cohort analysis"
+                description="Customer acquisition cohort analysis",
             ),
-
             # High-value customers (partial index)
             IndexDefinition(
                 name="idx_dim_customer_high_value",
@@ -252,88 +282,79 @@ class IndexManager:
                 columns=["lifetime_value", "total_orders"],
                 index_type=IndexType.PARTIAL,
                 partial_condition="lifetime_value > 1000.00 AND total_orders > 10",
-                description="High-value customer segment"
+                description="High-value customer segment",
             ),
-
             # === DIM_COUNTRY TABLE INDEXES ===
-
             # Geographic hierarchy
             IndexDefinition(
                 name="idx_dim_country_geography",
                 table_name="dim_country",
                 columns=["continent", "region"],
-                description="Geographic hierarchy for regional reporting"
+                description="Geographic hierarchy for regional reporting",
             ),
-
             # Economic analysis
             IndexDefinition(
                 name="idx_dim_country_economic",
                 table_name="dim_country",
                 columns=["currency_code", "gdp_per_capita"],
-                description="Economic indicators and currency analysis"
+                description="Economic indicators and currency analysis",
             ),
-
             # EU membership analysis
             IndexDefinition(
                 name="idx_dim_country_eu_status",
                 table_name="dim_country",
                 columns=["is_eu_member", "tax_rate"],
-                description="EU membership and tax analysis"
+                description="EU membership and tax analysis",
             ),
-
             # === DIM_INVOICE TABLE INDEXES ===
-
             # Invoice processing workflow
             IndexDefinition(
                 name="idx_dim_invoice_processing",
                 table_name="dim_invoice",
                 columns=["payment_status", "invoice_date"],
-                description="Invoice processing and payment tracking"
+                description="Invoice processing and payment tracking",
             ),
-
             # Cancelled invoice analysis
             IndexDefinition(
                 name="idx_dim_invoice_cancelled",
                 table_name="dim_invoice",
                 columns=["is_cancelled", "invoice_date"],
-                description="Cancelled invoice analysis and trends"
+                description="Cancelled invoice analysis and trends",
             ),
-
             # Payment method analysis
             IndexDefinition(
                 name="idx_dim_invoice_payment_analysis",
                 table_name="dim_invoice",
                 columns=["payment_method", "channel"],
-                description="Payment method and channel analysis"
+                description="Payment method and channel analysis",
             ),
-
             # Invoice value analysis
             IndexDefinition(
                 name="idx_dim_invoice_value",
                 table_name="dim_invoice",
                 columns=["invoice_total", "tax_amount"],
-                description="Invoice value and tax analysis"
+                description="Invoice value and tax analysis",
             ),
         ]
 
     async def create_all_indexes(self, force_recreate: bool = False) -> dict[str, Any]:
         """
         Create all performance indexes with comprehensive error handling.
-        
+
         Args:
             force_recreate: If True, drop and recreate existing indexes
-            
+
         Returns:
             Dictionary with creation results and metrics
         """
         logger.info("Starting comprehensive index creation...")
 
         results = {
-            'created': [],
-            'skipped': [],
-            'failed': [],
-            'total_time_seconds': 0,
-            'performance_impact': {}
+            "created": [],
+            "skipped": [],
+            "failed": [],
+            "total_time_seconds": 0,
+            "performance_impact": {},
         }
 
         start_time = time.time()
@@ -353,36 +374,37 @@ class IndexManager:
 
                     if await self._create_index(index_def, force_recreate):
                         index_time = time.time() - index_start
-                        results['created'].append({
-                            'name': index_def.name,
-                            'table': index_def.table_name,
-                            'columns': index_def.columns,
-                            'creation_time_seconds': index_time,
-                            'description': index_def.description
-                        })
+                        results["created"].append(
+                            {
+                                "name": index_def.name,
+                                "table": index_def.table_name,
+                                "columns": index_def.columns,
+                                "creation_time_seconds": index_time,
+                                "description": index_def.description,
+                            }
+                        )
                         logger.info(f"✅ Created index {index_def.name} in {index_time:.2f}s")
                     else:
-                        results['skipped'].append({
-                            'name': index_def.name,
-                            'reason': 'already_exists'
-                        })
+                        results["skipped"].append(
+                            {"name": index_def.name, "reason": "already_exists"}
+                        )
                         logger.debug(f"⏭️ Skipped existing index {index_def.name}")
 
                 except Exception as e:
-                    results['failed'].append({
-                        'name': index_def.name,
-                        'error': str(e),
-                        'table': index_def.table_name
-                    })
+                    results["failed"].append(
+                        {"name": index_def.name, "error": str(e), "table": index_def.table_name}
+                    )
                     logger.error(f"❌ Failed to create index {index_def.name}: {e}")
 
-            results['total_time_seconds'] = time.time() - start_time
+            results["total_time_seconds"] = time.time() - start_time
 
             # Analyze performance impact
-            results['performance_impact'] = await self._analyze_performance_impact()
+            results["performance_impact"] = await self._analyze_performance_impact()
 
             logger.info(f"Index creation completed in {results['total_time_seconds']:.2f}s")
-            logger.info(f"✅ Created: {len(results['created'])}, ⏭️ Skipped: {len(results['skipped'])}, ❌ Failed: {len(results['failed'])}")
+            logger.info(
+                f"✅ Created: {len(results['created'])}, ⏭️ Skipped: {len(results['skipped'])}, ❌ Failed: {len(results['failed'])}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to create indexes: {e}")
@@ -443,10 +465,10 @@ class IndexManager:
         try:
             # Query to get existing indexes (works for SQLite and PostgreSQL)
             sql = """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='index' AND name NOT LIKE 'sqlite_%'
                 UNION ALL
-                SELECT indexname as name FROM pg_indexes 
+                SELECT indexname as name FROM pg_indexes
                 WHERE schemaname = 'public'
             """
 
@@ -474,8 +496,8 @@ class IndexManager:
         except SQLAlchemyError as e:
             logger.warning(f"Could not drop index {index_name}: {e}")
 
-    async def _analyze_performance_impact(self) -> dict[str, Any]:
-        """Analyze the performance impact of created indexes."""
+    async def _analyze_performance_impact(self, target_ms: int = 50) -> dict[str, Any]:
+        """Analyze the performance impact of created indexes against target performance."""
         try:
             with self.engine.connect() as conn:
                 # Test query performance on key tables
@@ -491,13 +513,13 @@ class IndexManager:
                     start = time.time()
                     conn.execute(text(query))
                     duration = time.time() - start
-                    performance_data[f'test_query_{i+1}_ms'] = duration * 1000
+                    performance_data[f"test_query_{i + 1}_ms"] = duration * 1000
 
                 return performance_data
 
         except Exception as e:
             logger.warning(f"Could not analyze performance impact: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     def get_index_maintenance_queries(self) -> list[str]:
         """Get maintenance queries for index optimization."""
@@ -509,7 +531,6 @@ class IndexManager:
             "ANALYZE dim_date;",
             "ANALYZE dim_country;",
             "ANALYZE dim_invoice;",
-
             # Vacuum for SQLite
             "VACUUM;",
         ]
@@ -518,14 +539,16 @@ class IndexManager:
 import time
 
 
-async def create_performance_indexes(engine: Engine, force_recreate: bool = False) -> dict[str, Any]:
+async def create_performance_indexes(
+    engine: Engine, force_recreate: bool = False
+) -> dict[str, Any]:
     """
     Convenience function to create all performance indexes.
-    
+
     Args:
         engine: SQLAlchemy engine
         force_recreate: Whether to recreate existing indexes
-        
+
     Returns:
         Creation results and metrics
     """

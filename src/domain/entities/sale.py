@@ -3,6 +3,7 @@ Domain Entities for Sales - Separate from Persistence
 Pure business logic without ORM dependencies.
 Implements DDD principles with rich domain models and business rules.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,37 +16,41 @@ from uuid import uuid4
 
 class InvoiceStatus(Enum):
     """Invoice status enumeration following business rules."""
-    DRAFT = 'draft'
-    PENDING = 'pending'
-    PAID = 'paid'
-    CANCELLED = 'cancelled'
-    REFUNDED = 'refunded'
+
+    DRAFT = "draft"
+    PENDING = "pending"
+    PAID = "paid"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
 
 
 class PaymentMethod(Enum):
     """Payment method enumeration."""
-    CASH = 'cash'
-    CREDIT_CARD = 'credit_card'
-    DEBIT_CARD = 'debit_card'
-    BANK_TRANSFER = 'bank_transfer'
-    DIGITAL_WALLET = 'digital_wallet'
-    CHECK = 'check'
+
+    CASH = "cash"
+    CREDIT_CARD = "credit_card"
+    DEBIT_CARD = "debit_card"
+    BANK_TRANSFER = "bank_transfer"
+    DIGITAL_WALLET = "digital_wallet"
+    CHECK = "check"
 
 
 class CustomerSegment(Enum):
     """Customer segmentation for business intelligence."""
-    VIP = 'vip'
-    PREMIUM = 'premium'
-    REGULAR = 'regular'
-    NEW = 'new'
-    DORMANT = 'dormant'
+
+    VIP = "vip"
+    PREMIUM = "premium"
+    REGULAR = "regular"
+    NEW = "new"
+    DORMANT = "dormant"
 
 
 @dataclass
 class Money:
     """Value object for monetary amounts with currency handling."""
+
     amount: Decimal
-    currency: str = 'GBP'
+    currency: str = "GBP"
 
     def __post_init__(self):
         """Validate monetary amount."""
@@ -72,7 +77,7 @@ class Money:
 
     def is_zero(self) -> bool:
         """Check if amount is zero."""
-        return self.amount == Decimal('0')
+        return self.amount == Decimal("0")
 
     def __str__(self) -> str:
         return f"{self.amount:.2f} {self.currency}"
@@ -81,13 +86,14 @@ class Money:
 @dataclass
 class InvoiceLine:
     """Invoice line item - contains product and pricing details."""
+
     line_id: str | None = None
-    product_id: str = ''
-    product_description: str = ''
+    product_id: str = ""
+    product_description: str = ""
     quantity: int = 0
-    unit_price: Money = field(default_factory=lambda: Money(Decimal('0')))
-    discount_percentage: Decimal = Decimal('0')
-    tax_rate: Decimal = Decimal('0')
+    unit_price: Money = field(default_factory=lambda: Money(Decimal("0")))
+    discount_percentage: Decimal = Decimal("0")
+    tax_rate: Decimal = Decimal("0")
 
     def __post_init__(self):
         """Generate line ID if not provided and validate."""
@@ -123,15 +129,15 @@ class InvoiceLine:
     def validate(self) -> None:
         """Validate business rules for invoice line."""
         if self.quantity <= 0:
-            raise ValueError('Quantity must be positive')
+            raise ValueError("Quantity must be positive")
         if self.unit_price.amount <= 0:
-            raise ValueError('Unit price must be positive')
-        if not (Decimal('0') <= self.discount_percentage <= Decimal('100')):
-            raise ValueError('Discount percentage must be between 0 and 100')
+            raise ValueError("Unit price must be positive")
+        if not (Decimal("0") <= self.discount_percentage <= Decimal("100")):
+            raise ValueError("Discount percentage must be between 0 and 100")
         if self.tax_rate < 0:
-            raise ValueError('Tax rate cannot be negative')
+            raise ValueError("Tax rate cannot be negative")
         if not self.product_id:
-            raise ValueError('Product ID is required')
+            raise ValueError("Product ID is required")
 
     def apply_bulk_discount(self, threshold_quantity: int, discount_rate: Decimal) -> None:
         """Apply bulk discount if quantity meets threshold."""
@@ -144,7 +150,7 @@ class InvoiceLine:
             raise ValueError("Cost and price currencies must match")
 
         if self.unit_price.amount <= cost_per_unit.amount:
-            return Decimal('0')
+            return Decimal("0")
 
         profit = self.unit_price.subtract(cost_per_unit)
         return (profit.amount / self.unit_price.amount) * 100
@@ -153,10 +159,11 @@ class InvoiceLine:
 @dataclass
 class Invoice:
     """Invoice aggregate root - contains all invoice data and business rules."""
+
     invoice_id: str | None = None
-    invoice_number: str = ''
-    customer_id: str = ''
-    store_id: str = ''
+    invoice_number: str = ""
+    customer_id: str = ""
+    store_id: str = ""
     invoice_date: date = field(default_factory=date.today)
     due_date: date | None = None
     status: InvoiceStatus = InvoiceStatus.DRAFT
@@ -173,6 +180,7 @@ class Invoice:
         if not self.due_date:
             # Default due date is 30 days from invoice date
             from datetime import timedelta
+
             self.due_date = self.invoice_date + timedelta(days=30)
         self.validate()
 
@@ -180,7 +188,7 @@ class Invoice:
     def subtotal(self) -> Money:
         """Calculate invoice subtotal (before discounts and tax)."""
         if not self.lines:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = self.lines[0].line_amount
         for line in self.lines[1:]:
@@ -191,7 +199,7 @@ class Invoice:
     def total_discount(self) -> Money:
         """Calculate total discount amount."""
         if not self.lines:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = self.lines[0].discount_amount
         for line in self.lines[1:]:
@@ -202,7 +210,7 @@ class Invoice:
     def total_tax(self) -> Money:
         """Calculate total tax amount."""
         if not self.lines:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = self.lines[0].tax_amount
         for line in self.lines[1:]:
@@ -213,7 +221,7 @@ class Invoice:
     def total_amount(self) -> Money:
         """Calculate total invoice amount (final amount)."""
         if not self.lines:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = self.lines[0].net_amount
         for line in self.lines[1:]:
@@ -228,13 +236,12 @@ class Invoice:
     @property
     def is_overdue(self) -> bool:
         """Check if invoice is overdue."""
-        return (self.status in [InvoiceStatus.PENDING] and
-                self.due_date < date.today())
+        return self.status in [InvoiceStatus.PENDING] and self.due_date < date.today()
 
     @property
     def is_high_value(self) -> bool:
         """Check if this is a high-value invoice."""
-        return self.total_amount.amount >= Decimal('1000')
+        return self.total_amount.amount >= Decimal("1000")
 
     def add_line(self, line: InvoiceLine) -> None:
         """Add line item to invoice with validation."""
@@ -285,7 +292,7 @@ class Invoice:
         if self.status not in [InvoiceStatus.DRAFT]:
             raise ValueError(f"Cannot modify invoice in {self.status.value} status")
 
-        if not (Decimal('0') <= discount_percentage <= Decimal('50')):
+        if not (Decimal("0") <= discount_percentage <= Decimal("50")):
             raise ValueError("Invoice discount must be between 0% and 50%")
 
         for line in self.lines:
@@ -373,47 +380,49 @@ class Invoice:
     def to_summary_dict(self) -> dict[str, Any]:
         """Convert to summary dictionary for analytics."""
         return {
-            'invoice_id': self.invoice_id,
-            'invoice_number': self.invoice_number,
-            'customer_id': self.customer_id,
-            'store_id': self.store_id,
-            'invoice_date': self.invoice_date.isoformat(),
-            'due_date': self.due_date.isoformat() if self.due_date else None,
-            'status': self.status.value,
-            'payment_method': self.payment_method.value if self.payment_method else None,
-            'line_count': self.line_count,
-            'subtotal': float(self.subtotal.amount),
-            'total_discount': float(self.total_discount.amount),
-            'total_tax': float(self.total_tax.amount),
-            'total_amount': float(self.total_amount.amount),
-            'currency': self.total_amount.currency,
-            'is_high_value': self.is_high_value,
-            'is_overdue': self.is_overdue,
-            'aging_days': self.calculate_aging_days(),
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            "invoice_id": self.invoice_id,
+            "invoice_number": self.invoice_number,
+            "customer_id": self.customer_id,
+            "store_id": self.store_id,
+            "invoice_date": self.invoice_date.isoformat(),
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "status": self.status.value,
+            "payment_method": self.payment_method.value if self.payment_method else None,
+            "line_count": self.line_count,
+            "subtotal": float(self.subtotal.amount),
+            "total_discount": float(self.total_discount.amount),
+            "total_tax": float(self.total_tax.amount),
+            "total_amount": float(self.total_amount.amount),
+            "currency": self.total_amount.currency,
+            "is_high_value": self.is_high_value,
+            "is_overdue": self.is_overdue,
+            "aging_days": self.calculate_aging_days(),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
         }
 
 
 @dataclass
 class SalesAggregate:
     """Domain service for sales calculations and analytics."""
+
     invoices: list[Invoice]
 
-    def total_revenue_by_period(self, start_date: date, end_date: date,
-                               statuses: list[InvoiceStatus] | None = None) -> Money:
+    def total_revenue_by_period(
+        self, start_date: date, end_date: date, statuses: list[InvoiceStatus] | None = None
+    ) -> Money:
         """Calculate total revenue for a specific period."""
         if not statuses:
             statuses = [InvoiceStatus.PAID]
 
         filtered_invoices = [
-            inv for inv in self.invoices
-            if (start_date <= inv.invoice_date <= end_date and
-                inv.status in statuses)
+            inv
+            for inv in self.invoices
+            if (start_date <= inv.invoice_date <= end_date and inv.status in statuses)
         ]
 
         if not filtered_invoices:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = filtered_invoices[0].total_amount
         for inv in filtered_invoices[1:]:
@@ -424,13 +433,13 @@ class SalesAggregate:
     def revenue_by_customer(self, customer_id: str) -> Money:
         """Calculate total revenue for a specific customer."""
         customer_invoices = [
-            inv for inv in self.invoices
-            if (inv.customer_id == customer_id and
-                inv.status == InvoiceStatus.PAID)
+            inv
+            for inv in self.invoices
+            if (inv.customer_id == customer_id and inv.status == InvoiceStatus.PAID)
         ]
 
         if not customer_invoices:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = customer_invoices[0].total_amount
         for inv in customer_invoices[1:]:
@@ -441,13 +450,13 @@ class SalesAggregate:
     def revenue_by_store(self, store_id: str) -> Money:
         """Calculate total revenue for a specific store."""
         store_invoices = [
-            inv for inv in self.invoices
-            if (inv.store_id == store_id and
-                inv.status == InvoiceStatus.PAID)
+            inv
+            for inv in self.invoices
+            if (inv.store_id == store_id and inv.status == InvoiceStatus.PAID)
         ]
 
         if not store_invoices:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
         total = store_invoices[0].total_amount
         for inv in store_invoices[1:]:
@@ -460,11 +469,9 @@ class SalesAggregate:
         paid_invoices = [inv for inv in self.invoices if inv.status == InvoiceStatus.PAID]
 
         if not paid_invoices:
-            return Money(Decimal('0'))
+            return Money(Decimal("0"))
 
-        total_revenue = self.total_revenue_by_period(
-            date.min, date.max, [InvoiceStatus.PAID]
-        )
+        total_revenue = self.total_revenue_by_period(date.min, date.max, [InvoiceStatus.PAID])
 
         average_amount = total_revenue.amount / len(paid_invoices)
         return Money(average_amount, total_revenue.currency)
@@ -485,7 +492,7 @@ class SalesAggregate:
     def high_value_invoices(self, threshold: Decimal | None = None) -> list[Invoice]:
         """Get all high-value invoices."""
         if not threshold:
-            threshold = Decimal('1000')
+            threshold = Decimal("1000")
 
         return [inv for inv in self.invoices if inv.total_amount.amount >= threshold]
 
@@ -495,12 +502,12 @@ class SalesAggregate:
 
         if not customer_invoices:
             return {
-                'total_revenue': 0,
-                'invoice_count': 0,
-                'average_invoice_value': 0,
-                'first_purchase_date': None,
-                'last_purchase_date': None,
-                'purchase_frequency_days': 0
+                "total_revenue": 0,
+                "invoice_count": 0,
+                "average_invoice_value": 0,
+                "first_purchase_date": None,
+                "last_purchase_date": None,
+                "purchase_frequency_days": 0,
             }
 
         paid_invoices = [inv for inv in customer_invoices if inv.status == InvoiceStatus.PAID]
@@ -513,22 +520,26 @@ class SalesAggregate:
         frequency = purchase_span_days / len(paid_invoices) if len(paid_invoices) > 1 else 0
 
         return {
-            'customer_id': customer_id,
-            'total_revenue': float(total_revenue.amount),
-            'currency': total_revenue.currency,
-            'invoice_count': len(paid_invoices),
-            'average_invoice_value': float(total_revenue.amount / len(paid_invoices)) if paid_invoices else 0,
-            'first_purchase_date': first_purchase.isoformat(),
-            'last_purchase_date': last_purchase.isoformat(),
-            'purchase_frequency_days': frequency,
-            'total_transactions': len(customer_invoices)
+            "customer_id": customer_id,
+            "total_revenue": float(total_revenue.amount),
+            "currency": total_revenue.currency,
+            "invoice_count": len(paid_invoices),
+            "average_invoice_value": float(total_revenue.amount / len(paid_invoices))
+            if paid_invoices
+            else 0,
+            "first_purchase_date": first_purchase.isoformat(),
+            "last_purchase_date": last_purchase.isoformat(),
+            "purchase_frequency_days": frequency,
+            "total_transactions": len(customer_invoices),
         }
 
     def sales_performance_summary(self) -> dict[str, Any]:
         """Generate comprehensive sales performance summary."""
         all_invoices = len(self.invoices)
         paid_invoices = len([inv for inv in self.invoices if inv.status == InvoiceStatus.PAID])
-        cancelled_invoices = len([inv for inv in self.invoices if inv.status == InvoiceStatus.CANCELLED])
+        cancelled_invoices = len(
+            [inv for inv in self.invoices if inv.status == InvoiceStatus.CANCELLED]
+        )
         overdue_count = len(self.overdue_invoices())
         high_value_count = len(self.high_value_invoices())
 
@@ -536,16 +547,16 @@ class SalesAggregate:
         avg_invoice = self.average_invoice_value()
 
         return {
-            'total_invoices': all_invoices,
-            'paid_invoices': paid_invoices,
-            'cancelled_invoices': cancelled_invoices,
-            'overdue_invoices': overdue_count,
-            'high_value_invoices': high_value_count,
-            'conversion_rate': (paid_invoices / all_invoices * 100) if all_invoices > 0 else 0,
-            'total_revenue': float(total_revenue.amount),
-            'average_invoice_value': float(avg_invoice.amount),
-            'currency': total_revenue.currency,
-            'payment_methods': self.payment_method_distribution()
+            "total_invoices": all_invoices,
+            "paid_invoices": paid_invoices,
+            "cancelled_invoices": cancelled_invoices,
+            "overdue_invoices": overdue_count,
+            "high_value_invoices": high_value_count,
+            "conversion_rate": (paid_invoices / all_invoices * 100) if all_invoices > 0 else 0,
+            "total_revenue": float(total_revenue.amount),
+            "average_invoice_value": float(avg_invoice.amount),
+            "currency": total_revenue.currency,
+            "payment_methods": self.payment_method_distribution(),
         }
 
 

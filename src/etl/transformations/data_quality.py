@@ -2,6 +2,7 @@
 Advanced Data Quality and Validation Framework
 Provides comprehensive data quality checks, profiling, and automated remediation
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ logger = get_logger(__name__)
 
 class QualityIssueType(Enum):
     """Types of data quality issues."""
+
     MISSING_VALUES = "missing_values"
     DUPLICATES = "duplicates"
     OUTLIERS = "outliers"
@@ -31,6 +33,7 @@ class QualityIssueType(Enum):
 @dataclass
 class QualityIssue:
     """Represents a data quality issue."""
+
     type: QualityIssueType
     column: str
     description: str
@@ -44,6 +47,7 @@ class QualityIssue:
 @dataclass
 class DataProfile:
     """Comprehensive data profile."""
+
     total_rows: int
     total_columns: int
     missing_values_count: int
@@ -65,16 +69,16 @@ class DataQualityValidator:
     def _get_default_config(self) -> dict[str, Any]:
         """Get default quality validation configuration."""
         return {
-            'missing_value_threshold': 0.1,  # 10%
-            'duplicate_threshold': 0.05,     # 5%
-            'outlier_method': 'iqr',         # 'iqr' or 'zscore'
-            'outlier_threshold': 1.5,
-            'business_rules': {
-                'quantity': {'min': 0, 'max': 10000},
-                'unit_price': {'min': 0, 'max': 1000},
-                'customer_id': {'not_null': True},
-                'invoice_no': {'not_null': True, 'pattern': r'^[A-Z0-9]+$'}
-            }
+            "missing_value_threshold": 0.1,  # 10%
+            "duplicate_threshold": 0.05,  # 5%
+            "outlier_method": "iqr",  # 'iqr' or 'zscore'
+            "outlier_threshold": 1.5,
+            "business_rules": {
+                "quantity": {"min": 0, "max": 10000},
+                "unit_price": {"min": 0, "max": 1000},
+                "customer_id": {"not_null": True},
+                "invoice_no": {"not_null": True, "pattern": r"^[A-Z0-9]+$"},
+            },
         }
 
     def profile_data(self, df: pd.DataFrame) -> DataProfile:
@@ -116,87 +120,97 @@ class DataQualityValidator:
             duplicate_percentage=duplicate_percentage,
             column_profiles=column_profiles,
             quality_score=quality_score,
-            issues=self.quality_issues
+            issues=self.quality_issues,
         )
 
     def _profile_column(self, series: pd.Series) -> dict[str, Any]:
         """Profile individual column."""
         profile = {
-            'dtype': str(series.dtype),
-            'missing_count': series.isnull().sum(),
-            'missing_percentage': (series.isnull().sum() / len(series)) * 100,
-            'unique_count': series.nunique(),
-            'unique_percentage': (series.nunique() / len(series)) * 100,
+            "dtype": str(series.dtype),
+            "missing_count": series.isnull().sum(),
+            "missing_percentage": (series.isnull().sum() / len(series)) * 100,
+            "unique_count": series.nunique(),
+            "unique_percentage": (series.nunique() / len(series)) * 100,
         }
 
-        if series.dtype in ['int64', 'float64']:
-            profile.update({
-                'min': series.min(),
-                'max': series.max(),
-                'mean': series.mean(),
-                'median': series.median(),
-                'std': series.std(),
-                'skewness': series.skew(),
-                'kurtosis': series.kurtosis()
-            })
+        if series.dtype in ["int64", "float64"]:
+            profile.update(
+                {
+                    "min": series.min(),
+                    "max": series.max(),
+                    "mean": series.mean(),
+                    "median": series.median(),
+                    "std": series.std(),
+                    "skewness": series.skew(),
+                    "kurtosis": series.kurtosis(),
+                }
+            )
 
-        if series.dtype == 'object':
-            profile.update({
-                'avg_length': series.astype(str).str.len().mean(),
-                'most_common': series.value_counts().head(5).to_dict()
-            })
+        if series.dtype == "object":
+            profile.update(
+                {
+                    "avg_length": series.astype(str).str.len().mean(),
+                    "most_common": series.value_counts().head(5).to_dict(),
+                }
+            )
 
         if pd.api.types.is_datetime64_any_dtype(series):
-            profile.update({
-                'min_date': series.min(),
-                'max_date': series.max(),
-                'date_range_days': (series.max() - series.min()).days
-            })
+            profile.update(
+                {
+                    "min_date": series.min(),
+                    "max_date": series.max(),
+                    "date_range_days": (series.max() - series.min()).days,
+                }
+            )
 
         return profile
 
     def _validate_missing_values(self, df: pd.DataFrame):
         """Validate missing values."""
-        threshold = self.config['missing_value_threshold']
+        threshold = self.config["missing_value_threshold"]
 
         for col in df.columns:
             missing_count = df[col].isnull().sum()
             missing_percentage = (missing_count / len(df)) * 100
 
             if missing_percentage > threshold * 100:
-                severity = 'critical' if missing_percentage > 50 else 'high'
-                self.quality_issues.append(QualityIssue(
-                    type=QualityIssueType.MISSING_VALUES,
-                    column=col,
-                    description=f"High missing value rate: {missing_percentage:.2f}%",
-                    severity=severity,
-                    count=missing_count,
-                    percentage=missing_percentage,
-                    sample_values=[],
-                    recommendation=f"Consider imputation or removal of column {col}"
-                ))
+                severity = "critical" if missing_percentage > 50 else "high"
+                self.quality_issues.append(
+                    QualityIssue(
+                        type=QualityIssueType.MISSING_VALUES,
+                        column=col,
+                        description=f"High missing value rate: {missing_percentage:.2f}%",
+                        severity=severity,
+                        count=missing_count,
+                        percentage=missing_percentage,
+                        sample_values=[],
+                        recommendation=f"Consider imputation or removal of column {col}",
+                    )
+                )
 
     def _validate_duplicates(self, df: pd.DataFrame):
         """Validate duplicate records."""
-        threshold = self.config['duplicate_threshold']
+        threshold = self.config["duplicate_threshold"]
 
         duplicate_count = df.duplicated().sum()
         duplicate_percentage = (duplicate_count / len(df)) * 100
 
         if duplicate_percentage > threshold * 100:
-            severity = 'high' if duplicate_percentage > 10 else 'medium'
-            sample_duplicates = df[df.duplicated()].head(3).to_dict('records')
+            severity = "high" if duplicate_percentage > 10 else "medium"
+            sample_duplicates = df[df.duplicated()].head(3).to_dict("records")
 
-            self.quality_issues.append(QualityIssue(
-                type=QualityIssueType.DUPLICATES,
-                column='all',
-                description=f"High duplicate rate: {duplicate_percentage:.2f}%",
-                severity=severity,
-                count=duplicate_count,
-                percentage=duplicate_percentage,
-                sample_values=sample_duplicates,
-                recommendation="Review and remove duplicate records"
-            ))
+            self.quality_issues.append(
+                QualityIssue(
+                    type=QualityIssueType.DUPLICATES,
+                    column="all",
+                    description=f"High duplicate rate: {duplicate_percentage:.2f}%",
+                    severity=severity,
+                    count=duplicate_count,
+                    percentage=duplicate_percentage,
+                    sample_values=sample_duplicates,
+                    recommendation="Review and remove duplicate records",
+                )
+            )
 
     def _validate_outliers(self, df: pd.DataFrame):
         """Validate outliers in numeric columns."""
@@ -208,131 +222,144 @@ class DataQualityValidator:
             outlier_percentage = (outlier_count / len(df)) * 100
 
             if outlier_percentage > 5:  # More than 5% outliers
-                severity = 'medium' if outlier_percentage < 15 else 'high'
+                severity = "medium" if outlier_percentage < 15 else "high"
                 sample_outliers = outliers.head(5).tolist()
 
-                self.quality_issues.append(QualityIssue(
-                    type=QualityIssueType.OUTLIERS,
-                    column=col,
-                    description=f"High outlier rate: {outlier_percentage:.2f}%",
-                    severity=severity,
-                    count=outlier_count,
-                    percentage=outlier_percentage,
-                    sample_values=sample_outliers,
-                    recommendation=f"Review outliers in {col} - may indicate data entry errors"
-                ))
+                self.quality_issues.append(
+                    QualityIssue(
+                        type=QualityIssueType.OUTLIERS,
+                        column=col,
+                        description=f"High outlier rate: {outlier_percentage:.2f}%",
+                        severity=severity,
+                        count=outlier_count,
+                        percentage=outlier_percentage,
+                        sample_values=sample_outliers,
+                        recommendation=f"Review outliers in {col} - may indicate data entry errors",
+                    )
+                )
 
     def _detect_outliers(self, series: pd.Series) -> pd.Series:
         """Detect outliers using IQR method."""
-        if self.config['outlier_method'] == 'iqr':
+        if self.config["outlier_method"] == "iqr":
             Q1 = series.quantile(0.25)
             Q3 = series.quantile(0.75)
             IQR = Q3 - Q1
-            threshold = self.config['outlier_threshold']
+            threshold = self.config["outlier_threshold"]
 
             lower_bound = Q1 - threshold * IQR
             upper_bound = Q3 + threshold * IQR
 
             return series[(series < lower_bound) | (series > upper_bound)]
 
-        elif self.config['outlier_method'] == 'zscore':
+        elif self.config["outlier_method"] == "zscore":
             z_scores = np.abs((series - series.mean()) / series.std())
-            threshold = self.config['outlier_threshold']
+            threshold = self.config["outlier_threshold"]
             return series[z_scores > threshold]
 
         return pd.Series([])
 
     def _validate_business_rules(self, df: pd.DataFrame):
         """Validate business rules."""
-        business_rules = self.config.get('business_rules', {})
+        business_rules = self.config.get("business_rules", {})
 
         for col, rules in business_rules.items():
             if col not in df.columns:
                 continue
 
             # Null value validation
-            if rules.get('not_null', False):
+            if rules.get("not_null", False):
                 null_count = df[col].isnull().sum()
                 if null_count > 0:
-                    self.quality_issues.append(QualityIssue(
-                        type=QualityIssueType.BUSINESS_RULE_VIOLATION,
-                        column=col,
-                        description=f"Column {col} should not have null values",
-                        severity='critical',
-                        count=null_count,
-                        percentage=(null_count / len(df)) * 100,
-                        sample_values=[],
-                        recommendation=f"Ensure {col} is always populated"
-                    ))
+                    self.quality_issues.append(
+                        QualityIssue(
+                            type=QualityIssueType.BUSINESS_RULE_VIOLATION,
+                            column=col,
+                            description=f"Column {col} should not have null values",
+                            severity="critical",
+                            count=null_count,
+                            percentage=(null_count / len(df)) * 100,
+                            sample_values=[],
+                            recommendation=f"Ensure {col} is always populated",
+                        )
+                    )
 
             # Numeric range validation
-            if 'min' in rules and col in df.select_dtypes(include=[np.number]).columns:
-                invalid_count = (df[col] < rules['min']).sum()
+            if "min" in rules and col in df.select_dtypes(include=[np.number]).columns:
+                invalid_count = (df[col] < rules["min"]).sum()
                 if invalid_count > 0:
-                    self.quality_issues.append(QualityIssue(
-                        type=QualityIssueType.BUSINESS_RULE_VIOLATION,
-                        column=col,
-                        description=f"Values in {col} below minimum {rules['min']}",
-                        severity='high',
-                        count=invalid_count,
-                        percentage=(invalid_count / len(df)) * 100,
-                        sample_values=df[df[col] < rules['min']][col].head(5).tolist(),
-                        recommendation=f"Review values in {col} below {rules['min']}"
-                    ))
+                    self.quality_issues.append(
+                        QualityIssue(
+                            type=QualityIssueType.BUSINESS_RULE_VIOLATION,
+                            column=col,
+                            description=f"Values in {col} below minimum {rules['min']}",
+                            severity="high",
+                            count=invalid_count,
+                            percentage=(invalid_count / len(df)) * 100,
+                            sample_values=df[df[col] < rules["min"]][col].head(5).tolist(),
+                            recommendation=f"Review values in {col} below {rules['min']}",
+                        )
+                    )
 
-            if 'max' in rules and col in df.select_dtypes(include=[np.number]).columns:
-                invalid_count = (df[col] > rules['max']).sum()
+            if "max" in rules and col in df.select_dtypes(include=[np.number]).columns:
+                invalid_count = (df[col] > rules["max"]).sum()
                 if invalid_count > 0:
-                    self.quality_issues.append(QualityIssue(
-                        type=QualityIssueType.BUSINESS_RULE_VIOLATION,
-                        column=col,
-                        description=f"Values in {col} above maximum {rules['max']}",
-                        severity='high',
-                        count=invalid_count,
-                        percentage=(invalid_count / len(df)) * 100,
-                        sample_values=df[df[col] > rules['max']][col].head(5).tolist(),
-                        recommendation=f"Review values in {col} above {rules['max']}"
-                    ))
+                    self.quality_issues.append(
+                        QualityIssue(
+                            type=QualityIssueType.BUSINESS_RULE_VIOLATION,
+                            column=col,
+                            description=f"Values in {col} above maximum {rules['max']}",
+                            severity="high",
+                            count=invalid_count,
+                            percentage=(invalid_count / len(df)) * 100,
+                            sample_values=df[df[col] > rules["max"]][col].head(5).tolist(),
+                            recommendation=f"Review values in {col} above {rules['max']}",
+                        )
+                    )
 
             # Pattern validation
-            if 'pattern' in rules and col in df.select_dtypes(include=['object']).columns:
+            if "pattern" in rules and col in df.select_dtypes(include=["object"]).columns:
                 import re
-                pattern = re.compile(rules['pattern'])
+
+                pattern = re.compile(rules["pattern"])
                 invalid_mask = ~df[col].astype(str).str.match(pattern, na=False)
                 invalid_count = invalid_mask.sum()
 
                 if invalid_count > 0:
-                    self.quality_issues.append(QualityIssue(
-                        type=QualityIssueType.BUSINESS_RULE_VIOLATION,
-                        column=col,
-                        description=f"Values in {col} don't match pattern {rules['pattern']}",
-                        severity='medium',
-                        count=invalid_count,
-                        percentage=(invalid_count / len(df)) * 100,
-                        sample_values=df[invalid_mask][col].head(5).tolist(),
-                        recommendation=f"Standardize format for {col}"
-                    ))
+                    self.quality_issues.append(
+                        QualityIssue(
+                            type=QualityIssueType.BUSINESS_RULE_VIOLATION,
+                            column=col,
+                            description=f"Values in {col} don't match pattern {rules['pattern']}",
+                            severity="medium",
+                            count=invalid_count,
+                            percentage=(invalid_count / len(df)) * 100,
+                            sample_values=df[invalid_mask][col].head(5).tolist(),
+                            recommendation=f"Standardize format for {col}",
+                        )
+                    )
 
     def _validate_data_consistency(self, df: pd.DataFrame):
         """Validate data consistency across columns."""
         # Example: Check if invoice_timestamp is consistent with derived date fields
-        if 'invoice_timestamp' in df.columns and 'year' in df.columns:
+        if "invoice_timestamp" in df.columns and "year" in df.columns:
             df_temp = df.copy()
-            df_temp['extracted_year'] = pd.to_datetime(df_temp['invoice_timestamp']).dt.year
-            inconsistent = df_temp['year'] != df_temp['extracted_year']
+            df_temp["extracted_year"] = pd.to_datetime(df_temp["invoice_timestamp"]).dt.year
+            inconsistent = df_temp["year"] != df_temp["extracted_year"]
             inconsistent_count = inconsistent.sum()
 
             if inconsistent_count > 0:
-                self.quality_issues.append(QualityIssue(
-                    type=QualityIssueType.INCONSISTENT_DATA,
-                    column='year',
-                    description="Year field inconsistent with invoice_timestamp",
-                    severity='high',
-                    count=inconsistent_count,
-                    percentage=(inconsistent_count / len(df)) * 100,
-                    sample_values=[],
-                    recommendation="Recalculate derived date fields from source timestamp"
-                ))
+                self.quality_issues.append(
+                    QualityIssue(
+                        type=QualityIssueType.INCONSISTENT_DATA,
+                        column="year",
+                        description="Year field inconsistent with invoice_timestamp",
+                        severity="high",
+                        count=inconsistent_count,
+                        percentage=(inconsistent_count / len(df)) * 100,
+                        sample_values=[],
+                        recommendation="Recalculate derived date fields from source timestamp",
+                    )
+                )
 
     def _calculate_quality_score(self, df: pd.DataFrame) -> float:
         """Calculate overall data quality score (0-100)."""
@@ -345,15 +372,10 @@ class DataQualityValidator:
             QualityIssueType.OUTLIERS: 10,
             QualityIssueType.BUSINESS_RULE_VIOLATION: 25,
             QualityIssueType.INCONSISTENT_DATA: 20,
-            QualityIssueType.REFERENTIAL_INTEGRITY: 15
+            QualityIssueType.REFERENTIAL_INTEGRITY: 15,
         }
 
-        severity_multipliers = {
-            'critical': 1.0,
-            'high': 0.7,
-            'medium': 0.4,
-            'low': 0.2
-        }
+        severity_multipliers = {"critical": 1.0, "high": 0.7, "medium": 0.4, "low": 0.2}
 
         for issue in self.quality_issues:
             deduction = deductions.get(issue.type, 5)
@@ -383,16 +405,20 @@ class DataQualityValidator:
         for col in df_clean.columns:
             missing_count = df_clean[col].isnull().sum()
             if missing_count > 0:
-                if df_clean[col].dtype in ['int64', 'float64']:
+                if df_clean[col].dtype in ["int64", "float64"]:
                     # Fill numeric columns with median
                     df_clean[col] = df_clean[col].fillna(df_clean[col].median())
-                    remediation_log.append(f"Filled {missing_count} missing values in {col} with median")
-                elif df_clean[col].dtype == 'object':
+                    remediation_log.append(
+                        f"Filled {missing_count} missing values in {col} with median"
+                    )
+                elif df_clean[col].dtype == "object":
                     # Fill categorical columns with mode
                     mode_value = df_clean[col].mode()
                     if not mode_value.empty:
                         df_clean[col] = df_clean[col].fillna(mode_value[0])
-                        remediation_log.append(f"Filled {missing_count} missing values in {col} with mode")
+                        remediation_log.append(
+                            f"Filled {missing_count} missing values in {col} with mode"
+                        )
 
         # Cap outliers (for numeric columns)
         numeric_cols = df_clean.select_dtypes(include=[np.number]).columns
@@ -418,34 +444,34 @@ class DataQualityValidator:
     def generate_quality_report(self, profile: DataProfile) -> dict[str, Any]:
         """Generate comprehensive quality report."""
         report = {
-            'timestamp': datetime.now().isoformat(),
-            'summary': {
-                'total_rows': profile.total_rows,
-                'total_columns': profile.total_columns,
-                'quality_score': profile.quality_score,
-                'overall_status': self._get_quality_status(profile.quality_score)
+            "timestamp": datetime.now().isoformat(),
+            "summary": {
+                "total_rows": profile.total_rows,
+                "total_columns": profile.total_columns,
+                "quality_score": profile.quality_score,
+                "overall_status": self._get_quality_status(profile.quality_score),
             },
-            'missing_data': {
-                'total_missing_values': profile.missing_values_count,
-                'missing_percentage': profile.missing_values_percentage
+            "missing_data": {
+                "total_missing_values": profile.missing_values_count,
+                "missing_percentage": profile.missing_values_percentage,
             },
-            'duplicates': {
-                'duplicate_rows': profile.duplicate_rows,
-                'duplicate_percentage': profile.duplicate_percentage
+            "duplicates": {
+                "duplicate_rows": profile.duplicate_rows,
+                "duplicate_percentage": profile.duplicate_percentage,
             },
-            'issues': [
+            "issues": [
                 {
-                    'type': issue.type.value,
-                    'column': issue.column,
-                    'description': issue.description,
-                    'severity': issue.severity,
-                    'count': issue.count,
-                    'percentage': issue.percentage,
-                    'recommendation': issue.recommendation
+                    "type": issue.type.value,
+                    "column": issue.column,
+                    "description": issue.description,
+                    "severity": issue.severity,
+                    "count": issue.count,
+                    "percentage": issue.percentage,
+                    "recommendation": issue.recommendation,
                 }
                 for issue in profile.issues
             ],
-            'column_profiles': profile.column_profiles
+            "column_profiles": profile.column_profiles,
         }
 
         return report
@@ -453,15 +479,15 @@ class DataQualityValidator:
     def _get_quality_status(self, score: float) -> str:
         """Get quality status based on score."""
         if score >= 90:
-            return 'Excellent'
+            return "Excellent"
         elif score >= 80:
-            return 'Good'
+            return "Good"
         elif score >= 70:
-            return 'Fair'
+            return "Fair"
         elif score >= 60:
-            return 'Poor'
+            return "Poor"
         else:
-            return 'Critical'
+            return "Critical"
 
 
 def validate_data_quality(df: pd.DataFrame, config: dict[str, Any] | None = None) -> DataProfile:

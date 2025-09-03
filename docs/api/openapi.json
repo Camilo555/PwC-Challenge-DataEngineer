@@ -1,0 +1,1208 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "PwC Data Engineering Challenge - Enterprise API",
+    "version": "4.0.0",
+    "description": "Enterprise-grade high-performance REST API",
+    "contact": {
+      "name": "PwC Challenge API Support",
+      "email": "api-support@pwc-challenge.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.pwc-challenge.com",
+      "description": "Production"
+    },
+    {
+      "url": "https://staging-api.pwc-challenge.com",
+      "description": "Staging"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Development"
+    }
+  ],
+  "tags": [
+    {
+      "name": "API",
+      "description": "API related endpoints"
+    },
+    {
+      "name": "Search",
+      "description": "Search related endpoints"
+    }
+  ],
+  "paths": {
+    "/api/v1/limits": {
+      "get": {
+        "summary": "Get information about batch operation limits and constraints.",
+        "description": "",
+        "tags": [
+          "API"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/typesense": {
+      "get": {
+        "summary": "Vector search endpoint with mandatory filters.",
+        "description": "MANDATORY: At least one filter must be implemented per challenge requirements.\nAvailable filters:\n- country: Filter by specific country\n- price_min/price_max: Filter by price range",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter q"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter limit"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter country"
+          },
+          {
+            "name": "price_min",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter price_min"
+          },
+          {
+            "name": "price_max",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter price_max"
+          }
+        ]
+      }
+    },
+    "/api/v1/enhanced": {
+      "get": {
+        "summary": "Enhanced vector search with comprehensive filtering - REQUIREMENT FULFILLED.",
+        "description": "This endpoint implements multiple filter types as required:\n- Category filtering\n- Price range filtering\n- Country filtering\n- Date range filtering\n- Customer segment filtering",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter q"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter category"
+          },
+          {
+            "name": "price_min",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter price_min"
+          },
+          {
+            "name": "price_max",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter price_max"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter country"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter date_from"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter date_to"
+          },
+          {
+            "name": "customer_segment",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter customer_segment"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter per_page"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter page"
+          }
+        ]
+      }
+    },
+    "/api/v1/faceted": {
+      "get": {
+        "summary": "Faceted search to get available filter options.",
+        "description": "Returns facet counts for dynamic filter UI generation.",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter q"
+          },
+          {
+            "name": "facet_fields",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter facet_fields"
+          },
+          {
+            "name": "max_facet_values",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter max_facet_values"
+          }
+        ]
+      }
+    },
+    "/api/v1/geographic": {
+      "get": {
+        "summary": "Geographic search with country-based filtering.",
+        "description": "Specialized endpoint for location-based searches.",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter q"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter country"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter per_page"
+          }
+        ]
+      }
+    },
+    "/api/v1/advanced": {
+      "post": {
+        "summary": "Advanced search with complex filtering.",
+        "description": "Accepts JSON body with complex filter structures:\n{\n    \"total_range\": {\"min\": 10, \"max\": 1000},\n    \"date_range\": {\"from\": \"2023-01-01\", \"to\": \"2023-12-31\"},\n    \"categories\": [\"Electronics\", \"Books\"],\n    \"countries\": [\"United Kingdom\", \"Germany\"]\n}",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter query"
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter filters"
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter sort_by"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter per_page"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Parameter page"
+          }
+        ]
+      }
+    },
+    "/api/v1/suggestions/{field}": {
+      "get": {
+        "summary": "Get filter suggestions for a specific field.",
+        "description": "Useful for autocomplete in search UIs.",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "field",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter field"
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Parameter query"
+          }
+        ]
+      }
+    },
+    "/api/v1/filters/available": {
+      "get": {
+        "summary": "Get information about available filters and their types.",
+        "description": "Returns metadata about what filters are supported.",
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SaleItem": {
+        "type": "object",
+        "description": "Schema for SaleItem",
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "description": "Field invoice_no"
+          },
+          "stock_code": {
+            "type": "string",
+            "description": "Field stock_code"
+          },
+          "description": {
+            "type": "string",
+            "description": "Field description"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Field quantity"
+          },
+          "invoice_date": {
+            "type": "string",
+            "description": "Field invoice_date"
+          },
+          "unit_price": {
+            "type": "number",
+            "description": "Field unit_price"
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "Field customer_id"
+          },
+          "country": {
+            "type": "string",
+            "description": "Field country"
+          },
+          "total": {
+            "type": "number",
+            "description": "Field total"
+          },
+          "total_str": {
+            "type": "string",
+            "description": "Field total_str"
+          }
+        }
+      },
+      "PaginatedSales": {
+        "type": "object",
+        "description": "Schema for PaginatedSales",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Field items"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Field total"
+          },
+          "page": {
+            "type": "integer",
+            "description": "Field page"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Field size"
+          }
+        }
+      },
+      "EnhancedSaleItem": {
+        "type": "object",
+        "description": "Schema for EnhancedSaleItem",
+        "properties": {
+          "sale_id": {
+            "type": "string",
+            "description": "Field sale_id"
+          },
+          "invoice_no": {
+            "type": "string",
+            "description": "Field invoice_no"
+          },
+          "stock_code": {
+            "type": "string",
+            "description": "Field stock_code"
+          },
+          "description": {
+            "type": "string",
+            "description": "Field description"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Field quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "description": "Field unit_price"
+          },
+          "total_amount": {
+            "type": "string",
+            "description": "Field total_amount"
+          },
+          "discount_amount": {
+            "type": "string",
+            "description": "Field discount_amount"
+          },
+          "tax_amount": {
+            "type": "string",
+            "description": "Field tax_amount"
+          },
+          "profit_amount": {
+            "type": "string",
+            "description": "Field profit_amount"
+          },
+          "margin_percentage": {
+            "type": "string",
+            "description": "Field margin_percentage"
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "Field customer_id"
+          },
+          "customer_segment": {
+            "type": "string",
+            "description": "Field customer_segment"
+          },
+          "customer_lifetime_value": {
+            "type": "string",
+            "description": "Field customer_lifetime_value"
+          },
+          "country": {
+            "type": "string",
+            "description": "Field country"
+          },
+          "country_code": {
+            "type": "string",
+            "description": "Field country_code"
+          },
+          "region": {
+            "type": "string",
+            "description": "Field region"
+          },
+          "continent": {
+            "type": "string",
+            "description": "Field continent"
+          },
+          "product_category": {
+            "type": "string",
+            "description": "Field product_category"
+          },
+          "product_brand": {
+            "type": "string",
+            "description": "Field product_brand"
+          },
+          "invoice_date": {
+            "type": "string",
+            "description": "Field invoice_date"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "description": "Field fiscal_year"
+          },
+          "fiscal_quarter": {
+            "type": "integer",
+            "description": "Field fiscal_quarter"
+          },
+          "is_weekend": {
+            "type": "boolean",
+            "description": "Field is_weekend"
+          },
+          "is_holiday": {
+            "type": "boolean",
+            "description": "Field is_holiday"
+          },
+          "revenue_per_unit": {
+            "type": "string",
+            "description": "Field revenue_per_unit"
+          },
+          "profitability_score": {
+            "type": "number",
+            "description": "Field profitability_score"
+          },
+          "customer_value_tier": {
+            "type": "string",
+            "description": "Field customer_value_tier"
+          }
+        }
+      },
+      "SalesAggregation": {
+        "type": "object",
+        "description": "Schema for SalesAggregation",
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "description": "Field dimension"
+          },
+          "dimension_value": {
+            "type": "string",
+            "description": "Field dimension_value"
+          },
+          "total_revenue": {
+            "type": "string",
+            "description": "Field total_revenue"
+          },
+          "total_quantity": {
+            "type": "integer",
+            "description": "Field total_quantity"
+          },
+          "transaction_count": {
+            "type": "integer",
+            "description": "Field transaction_count"
+          },
+          "unique_customers": {
+            "type": "integer",
+            "description": "Field unique_customers"
+          },
+          "avg_order_value": {
+            "type": "string",
+            "description": "Field avg_order_value"
+          },
+          "profit_margin": {
+            "type": "string",
+            "description": "Field profit_margin"
+          },
+          "growth_rate": {
+            "type": "number",
+            "description": "Field growth_rate"
+          }
+        }
+      },
+      "TimeSeriesPoint": {
+        "type": "object",
+        "description": "Schema for TimeSeriesPoint",
+        "properties": {
+          "period": {
+            "type": "string",
+            "description": "Field period"
+          },
+          "revenue": {
+            "type": "string",
+            "description": "Field revenue"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Field quantity"
+          },
+          "transactions": {
+            "type": "integer",
+            "description": "Field transactions"
+          },
+          "unique_customers": {
+            "type": "integer",
+            "description": "Field unique_customers"
+          },
+          "avg_order_value": {
+            "type": "string",
+            "description": "Field avg_order_value"
+          },
+          "cumulative_revenue": {
+            "type": "string",
+            "description": "Field cumulative_revenue"
+          },
+          "period_growth": {
+            "type": "number",
+            "description": "Field period_growth"
+          }
+        }
+      },
+      "EnhancedSalesAnalytics": {
+        "type": "object",
+        "description": "Schema for EnhancedSalesAnalytics",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "description": "Field summary"
+          },
+          "time_series": {
+            "type": "integer",
+            "description": "Field time_series"
+          },
+          "top_products": {
+            "type": "array",
+            "description": "Field top_products"
+          },
+          "top_customers": {
+            "type": "array",
+            "description": "Field top_customers"
+          },
+          "geographic_breakdown": {
+            "type": "array",
+            "description": "Field geographic_breakdown"
+          },
+          "category_performance": {
+            "type": "array",
+            "description": "Field category_performance"
+          },
+          "seasonal_insights": {
+            "type": "object",
+            "description": "Field seasonal_insights"
+          },
+          "forecasting": {
+            "type": "object",
+            "description": "Field forecasting"
+          }
+        }
+      },
+      "PaginatedEnhancedSales": {
+        "type": "object",
+        "description": "Schema for PaginatedEnhancedSales",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Field items"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Field total"
+          },
+          "page": {
+            "type": "integer",
+            "description": "Field page"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Field size"
+          },
+          "pages": {
+            "type": "integer",
+            "description": "Field pages"
+          },
+          "has_next": {
+            "type": "boolean",
+            "description": "Field has_next"
+          },
+          "has_previous": {
+            "type": "boolean",
+            "description": "Field has_previous"
+          },
+          "aggregations": {
+            "type": "object",
+            "description": "Field aggregations"
+          },
+          "filters_applied": {
+            "type": "object",
+            "description": "Field filters_applied"
+          },
+          "response_time_ms": {
+            "type": "number",
+            "description": "Field response_time_ms"
+          },
+          "data_freshness": {
+            "type": "string",
+            "description": "Field data_freshness"
+          },
+          "quality_score": {
+            "type": "number",
+            "description": "Field quality_score"
+          }
+        }
+      },
+      "SalesFiltersV2": {
+        "type": "object",
+        "description": "Schema for SalesFiltersV2",
+        "properties": {
+          "date_from": {
+            "type": "string",
+            "description": "Field date_from"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "Field date_to"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "description": "Field fiscal_year"
+          },
+          "fiscal_quarter": {
+            "type": "integer",
+            "description": "Field fiscal_quarter"
+          },
+          "countries": {
+            "type": "string",
+            "description": "Field countries"
+          },
+          "regions": {
+            "type": "string",
+            "description": "Field regions"
+          },
+          "continents": {
+            "type": "string",
+            "description": "Field continents"
+          },
+          "categories": {
+            "type": "string",
+            "description": "Field categories"
+          },
+          "brands": {
+            "type": "string",
+            "description": "Field brands"
+          },
+          "stock_codes": {
+            "type": "string",
+            "description": "Field stock_codes"
+          },
+          "customer_segments": {
+            "type": "string",
+            "description": "Field customer_segments"
+          },
+          "customer_value_tiers": {
+            "type": "string",
+            "description": "Field customer_value_tiers"
+          },
+          "min_customer_ltv": {
+            "type": "string",
+            "description": "Field min_customer_ltv"
+          },
+          "min_amount": {
+            "type": "string",
+            "description": "Field min_amount"
+          },
+          "max_amount": {
+            "type": "string",
+            "description": "Field max_amount"
+          },
+          "min_margin": {
+            "type": "string",
+            "description": "Field min_margin"
+          },
+          "has_profit_data": {
+            "type": "boolean",
+            "description": "Field has_profit_data"
+          },
+          "exclude_cancelled": {
+            "type": "boolean",
+            "description": "Field exclude_cancelled"
+          },
+          "exclude_refunds": {
+            "type": "boolean",
+            "description": "Field exclude_refunds"
+          },
+          "include_weekends": {
+            "type": "boolean",
+            "description": "Field include_weekends"
+          },
+          "include_holidays": {
+            "type": "boolean",
+            "description": "Field include_holidays"
+          }
+        }
+      },
+      "SalesExportRequest": {
+        "type": "object",
+        "description": "Schema for SalesExportRequest",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "Field format"
+          },
+          "filters": {
+            "type": "string",
+            "description": "Field filters"
+          },
+          "include_analytics": {
+            "type": "boolean",
+            "description": "Field include_analytics"
+          },
+          "include_forecasting": {
+            "type": "boolean",
+            "description": "Field include_forecasting"
+          },
+          "compression": {
+            "type": "string",
+            "description": "Field compression"
+          },
+          "email_notification": {
+            "type": "boolean",
+            "description": "Field email_notification"
+          },
+          "notification_email": {
+            "type": "string",
+            "description": "Field notification_email"
+          }
+        }
+      },
+      "SalesExportResponse": {
+        "type": "object",
+        "description": "Schema for SalesExportResponse",
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "description": "Field export_id"
+          },
+          "status": {
+            "type": "string",
+            "description": "Field status"
+          },
+          "estimated_completion": {
+            "type": "string",
+            "description": "Field estimated_completion"
+          },
+          "download_url": {
+            "type": "string",
+            "description": "Field download_url"
+          },
+          "file_size_mb": {
+            "type": "number",
+            "description": "Field file_size_mb"
+          },
+          "record_count": {
+            "type": "integer",
+            "description": "Field record_count"
+          }
+        }
+      },
+      "CustomerEntity": {
+        "type": "object",
+        "description": "Schema for CustomerEntity",
+        "properties": {
+          "customer_key": {
+            "type": "integer",
+            "description": "Field customer_key"
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "Field customer_id"
+          },
+          "customer_segment": {
+            "type": "string",
+            "description": "Field customer_segment"
+          },
+          "customer_value_tier": {
+            "type": "string",
+            "description": "Field customer_value_tier"
+          },
+          "status": {
+            "type": "string",
+            "description": "Field status"
+          },
+          "lifetime_value": {
+            "type": "string",
+            "description": "Field lifetime_value"
+          },
+          "avg_order_value": {
+            "type": "string",
+            "description": "Field avg_order_value"
+          },
+          "order_count": {
+            "type": "integer",
+            "description": "Field order_count"
+          },
+          "first_order_date": {
+            "type": "string",
+            "description": "Field first_order_date"
+          },
+          "last_order_date": {
+            "type": "string",
+            "description": "Field last_order_date"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Field created_at"
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Field is_active"
+          },
+          "try": {
+            "type": "number",
+            "description": "Field try"
+          },
+          "Decimal": {
+            "type": "number",
+            "description": "Field Decimal"
+          },
+          "datetime": {
+            "type": "string",
+            "description": "Field datetime"
+          },
+          "date": {
+            "type": "string",
+            "description": "Field date"
+          },
+          "UUID": {
+            "type": "string",
+            "description": "Field UUID"
+          }
+        }
+      },
+      "SalesTransactionUpdate": {
+        "type": "object",
+        "description": "Schema for SalesTransactionUpdate",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Field description"
+          },
+          "status": {
+            "type": "string",
+            "description": "Field status"
+          },
+          "payment_method": {
+            "type": "string",
+            "description": "Field payment_method"
+          }
+        }
+      },
+      "SalesTransactionFilter": {
+        "type": "object",
+        "description": "Schema for SalesTransactionFilter",
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "description": "Field invoice_no"
+          },
+          "stock_code": {
+            "type": "string",
+            "description": "Field stock_code"
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "Field customer_id"
+          },
+          "country": {
+            "type": "string",
+            "description": "Field country"
+          },
+          "status": {
+            "type": "string",
+            "description": "Field status"
+          },
+          "date_from": {
+            "type": "string",
+            "description": "Field date_from"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "Field date_to"
+          },
+          "min_amount": {
+            "type": "string",
+            "description": "Field min_amount"
+          },
+          "max_amount": {
+            "type": "string",
+            "description": "Field max_amount"
+          },
+          "min_quantity": {
+            "type": "integer",
+            "description": "Field min_quantity"
+          },
+          "max_quantity": {
+            "type": "integer",
+            "description": "Field max_quantity"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ApiKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API Key with 'pwc_' prefix"
+      }
+    }
+  }
+}

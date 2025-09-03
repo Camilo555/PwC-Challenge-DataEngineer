@@ -37,7 +37,7 @@ class AuthenticationService:
         encoded_jwt = jwt.encode(
             to_encode,
             self.security_config.jwt_secret_key,
-            algorithm=self.security_config.jwt_algorithm
+            algorithm=self.security_config.jwt_algorithm,
         )
         return encoded_jwt
 
@@ -46,7 +46,7 @@ class AuthenticationService:
             payload = jwt.decode(
                 token,
                 self.security_config.jwt_secret_key,
-                algorithms=[self.security_config.jwt_algorithm]
+                algorithms=[self.security_config.jwt_algorithm],
             )
             username: str = payload.get("sub")
             if username is None:
@@ -55,7 +55,7 @@ class AuthenticationService:
             return TokenData(
                 username=username,
                 expires_at=datetime.fromtimestamp(payload.get("exp", 0)),
-                permissions=payload.get("permissions", [])
+                permissions=payload.get("permissions", []),
             )
         except JWTError:
             return None
@@ -69,9 +69,5 @@ class AuthenticationService:
         if permissions is None:
             permissions = ["read", "write"]
 
-        token_data = {
-            "sub": username,
-            "permissions": permissions,
-            "iat": datetime.utcnow()
-        }
+        token_data = {"sub": username, "permissions": permissions, "iat": datetime.utcnow()}
         return self.create_access_token(token_data)

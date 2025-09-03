@@ -1,0 +1,666 @@
+# Default values for PwC Data Platform
+# This is a YAML-formatted file with comprehensive configuration options
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+  timezone: "UTC"
+  
+  # Multi-cloud configuration
+  cloudProvider: "aws"  # aws, azure, gcp, multi
+  region: "us-west-2"
+  
+  # Environment configuration
+  environment: "production"  # development, staging, production
+  
+  # Security settings
+  security:
+    enabled: true
+    rbac:
+      create: true
+    networkPolicies:
+      enabled: true
+    podSecurityPolicy:
+      enabled: true
+    encryption:
+      enabled: true
+      kmsKeyId: ""
+
+# Application configuration
+app:
+  name: pwc-data-platform
+  version: "4.0.0"
+  
+  # Resource sizing based on environment
+  sizing:
+    small:
+      api:
+        replicas: 2
+        cpu: "500m"
+        memory: "1Gi"
+      etl:
+        replicas: 1
+        cpu: "2"
+        memory: "4Gi"
+    medium:
+      api:
+        replicas: 3
+        cpu: "1"
+        memory: "2Gi"
+      etl:
+        replicas: 2
+        cpu: "4"
+        memory: "8Gi"
+    large:
+      api:
+        replicas: 5
+        cpu: "2"
+        memory: "4Gi"
+      etl:
+        replicas: 4
+        cpu: "8"
+        memory: "16Gi"
+
+# FastAPI Application
+api:
+  enabled: true
+  name: pwc-api
+  image:
+    repository: pwc-data-platform/api
+    tag: "4.0.0"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 3
+  
+  resources:
+    limits:
+      cpu: 2
+      memory: 4Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  
+  # Auto-scaling configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    
+    # Advanced scaling metrics
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 30
+        policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+  
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: ""
+  
+  # Health checks
+  health:
+    livenessProbe:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 2
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+# ETL Processing
+etl:
+  enabled: true
+  name: pwc-etl
+  image:
+    repository: pwc-data-platform/etl
+    tag: "4.0.0"
+    pullPolicy: IfNotPresent
+  
+  # Spark configuration
+  spark:
+    enabled: true
+    master: "k8s://https://kubernetes.default.svc:443"
+    executor:
+      instances: 2
+      memory: "2g"
+      cores: 2
+    driver:
+      memory: "2g"
+      cores: 1
+    
+    # Dynamic allocation
+    dynamicAllocation:
+      enabled: true
+      minExecutors: 1
+      maxExecutors: 10
+      targetExecutors: 2
+    
+    # Kubernetes-specific configuration
+    kubernetes:
+      namespace: pwc-data-platform
+      serviceAccount: spark
+      
+  # Job scheduling
+  scheduling:
+    enabled: true
+    cronJobs:
+      - name: daily-etl
+        schedule: "0 2 * * *"
+        suspend: false
+        concurrencyPolicy: Forbid
+        restartPolicy: OnFailure
+        backoffLimit: 3
+      
+  resources:
+    limits:
+      cpu: 8
+      memory: 16Gi
+    requests:
+      cpu: 4
+      memory: 8Gi
+
+# Data Lake Configuration
+dataLake:
+  enabled: true
+  
+  # Storage configuration (cloud-specific)
+  storage:
+    aws:
+      s3:
+        bucket: ""
+        region: "us-west-2"
+        kmsKeyId: ""
+    azure:
+      adls:
+        accountName: ""
+        containerName: ""
+        resourceGroup: ""
+    gcp:
+      gcs:
+        bucket: ""
+        project: ""
+  
+  # Data format and partitioning
+  format: "delta"  # delta, parquet, iceberg
+  partitioning:
+    enabled: true
+    columns: ["year", "month", "day"]
+  
+  # Retention policies
+  retention:
+    bronze: "2y"
+    silver: "5y"
+    gold: "10y"
+
+# Database configuration
+database:
+  # Primary database
+  primary:
+    type: "postgresql"  # postgresql, mysql, sqlite
+    host: ""
+    port: 5432
+    name: "dataplatform"
+    username: "admin"
+    # Password should be set via secret
+    existingSecret: "db-credentials"
+    secretKey: "password"
+  
+  # Connection pooling
+  pooling:
+    enabled: true
+    maxConnections: 20
+    minConnections: 5
+    connectionTimeout: 30
+    idleTimeout: 600
+
+# Caching layer
+redis:
+  enabled: true
+  architecture: "replication"  # standalone, replication, sentinel, cluster
+  auth:
+    enabled: true
+    existingSecret: "redis-credentials"
+    secretKey: "password"
+  
+  master:
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 1
+      requests:
+        memory: 1Gi
+        cpu: 500m
+  
+  replica:
+    replicaCount: 2
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 1
+      requests:
+        memory: 1Gi
+        cpu: 500m
+
+# Message streaming
+kafka:
+  enabled: true
+  replicationFactor: 3
+  numPartitions: 3
+  
+  resources:
+    limits:
+      memory: 2Gi
+      cpu: 1
+    requests:
+      memory: 1Gi
+      cpu: 500m
+  
+  zookeeper:
+    enabled: true
+    replicaCount: 3
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 500m
+      requests:
+        memory: 512Mi
+        cpu: 250m
+
+# Monitoring and observability
+monitoring:
+  enabled: true
+  
+  # Prometheus
+  prometheus:
+    enabled: true
+    retention: "30d"
+    storageSize: "50Gi"
+    
+    # Service monitoring
+    serviceMonitor:
+      enabled: true
+      interval: "30s"
+      scrapeTimeout: "10s"
+    
+    # Alerting rules
+    alerting:
+      enabled: true
+      rules:
+        - name: "data-platform-alerts"
+          rules:
+            - alert: "HighCPUUsage"
+              expr: "cpu_usage_percent > 80"
+              for: "5m"
+            - alert: "HighMemoryUsage"
+              expr: "memory_usage_percent > 85"
+              for: "5m"
+            - alert: "ETLJobFailure"
+              expr: "etl_job_failures_total > 0"
+              for: "1m"
+  
+  # Grafana
+  grafana:
+    enabled: true
+    adminPassword: ""  # Set via secret
+    persistence:
+      enabled: true
+      size: "10Gi"
+    
+    dashboards:
+      enabled: true
+      provider:
+        folder: "/tmp/dashboards"
+        options:
+          path: /tmp/dashboards
+  
+  # DataDog integration
+  datadog:
+    enabled: true
+    apiKey: ""  # Set via secret
+    site: "datadoghq.com"
+    
+    # APM tracing
+    apm:
+      enabled: true
+      env: "production"
+    
+    # Log collection
+    logs:
+      enabled: true
+      containerCollectAll: true
+    
+    # Custom metrics
+    metrics:
+      enabled: true
+      customMetrics:
+        - name: "etl.job.duration"
+          type: "histogram"
+        - name: "api.request.count"
+          type: "counter"
+
+# Security and compliance
+security:
+  enabled: true
+  
+  # Network policies
+  networkPolicies:
+    enabled: true
+    ingress:
+      enabled: true
+      rules:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                name: istio-system
+          ports:
+          - port: 8000
+            protocol: TCP
+    
+    egress:
+      enabled: true
+      rules:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                name: pwc-data-platform
+          ports:
+          - port: 5432
+            protocol: TCP
+  
+  # Pod security policies
+  podSecurityPolicy:
+    enabled: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    requiredDropCapabilities:
+      - ALL
+    volumes:
+      - 'configMap'
+      - 'emptyDir'
+      - 'projected'
+      - 'secret'
+      - 'downwardAPI'
+      - 'persistentVolumeClaim'
+  
+  # RBAC
+  rbac:
+    enabled: true
+    
+    serviceAccount:
+      create: true
+      name: ""
+      annotations: {}
+    
+    roles:
+      - name: "data-platform-reader"
+        rules:
+          - apiGroups: [""]
+            resources: ["pods", "services", "configmaps"]
+            verbs: ["get", "list", "watch"]
+      
+      - name: "data-platform-writer"
+        rules:
+          - apiGroups: [""]
+            resources: ["pods", "services", "configmaps", "secrets"]
+            verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# Service mesh configuration
+serviceMesh:
+  enabled: true
+  type: "istio"  # istio, linkerd, consul
+  
+  istio:
+    enabled: true
+    
+    # Sidecar injection
+    sidecar:
+      inject: true
+      
+    # Traffic management
+    virtualService:
+      enabled: true
+      hosts:
+        - "api.pwc-data-platform.local"
+      http:
+        - match:
+          - uri:
+              prefix: /api/v1
+          route:
+          - destination:
+              host: pwc-api
+              port:
+                number: 8000
+          timeout: 30s
+          retries:
+            attempts: 3
+            perTryTimeout: 10s
+    
+    # Security policies
+    peerAuthentication:
+      enabled: true
+      mtls:
+        mode: STRICT
+    
+    # Authorization policies
+    authorizationPolicy:
+      enabled: true
+      rules:
+        - from:
+          - source:
+              principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+          to:
+          - operation:
+              methods: ["GET", "POST"]
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"  # nginx, istio, traefik
+  
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  
+  hosts:
+    - host: api.pwc-data-platform.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: pwc-api
+            port: 8000
+  
+  tls:
+    - secretName: api-tls-secret
+      hosts:
+        - api.pwc-data-platform.com
+
+# Persistent storage
+persistence:
+  enabled: true
+  
+  # Storage classes for different cloud providers
+  storageClasses:
+    aws:
+      name: "gp3"
+      provisioner: "ebs.csi.aws.com"
+      parameters:
+        type: "gp3"
+        encrypted: "true"
+    azure:
+      name: "managed-premium"
+      provisioner: "kubernetes.io/azure-disk"
+      parameters:
+        storageaccounttype: "Premium_LRS"
+        kind: "Managed"
+    gcp:
+      name: "ssd-regional"
+      provisioner: "kubernetes.io/gce-pd"
+      parameters:
+        type: "pd-ssd"
+        replication-type: "regional-pd"
+  
+  # Persistent volume claims
+  claims:
+    - name: "data-storage"
+      size: "100Gi"
+      accessMode: "ReadWriteOnce"
+      storageClass: ""  # Will be set based on cloud provider
+    - name: "logs-storage"
+      size: "50Gi"
+      accessMode: "ReadWriteOnce"
+      storageClass: ""
+
+# Cost optimization
+costOptimization:
+  enabled: true
+  
+  # Spot instances/preemptible nodes
+  spotInstances:
+    enabled: true
+    percentage: 70  # Percentage of workload on spot instances
+  
+  # Resource quotas
+  resourceQuotas:
+    enabled: true
+    quotas:
+      requests.cpu: "50"
+      requests.memory: "100Gi"
+      limits.cpu: "100"
+      limits.memory: "200Gi"
+      persistentvolumeclaims: "20"
+  
+  # Limit ranges
+  limitRanges:
+    enabled: true
+    limits:
+      - type: "Container"
+        default:
+          cpu: "1"
+          memory: "2Gi"
+        defaultRequest:
+          cpu: "100m"
+          memory: "128Mi"
+        max:
+          cpu: "8"
+          memory: "16Gi"
+
+# Backup and disaster recovery
+backup:
+  enabled: true
+  
+  # Backup schedule
+  schedule:
+    database: "0 2 * * *"  # Daily at 2 AM
+    volumes: "0 4 * * 0"   # Weekly on Sunday at 4 AM
+  
+  # Retention policies
+  retention:
+    daily: 7
+    weekly: 4
+    monthly: 12
+  
+  # Cross-region backup
+  crossRegion:
+    enabled: true
+    regions:
+      - "us-east-1"
+      - "eu-west-1"
+
+# Environment-specific overrides
+environments:
+  development:
+    api:
+      replicaCount: 1
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 250m
+          memory: 512Mi
+    
+    monitoring:
+      prometheus:
+        retention: "7d"
+        storageSize: "10Gi"
+    
+    costOptimization:
+      spotInstances:
+        enabled: true
+        percentage: 90
+  
+  staging:
+    api:
+      replicaCount: 2
+      resources:
+        limits:
+          cpu: 1
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+    
+    monitoring:
+      prometheus:
+        retention: "15d"
+        storageSize: "25Gi"
+  
+  production:
+    api:
+      replicaCount: 5
+      resources:
+        limits:
+          cpu: 2
+          memory: 4Gi
+        requests:
+          cpu: 1
+          memory: 2Gi
+    
+    monitoring:
+      prometheus:
+        retention: "30d"
+        storageSize: "50Gi"
+    
+    costOptimization:
+      spotInstances:
+        enabled: true
+        percentage: 50

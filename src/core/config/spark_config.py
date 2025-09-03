@@ -2,6 +2,7 @@
 Advanced Spark Configuration
 Provides comprehensive Spark settings for all deployment scenarios
 """
+
 from __future__ import annotations
 
 import platform
@@ -74,7 +75,7 @@ class SparkConfig(BaseSettings):
         default_factory=lambda: [
             "io.delta:delta-core_2.12:2.4.0",
             "org.apache.hadoop:hadoop-aws:3.3.4",
-            "com.amazonaws:aws-java-sdk-bundle:1.12.262"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262",
         ]
     )
 
@@ -83,10 +84,7 @@ class SparkConfig(BaseSettings):
     hadoop_home: str | None = Field(default=None)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     @field_validator("checkpoint_dir", "event_log_dir", mode="before")
@@ -106,45 +104,52 @@ class SparkConfig(BaseSettings):
             "spark.app.name": self.app_name,
             "spark.master": self.master,
             "spark.submit.deployMode": self.deploy_mode,
-
             # Driver configuration
             "spark.driver.memory": self.driver_memory,
             "spark.driver.cores": str(self.driver_cores),
             "spark.driver.maxResultSize": self.driver_max_result_size,
-
             # Executor configuration
             "spark.executor.memory": self.executor_memory,
             "spark.executor.cores": str(self.executor_cores),
             "spark.executor.instances": str(self.executor_instances),
-
             # SQL and adaptive query execution
             "spark.sql.adaptive.enabled": str(self.adaptive_enabled).lower(),
-            "spark.sql.adaptive.coalescePartitions.enabled": str(self.adaptive_coalesce_partitions_enabled).lower(),
+            "spark.sql.adaptive.coalescePartitions.enabled": str(
+                self.adaptive_coalesce_partitions_enabled
+            ).lower(),
             "spark.sql.adaptive.skewJoin.enabled": str(self.adaptive_skewed_join_enabled).lower(),
-
             # Serialization
             "spark.serializer": self.serializer,
             "spark.io.compression.codec": self.compression_codec,
-
             # Data location
             "spark.sql.warehouse.dir": str(base_config.gold_path),
         }
 
         # Dynamic allocation
         if self.dynamic_allocation_enabled:
-            config.update({
-                "spark.dynamicAllocation.enabled": "true",
-                "spark.dynamicAllocation.minExecutors": str(self.dynamic_allocation_min_executors),
-                "spark.dynamicAllocation.maxExecutors": str(self.dynamic_allocation_max_executors),
-                "spark.dynamicAllocation.initialExecutors": str(self.dynamic_allocation_initial_executors),
-            })
+            config.update(
+                {
+                    "spark.dynamicAllocation.enabled": "true",
+                    "spark.dynamicAllocation.minExecutors": str(
+                        self.dynamic_allocation_min_executors
+                    ),
+                    "spark.dynamicAllocation.maxExecutors": str(
+                        self.dynamic_allocation_max_executors
+                    ),
+                    "spark.dynamicAllocation.initialExecutors": str(
+                        self.dynamic_allocation_initial_executors
+                    ),
+                }
+            )
 
         # Delta Lake configuration
         if self.enable_delta:
-            config.update({
-                "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
-                "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-            })
+            config.update(
+                {
+                    "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+                    "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+                }
+            )
 
         # Checkpointing
         if self.checkpoint_dir:
@@ -152,10 +157,12 @@ class SparkConfig(BaseSettings):
 
         # Event logging
         if self.event_log_enabled and self.event_log_dir:
-            config.update({
-                "spark.eventLog.enabled": "true",
-                "spark.eventLog.dir": self.event_log_dir,
-            })
+            config.update(
+                {
+                    "spark.eventLog.enabled": "true",
+                    "spark.eventLog.dir": self.event_log_dir,
+                }
+            )
 
         # UI configuration
         if not self.ui_enabled:
@@ -168,10 +175,12 @@ class SparkConfig(BaseSettings):
             config["spark.authenticate"] = "true"
 
         if self.encrypt_enabled:
-            config.update({
-                "spark.network.crypto.enabled": "true",
-                "spark.io.encryption.enabled": "true",
-            })
+            config.update(
+                {
+                    "spark.network.crypto.enabled": "true",
+                    "spark.io.encryption.enabled": "true",
+                }
+            )
 
         # Environment-specific settings
         environment_config = self._get_environment_config(base_config.environment)
@@ -210,7 +219,7 @@ class SparkConfig(BaseSettings):
                 "spark.driver.memory": "4g",
                 "spark.dynamicAllocation.maxExecutors": "20",
                 "spark.sql.adaptive.advisoryPartitionSizeInBytes": "128MB",
-            }
+            },
         }
 
         return config_overrides.get(environment, {})
@@ -221,11 +230,13 @@ class SparkConfig(BaseSettings):
 
         # Windows-specific optimizations
         if platform.system() == "Windows":
-            config.update({
-                "spark.sql.warehouse.dir": (Path.cwd() / "spark-warehouse").as_posix(),
-                "spark.hadoop.fs.defaultFS": "file:///",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            })
+            config.update(
+                {
+                    "spark.sql.warehouse.dir": (Path.cwd() / "spark-warehouse").as_posix(),
+                    "spark.hadoop.fs.defaultFS": "file:///",
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                }
+            )
 
             # Try to detect Java automatically on Windows
             if not self.java_home:
@@ -242,25 +253,34 @@ class SparkConfig(BaseSettings):
 
         # Linux/Mac optimizations
         else:
-            config.update({
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-                "spark.serializer.objectStreamReset": "100",
-            })
+            config.update(
+                {
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                    "spark.serializer.objectStreamReset": "100",
+                }
+            )
 
         return config
 
     def get_submit_args(self) -> list[str]:
         """Generate spark-submit arguments."""
         args = [
-            "--packages", ",".join(self.jars_packages),
+            "--packages",
+            ",".join(self.jars_packages),
         ]
 
         if self.master != "local[*]":
-            args.extend([
-                "--deploy-mode", self.deploy_mode,
-                "--executor-memory", self.executor_memory,
-                "--executor-cores", str(self.executor_cores),
-                "--num-executors", str(self.executor_instances),
-            ])
+            args.extend(
+                [
+                    "--deploy-mode",
+                    self.deploy_mode,
+                    "--executor-memory",
+                    self.executor_memory,
+                    "--executor-cores",
+                    str(self.executor_cores),
+                    "--num-executors",
+                    str(self.executor_instances),
+                ]
+            )
 
         return args

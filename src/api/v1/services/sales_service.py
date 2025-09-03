@@ -1,8 +1,8 @@
-
 """
 API Sales Service
 Application layer service that coordinates between API and domain layers.
 """
+
 from __future__ import annotations
 
 from api.v1.schemas.sales import SaleItem
@@ -44,16 +44,13 @@ class SalesService:
             country=country,
             page=page,
             size=size,
-            sort=sort
+            sort=sort,
         )
 
         # Get data from domain service
         sales, total_count = await self._domain_sales_service.get_sales(criteria)
 
         # Map domain entities to API DTOs
-        sale_items = [
-            self._model_mapper.domain_to_dto(sale, SaleItem)
-            for sale in sales
-        ]
+        sale_items = [self._model_mapper.domain_to_dto(sale, SaleItem) for sale in sales]
 
         return sale_items, total_count

@@ -24,7 +24,7 @@ class PolarsBronzeProcessor:
     def process_bronze_layer(self, enable_profiling: bool = True) -> dict[str, Any]:
         """
         Process raw data into Bronze layer using Polars lazy evaluation.
-        
+
         Returns comprehensive processing metrics and quality assessment.
         """
         logger.info("Starting Polars Bronze layer processing")
@@ -59,7 +59,9 @@ class PolarsBronzeProcessor:
                 "memory_usage_mb": df_result.estimated_size("mb"),
             }
 
-            logger.info(f"Bronze processing completed: {result['records_processed']:,} records in {processing_time:.2f}s")
+            logger.info(
+                f"Bronze processing completed: {result['records_processed']:,} records in {processing_time:.2f}s"
+            )
             return result
 
         except Exception as e:
@@ -67,25 +69,25 @@ class PolarsBronzeProcessor:
             return {
                 "status": "failed",
                 "error": str(e),
-                "processing_time_seconds": (datetime.now() - start_time).total_seconds()
+                "processing_time_seconds": (datetime.now() - start_time).total_seconds(),
             }
 
     def _load_data_lazily(self) -> pl.LazyFrame:
         """Load data using Polars lazy evaluation for optimal performance."""
         file_path = self._find_input_file()
 
-        if file_path.suffix.lower() == '.csv':
+        if file_path.suffix.lower() == ".csv":
             return pl.scan_csv(
                 file_path,
                 infer_schema_length=10000,
                 try_parse_dates=True,
-                encoding="utf8-lossy"  # Handle encoding issues gracefully
+                encoding="utf8-lossy",  # Handle encoding issues gracefully
             )
-        elif file_path.suffix.lower() == '.parquet':
+        elif file_path.suffix.lower() == ".parquet":
             return pl.scan_parquet(file_path)
-        elif file_path.suffix.lower() in ['.xlsx', '.xls']:
+        elif file_path.suffix.lower() in [".xlsx", ".xls"]:
             # For Excel files, load with pandas first then convert
-            df_pandas = pd.read_excel(file_path, engine='openpyxl')
+            df_pandas = pd.read_excel(file_path, engine="openpyxl")
             return pl.from_pandas(df_pandas).lazy()
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
@@ -130,58 +132,56 @@ class PolarsBronzeProcessor:
         logger.info(f"Final columns after renaming: {final_columns}")
 
         # Add metadata columns
-        result_df = result_df.with_columns([
-            pl.lit(datetime.now().isoformat()).alias("ingestion_timestamp"),
-            pl.lit("bronze").alias("data_layer"),
-            pl.arange(0, pl.len()).alias("row_id")
-        ])
+        result_df = result_df.with_columns(
+            [
+                pl.lit(datetime.now().isoformat()).alias("ingestion_timestamp"),
+                pl.lit("bronze").alias("data_layer"),
+                pl.arange(0, pl.len()).alias("row_id"),
+            ]
+        )
 
         # Handle missing values and type casting safely
         if "customer_id" in final_columns:
-            result_df = result_df.with_columns([
-                pl.when(pl.col("customer_id").is_null())
-                .then(pl.lit("UNKNOWN"))
-                .otherwise(pl.col("customer_id").cast(pl.Utf8))
-                .alias("customer_id")
-            ])
+            result_df = result_df.with_columns(
+                [
+                    pl.when(pl.col("customer_id").is_null())
+                    .then(pl.lit("UNKNOWN"))
+                    .otherwise(pl.col("customer_id").cast(pl.Utf8))
+                    .alias("customer_id")
+                ]
+            )
 
         if "country" in final_columns:
-            result_df = result_df.with_columns([
-                pl.when(pl.col("country").is_null())
-                .then(pl.lit("Unknown"))
-                .otherwise(pl.col("country"))
-                .alias("country")
-            ])
+            result_df = result_df.with_columns(
+                [
+                    pl.when(pl.col("country").is_null())
+                    .then(pl.lit("Unknown"))
+                    .otherwise(pl.col("country"))
+                    .alias("country")
+                ]
+            )
 
         # Safe numeric casting
         if "quantity" in final_columns:
-            result_df = result_df.with_columns([
-                pl.col("quantity").cast(pl.Int64, strict=False)
-            ])
+            result_df = result_df.with_columns([pl.col("quantity").cast(pl.Int64, strict=False)])
 
         if "unit_price" in final_columns:
-            result_df = result_df.with_columns([
-                pl.col("unit_price").cast(pl.Float64, strict=False)
-            ])
+            result_df = result_df.with_columns(
+                [pl.col("unit_price").cast(pl.Float64, strict=False)]
+            )
 
         # Calculate derived fields
         if "quantity" in final_columns and "unit_price" in final_columns:
-            result_df = result_df.with_columns([
-                (pl.col("quantity") * pl.col("unit_price")).alias("total_amount")
-            ])
+            result_df = result_df.with_columns(
+                [(pl.col("quantity") * pl.col("unit_price")).alias("total_amount")]
+            )
 
         # Apply filters safely
         filters = []
         if "quantity" in final_columns:
-            filters.extend([
-                pl.col("quantity").is_not_null(),
-                pl.col("quantity") > 0
-            ])
+            filters.extend([pl.col("quantity").is_not_null(), pl.col("quantity") > 0])
         if "unit_price" in final_columns:
-            filters.extend([
-                pl.col("unit_price").is_not_null(),
-                pl.col("unit_price") > 0
-            ])
+            filters.extend([pl.col("unit_price").is_not_null(), pl.col("unit_price") > 0])
         if "invoice_no" in final_columns:
             filters.append(~pl.col("invoice_no").str.starts_with("C"))
 
@@ -215,7 +215,7 @@ class PolarsBronzeProcessor:
             "invoice_timestamp": "invoice_date",
             "unit_price": "unit_price",
             "customer_id": "customer_id",
-            "country": "country"
+            "country": "country",
         }
 
     def _assess_data_quality(self, df: pl.DataFrame) -> dict[str, Any]:
@@ -232,11 +232,13 @@ class PolarsBronzeProcessor:
 
         # Calculate duplicate percentage
         unique_records = df.unique().shape[0]
-        duplicate_percentage = ((total_records - unique_records) / total_records * 100) if total_records > 0 else 0
+        duplicate_percentage = (
+            ((total_records - unique_records) / total_records * 100) if total_records > 0 else 0
+        )
 
         # Numeric column statistics
         numeric_stats = {}
-        numeric_columns = ['quantity', 'unit_price', 'total_amount']
+        numeric_columns = ["quantity", "unit_price", "total_amount"]
         for col in numeric_columns:
             if col in df.columns:
                 col_stats = df.select(pl.col(col)).describe()
@@ -254,5 +256,5 @@ class PolarsBronzeProcessor:
             "average_completeness": round(avg_completeness, 2),
             "numeric_statistics": numeric_stats,
             "quality_score": round(quality_score, 4),
-            "assessment_timestamp": datetime.now().isoformat()
+            "assessment_timestamp": datetime.now().isoformat(),
         }

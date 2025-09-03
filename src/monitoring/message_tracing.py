@@ -2,12 +2,13 @@
 Distributed Tracing for Message Flows
 Provides comprehensive tracing for RabbitMQ and Kafka message processing
 """
+
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.context import Context
@@ -19,8 +20,9 @@ from core.logging import get_logger
 
 class MessageOperationType(Enum):
     """Types of message operations"""
+
     PUBLISH = "publish"
-    CONSUME = "consume" 
+    CONSUME = "consume"
     PROCESS = "process"
     ACK = "acknowledge"
     NACK = "negative_acknowledge"
@@ -31,61 +33,63 @@ class MessageOperationType(Enum):
 @dataclass
 class MessageTraceContext:
     """Message tracing context"""
+
     trace_id: str
     span_id: str
-    parent_span_id: Optional[str] = None
-    correlation_id: Optional[str] = None
-    message_id: Optional[str] = None
-    operation_type: Optional[MessageOperationType] = None
+    parent_span_id: str | None = None
+    correlation_id: str | None = None
+    message_id: str | None = None
+    operation_type: MessageOperationType | None = None
     component: str = "messaging"
     timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class MessageTracer:
     """Distributed tracing for messaging systems"""
-    
+
     def __init__(self, service_name: str = "messaging-system"):
         self.service_name = service_name
         self.tracer = trace.get_tracer(__name__)
         self.logger = get_logger(__name__)
-        
+
         # Active traces
-        self.active_traces: Dict[str, MessageTraceContext] = {}
-        
+        self.active_traces: dict[str, MessageTraceContext] = {}
+
     @contextmanager
     def trace_message_operation(
         self,
         operation_type: MessageOperationType,
         component: str,
-        message_id: Optional[str] = None,
-        correlation_id: Optional[str] = None,
-        queue_or_topic: Optional[str] = None,
-        headers: Optional[Dict[str, Any]] = None
+        message_id: str | None = None,
+        correlation_id: str | None = None,
+        queue_or_topic: str | None = None,
+        headers: dict[str, Any] | None = None,
     ):
         """Context manager for tracing message operations"""
-        
+
         # Create span name
         span_name = f"{component}.{operation_type.value}"
         if queue_or_topic:
             span_name += f".{queue_or_topic}"
-        
+
         # Extract context from headers if available
         context = Context()
         if headers:
             context = extract(headers)
-        
+
         with self.tracer.start_as_current_span(
             span_name,
             context=context,
-            kind=trace.SpanKind.PRODUCER if operation_type == MessageOperationType.PUBLISH else trace.SpanKind.CONSUMER
+            kind=trace.SpanKind.PRODUCER
+            if operation_type == MessageOperationType.PUBLISH
+            else trace.SpanKind.CONSUMER,
         ) as span:
-            
             # Set span attributes
             span.set_attribute("messaging.system", component)
             span.set_attribute("messaging.operation", operation_type.value)
             span.set_attribute("service.name", self.service_name)
-            
+
             if message_id:
                 span.set_attribute("messaging.message_id", message_id)
             if correlation_id:
@@ -95,74 +99,75 @@ class MessageTracer:
                     span.set_attribute("messaging.rabbitmq.queue", queue_or_topic)
                 elif component == "kafka":
                     span.set_attribute("messaging.kafka.topic", queue_or_topic)
-            
+
             # Create trace context
             trace_context = MessageTraceContext(
-                trace_id=format(span.get_span_context().trace_id, '032x'),
-                span_id=format(span.get_span_context().span_id, '016x'),
+                trace_id=format(span.get_span_context().trace_id, "032x"),
+                span_id=format(span.get_span_context().span_id, "016x"),
                 correlation_id=correlation_id,
                 message_id=message_id,
                 operation_type=operation_type,
-                component=component
+                component=component,
             )
-            
+
             # Store in active traces
             self.active_traces[trace_context.span_id] = trace_context
-            
+
             try:
                 yield trace_context
-                
+
                 # Mark as successful
                 span.set_status(Status(StatusCode.OK))
                 trace_context.metadata["status"] = "success"
-                
+
             except Exception as e:
                 # Record exception
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 trace_context.metadata["status"] = "error"
                 trace_context.metadata["error"] = str(e)
-                
+
                 self.logger.error(f"Message operation failed: {operation_type.value} - {str(e)}")
                 raise
-                
+
             finally:
                 # Remove from active traces
                 self.active_traces.pop(trace_context.span_id, None)
-    
+
     @asynccontextmanager
     async def trace_async_message_operation(
         self,
         operation_type: MessageOperationType,
         component: str,
-        message_id: Optional[str] = None,
-        correlation_id: Optional[str] = None,
-        queue_or_topic: Optional[str] = None,
-        headers: Optional[Dict[str, Any]] = None
+        message_id: str | None = None,
+        correlation_id: str | None = None,
+        queue_or_topic: str | None = None,
+        headers: dict[str, Any] | None = None,
     ):
         """Async context manager for tracing message operations"""
-        
+
         # Create span name
         span_name = f"{component}.{operation_type.value}"
         if queue_or_topic:
             span_name += f".{queue_or_topic}"
-        
+
         # Extract context from headers if available
         context = Context()
         if headers:
             context = extract(headers)
-        
+
         with self.tracer.start_as_current_span(
             span_name,
             context=context,
-            kind=trace.SpanKind.PRODUCER if operation_type == MessageOperationType.PUBLISH else trace.SpanKind.CONSUMER
+            kind=trace.SpanKind.PRODUCER
+            if operation_type == MessageOperationType.PUBLISH
+            else trace.SpanKind.CONSUMER,
         ) as span:
-            
             # Set span attributes
             span.set_attribute("messaging.system", component)
             span.set_attribute("messaging.operation", operation_type.value)
             span.set_attribute("service.name", self.service_name)
-            
+
             if message_id:
                 span.set_attribute("messaging.message_id", message_id)
             if correlation_id:
@@ -172,59 +177,61 @@ class MessageTracer:
                     span.set_attribute("messaging.rabbitmq.queue", queue_or_topic)
                 elif component == "kafka":
                     span.set_attribute("messaging.kafka.topic", queue_or_topic)
-            
+
             # Create trace context
             trace_context = MessageTraceContext(
-                trace_id=format(span.get_span_context().trace_id, '032x'),
-                span_id=format(span.get_span_context().span_id, '016x'),
+                trace_id=format(span.get_span_context().trace_id, "032x"),
+                span_id=format(span.get_span_context().span_id, "016x"),
                 correlation_id=correlation_id,
                 message_id=message_id,
                 operation_type=operation_type,
-                component=component
+                component=component,
             )
-            
+
             # Store in active traces
             self.active_traces[trace_context.span_id] = trace_context
-            
+
             try:
                 yield trace_context
-                
+
                 # Mark as successful
                 span.set_status(Status(StatusCode.OK))
                 trace_context.metadata["status"] = "success"
-                
+
             except Exception as e:
                 # Record exception
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 trace_context.metadata["status"] = "error"
                 trace_context.metadata["error"] = str(e)
-                
-                self.logger.error(f"Async message operation failed: {operation_type.value} - {str(e)}")
+
+                self.logger.error(
+                    f"Async message operation failed: {operation_type.value} - {str(e)}"
+                )
                 raise
-                
+
             finally:
                 # Remove from active traces
                 self.active_traces.pop(trace_context.span_id, None)
-    
-    def inject_trace_headers(self, headers: Dict[str, str]) -> Dict[str, str]:
+
+    def inject_trace_headers(self, headers: dict[str, str]) -> dict[str, str]:
         """Inject tracing headers into message headers"""
         if headers is None:
             headers = {}
-        
+
         # Inject OpenTelemetry context
         inject(headers)
-        
+
         return headers
-    
-    def extract_trace_context(self, headers: Dict[str, str]) -> Optional[Context]:
+
+    def extract_trace_context(self, headers: dict[str, str]) -> Context | None:
         """Extract tracing context from message headers"""
         if not headers:
             return None
-        
+
         return extract(headers)
-    
-    def add_span_event(self, span_id: str, event_name: str, attributes: Dict[str, Any] = None):
+
+    def add_span_event(self, span_id: str, event_name: str, attributes: dict[str, Any] = None):
         """Add an event to an active span"""
         if span_id in self.active_traces:
             # This would need to be integrated with the actual span
@@ -232,41 +239,43 @@ class MessageTracer:
             trace_context = self.active_traces[span_id]
             if "events" not in trace_context.metadata:
                 trace_context.metadata["events"] = []
-            
-            trace_context.metadata["events"].append({
-                "name": event_name,
-                "timestamp": datetime.now().isoformat(),
-                "attributes": attributes or {}
-            })
-            
+
+            trace_context.metadata["events"].append(
+                {
+                    "name": event_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "attributes": attributes or {},
+                }
+            )
+
             self.logger.debug(f"Added span event: {event_name} for span {span_id}")
-    
-    def get_active_traces(self) -> Dict[str, MessageTraceContext]:
+
+    def get_active_traces(self) -> dict[str, MessageTraceContext]:
         """Get all active traces"""
         return self.active_traces.copy()
-    
-    def get_trace_summary(self) -> Dict[str, Any]:
+
+    def get_trace_summary(self) -> dict[str, Any]:
         """Get summary of tracing activity"""
         return {
             "active_traces": len(self.active_traces),
             "service_name": self.service_name,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 
 class RabbitMQTracer(MessageTracer):
     """Specialized tracer for RabbitMQ operations"""
-    
+
     def __init__(self, service_name: str = "rabbitmq-messaging"):
         super().__init__(service_name)
-    
+
     @contextmanager
     def trace_publish(
         self,
         queue_name: str,
         message_id: str,
-        correlation_id: Optional[str] = None,
-        headers: Optional[Dict[str, Any]] = None
+        correlation_id: str | None = None,
+        headers: dict[str, Any] | None = None,
     ):
         """Trace message publishing to RabbitMQ"""
         with self.trace_message_operation(
@@ -275,17 +284,17 @@ class RabbitMQTracer(MessageTracer):
             message_id=message_id,
             correlation_id=correlation_id,
             queue_or_topic=queue_name,
-            headers=headers
+            headers=headers,
         ) as trace_context:
             yield trace_context
-    
-    @contextmanager  
+
+    @contextmanager
     def trace_consume(
         self,
         queue_name: str,
         message_id: str,
-        correlation_id: Optional[str] = None,
-        headers: Optional[Dict[str, Any]] = None
+        correlation_id: str | None = None,
+        headers: dict[str, Any] | None = None,
     ):
         """Trace message consumption from RabbitMQ"""
         with self.trace_message_operation(
@@ -294,17 +303,17 @@ class RabbitMQTracer(MessageTracer):
             message_id=message_id,
             correlation_id=correlation_id,
             queue_or_topic=queue_name,
-            headers=headers
+            headers=headers,
         ) as trace_context:
             yield trace_context
-    
+
     @contextmanager
     def trace_process(
         self,
         queue_name: str,
         message_id: str,
         processor_name: str,
-        correlation_id: Optional[str] = None
+        correlation_id: str | None = None,
     ):
         """Trace message processing"""
         with self.trace_message_operation(
@@ -312,7 +321,7 @@ class RabbitMQTracer(MessageTracer):
             "rabbitmq",
             message_id=message_id,
             correlation_id=correlation_id,
-            queue_or_topic=queue_name
+            queue_or_topic=queue_name,
         ) as trace_context:
             trace_context.metadata["processor"] = processor_name
             yield trace_context
@@ -320,33 +329,33 @@ class RabbitMQTracer(MessageTracer):
 
 class KafkaTracer(MessageTracer):
     """Specialized tracer for Kafka operations"""
-    
+
     def __init__(self, service_name: str = "kafka-messaging"):
         super().__init__(service_name)
-    
+
     @contextmanager
     def trace_produce(
         self,
         topic_name: str,
         message_id: str,
-        partition: Optional[int] = None,
-        key: Optional[str] = None,
-        headers: Optional[Dict[str, Any]] = None
+        partition: int | None = None,
+        key: str | None = None,
+        headers: dict[str, Any] | None = None,
     ):
         """Trace message production to Kafka"""
         with self.trace_message_operation(
             MessageOperationType.PUBLISH,
-            "kafka", 
+            "kafka",
             message_id=message_id,
             queue_or_topic=topic_name,
-            headers=headers
+            headers=headers,
         ) as trace_context:
             if partition is not None:
                 trace_context.metadata["partition"] = partition
             if key:
                 trace_context.metadata["key"] = key
             yield trace_context
-    
+
     @contextmanager
     def trace_consume(
         self,
@@ -355,7 +364,7 @@ class KafkaTracer(MessageTracer):
         partition: int,
         offset: int,
         consumer_group: str,
-        headers: Optional[Dict[str, Any]] = None
+        headers: dict[str, Any] | None = None,
     ):
         """Trace message consumption from Kafka"""
         with self.trace_message_operation(
@@ -363,24 +372,22 @@ class KafkaTracer(MessageTracer):
             "kafka",
             message_id=message_id,
             queue_or_topic=topic_name,
-            headers=headers
+            headers=headers,
         ) as trace_context:
-            trace_context.metadata.update({
-                "partition": partition,
-                "offset": offset,
-                "consumer_group": consumer_group
-            })
+            trace_context.metadata.update(
+                {"partition": partition, "offset": offset, "consumer_group": consumer_group}
+            )
             yield trace_context
-    
+
     @asynccontextmanager
     async def trace_async_consume(
         self,
-        topic_name: str, 
+        topic_name: str,
         message_id: str,
         partition: int,
         offset: int,
         consumer_group: str,
-        headers: Optional[Dict[str, Any]] = None
+        headers: dict[str, Any] | None = None,
     ):
         """Trace async message consumption from Kafka"""
         async with self.trace_async_message_operation(
@@ -388,48 +395,46 @@ class KafkaTracer(MessageTracer):
             "kafka",
             message_id=message_id,
             queue_or_topic=topic_name,
-            headers=headers
+            headers=headers,
         ) as trace_context:
-            trace_context.metadata.update({
-                "partition": partition,
-                "offset": offset,
-                "consumer_group": consumer_group
-            })
+            trace_context.metadata.update(
+                {"partition": partition, "offset": offset, "consumer_group": consumer_group}
+            )
             yield trace_context
 
 
 class MessageFlowTracer:
     """Traces complete message flows across systems"""
-    
+
     def __init__(self):
         self.rabbitmq_tracer = RabbitMQTracer()
         self.kafka_tracer = KafkaTracer()
         self.logger = get_logger(__name__)
-        
+
         # Flow tracking
-        self.active_flows: Dict[str, Dict[str, Any]] = {}
-    
-    def start_flow(self, flow_id: str, flow_name: str, metadata: Dict[str, Any] = None) -> str:
+        self.active_flows: dict[str, dict[str, Any]] = {}
+
+    def start_flow(self, flow_id: str, flow_name: str, metadata: dict[str, Any] = None) -> str:
         """Start tracking a message flow"""
         self.active_flows[flow_id] = {
             "flow_name": flow_name,
             "start_time": datetime.now(),
             "steps": [],
             "metadata": metadata or {},
-            "status": "active"
+            "status": "active",
         }
-        
+
         self.logger.info(f"Started message flow: {flow_name} ({flow_id})")
         return flow_id
-    
+
     def add_flow_step(
         self,
         flow_id: str,
         step_name: str,
         component: str,
         operation_type: MessageOperationType,
-        message_id: Optional[str] = None,
-        metadata: Dict[str, Any] = None
+        message_id: str | None = None,
+        metadata: dict[str, Any] = None,
     ):
         """Add a step to a message flow"""
         if flow_id in self.active_flows:
@@ -439,12 +444,12 @@ class MessageFlowTracer:
                 "operation_type": operation_type.value,
                 "message_id": message_id,
                 "timestamp": datetime.now(),
-                "metadata": metadata or {}
+                "metadata": metadata or {},
             }
-            
+
             self.active_flows[flow_id]["steps"].append(step)
             self.logger.debug(f"Added step to flow {flow_id}: {step_name}")
-    
+
     def complete_flow(self, flow_id: str, status: str = "completed"):
         """Complete a message flow"""
         if flow_id in self.active_flows:
@@ -452,49 +457,53 @@ class MessageFlowTracer:
             flow["status"] = status
             flow["end_time"] = datetime.now()
             flow["duration_ms"] = (flow["end_time"] - flow["start_time"]).total_seconds() * 1000
-            
+
             self.logger.info(f"Completed message flow: {flow['flow_name']} ({flow_id}) - {status}")
-    
-    def get_flow_details(self, flow_id: str) -> Optional[Dict[str, Any]]:
+
+    def get_flow_details(self, flow_id: str) -> dict[str, Any] | None:
         """Get details of a specific flow"""
         return self.active_flows.get(flow_id)
-    
-    def get_active_flows(self) -> Dict[str, Dict[str, Any]]:
+
+    def get_active_flows(self) -> dict[str, dict[str, Any]]:
         """Get all active flows"""
         return {
-            flow_id: flow for flow_id, flow in self.active_flows.items()
+            flow_id: flow
+            for flow_id, flow in self.active_flows.items()
             if flow["status"] == "active"
         }
-    
-    def get_flow_metrics(self) -> Dict[str, Any]:
+
+    def get_flow_metrics(self) -> dict[str, Any]:
         """Get metrics about message flows"""
         total_flows = len(self.active_flows)
         active_flows = len([f for f in self.active_flows.values() if f["status"] == "active"])
         completed_flows = len([f for f in self.active_flows.values() if f["status"] == "completed"])
         failed_flows = len([f for f in self.active_flows.values() if f["status"] == "failed"])
-        
+
         # Calculate average duration for completed flows
         completed_durations = [
-            f["duration_ms"] for f in self.active_flows.values()
+            f["duration_ms"]
+            for f in self.active_flows.values()
             if f["status"] == "completed" and "duration_ms" in f
         ]
-        
-        avg_duration = sum(completed_durations) / len(completed_durations) if completed_durations else 0
-        
+
+        avg_duration = (
+            sum(completed_durations) / len(completed_durations) if completed_durations else 0
+        )
+
         return {
             "total_flows": total_flows,
             "active_flows": active_flows,
             "completed_flows": completed_flows,
             "failed_flows": failed_flows,
             "average_duration_ms": avg_duration,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 
 # Global message tracer instances
-_rabbitmq_tracer: Optional[RabbitMQTracer] = None
-_kafka_tracer: Optional[KafkaTracer] = None
-_message_flow_tracer: Optional[MessageFlowTracer] = None
+_rabbitmq_tracer: RabbitMQTracer | None = None
+_kafka_tracer: KafkaTracer | None = None
+_message_flow_tracer: MessageFlowTracer | None = None
 
 
 def get_rabbitmq_tracer() -> RabbitMQTracer:
@@ -524,30 +533,36 @@ def get_message_flow_tracer() -> MessageFlowTracer:
 # Decorator functions for automatic tracing
 def trace_rabbitmq_publish(queue_name: str):
     """Decorator for tracing RabbitMQ message publishing"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
-            message_id = kwargs.get('message_id') or str(uuid.uuid4())
-            correlation_id = kwargs.get('correlation_id')
-            headers = kwargs.get('headers', {})
-            
+            message_id = kwargs.get("message_id") or str(uuid.uuid4())
+            correlation_id = kwargs.get("correlation_id")
+            headers = kwargs.get("headers", {})
+
             tracer = get_rabbitmq_tracer()
             with tracer.trace_publish(queue_name, message_id, correlation_id, headers):
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 def trace_kafka_produce(topic_name: str):
     """Decorator for tracing Kafka message production"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
-            message_id = kwargs.get('message_id') or str(uuid.uuid4())
-            headers = kwargs.get('headers', {})
-            partition = kwargs.get('partition')
-            key = kwargs.get('key')
-            
+            message_id = kwargs.get("message_id") or str(uuid.uuid4())
+            headers = kwargs.get("headers", {})
+            partition = kwargs.get("partition")
+            key = kwargs.get("key")
+
             tracer = get_kafka_tracer()
             with tracer.trace_produce(topic_name, message_id, partition, key, headers):
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator

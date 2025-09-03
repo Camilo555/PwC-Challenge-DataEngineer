@@ -2,6 +2,7 @@
 Advanced Dagster Configuration
 Provides comprehensive Dagster settings for modern data orchestration
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -93,10 +94,7 @@ class DagsterConfig(BaseSettings):
     partition_start_date: str = Field(default="2024-01-01")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     @field_validator("dagster_home", mode="before")
@@ -128,13 +126,7 @@ class DagsterConfig(BaseSettings):
             storage_dir = Path(self.dagster_home) / "storage"
             storage_dir.mkdir(parents=True, exist_ok=True)
 
-            return {
-                "sqlite_db": {
-                    "sqlite_db": {
-                        "base_dir": str(storage_dir)
-                    }
-                }
-            }
+            return {"sqlite_db": {"sqlite_db": {"base_dir": str(storage_dir)}}}
 
     def get_run_launcher_config(self, base_config: BaseConfig) -> dict[str, Any]:
         """Get run launcher configuration."""
@@ -151,37 +143,26 @@ class DagsterConfig(BaseSettings):
                 }
             }
         else:
-            return {
-                "DefaultRunLauncher": {}
-            }
+            return {"DefaultRunLauncher": {}}
 
     def get_compute_log_manager_config(self) -> dict[str, Any]:
         """Get compute log manager configuration."""
         log_dir = Path(self.dagster_home) / self.compute_logs_directory
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        return {
-            "LocalComputeLogManager": {
-                "base_dir": str(log_dir)
-            }
-        }
+        return {"LocalComputeLogManager": {"base_dir": str(log_dir)}}
 
     def get_io_manager_configs(self) -> dict[str, Any]:
         """Get I/O manager configurations."""
         configs = {
             "fs_io_manager": {
-                "config": {
-                    "base_dir": str(Path(self.dagster_home) / "storage" / "io_manager")
-                }
+                "config": {"base_dir": str(Path(self.dagster_home) / "storage" / "io_manager")}
             }
         }
 
         if self.enable_s3_io_manager and self.s3_bucket:
             configs["s3_io_manager"] = {
-                "config": {
-                    "s3_bucket": self.s3_bucket,
-                    "s3_prefix": "dagster-io"
-                }
+                "config": {"s3_bucket": self.s3_bucket, "s3_prefix": "dagster-io"}
             }
 
         return configs
@@ -192,13 +173,7 @@ class DagsterConfig(BaseSettings):
 
         # Spark resource
         if base_config.processing_engine.value == "spark":
-            spark_config = {
-                "spark_session": {
-                    "config": {
-                        "spark_conf": self.default_spark_conf
-                    }
-                }
-            }
+            spark_config = {"spark_session": {"config": {"spark_conf": self.default_spark_conf}}}
             if self.spark_config_path:
                 spark_config["spark_session"]["config"]["config_path"] = self.spark_config_path
 
@@ -209,7 +184,7 @@ class DagsterConfig(BaseSettings):
             configs["external_api"] = {
                 "config": {
                     "timeout_seconds": self.api_request_timeout_seconds,
-                    "retry_attempts": self.api_retry_attempts
+                    "retry_attempts": self.api_retry_attempts,
                 }
             }
 
@@ -218,17 +193,13 @@ class DagsterConfig(BaseSettings):
             "config": {
                 "min_quality_score": self.min_data_quality_score,
                 "max_null_percentage": self.max_null_percentage,
-                "max_duplicate_percentage": self.max_duplicate_percentage
+                "max_duplicate_percentage": self.max_duplicate_percentage,
             }
         }
 
         # Notification resources
         if self.slack_webhook_url:
-            configs["slack"] = {
-                "config": {
-                    "webhook_url": self.slack_webhook_url
-                }
-            }
+            configs["slack"] = {"config": {"webhook_url": self.slack_webhook_url}}
 
         return configs
 
@@ -236,7 +207,7 @@ class DagsterConfig(BaseSettings):
         """Get sensor configurations."""
         return {
             "evaluation_interval": self.sensor_evaluation_interval_seconds,
-            "minimum_interval_seconds": self.sensor_minimum_interval_seconds
+            "minimum_interval_seconds": self.sensor_minimum_interval_seconds,
         }
 
     def get_schedule_configs(self) -> dict[str, Any]:
@@ -245,8 +216,8 @@ class DagsterConfig(BaseSettings):
             "enable_schedules": True,
             "default_schedule": {
                 "cron_schedule": "0 2 * * *",  # Daily at 2 AM
-                "execution_timezone": "UTC"
-            }
+                "execution_timezone": "UTC",
+            },
         }
 
     def get_auto_materialize_configs(self) -> dict[str, Any]:
@@ -254,20 +225,18 @@ class DagsterConfig(BaseSettings):
         return {
             "enabled": self.enable_auto_materialize,
             "evaluation_interval_seconds": self.auto_materialize_evaluation_interval_seconds,
-            "use_sensors": True
+            "use_sensors": True,
         }
 
     def get_monitoring_configs(self) -> dict[str, Any]:
         """Get monitoring and observability configurations."""
         configs = {
             "asset_monitoring": self.enable_asset_monitoring,
-            "op_monitoring": self.enable_op_monitoring
+            "op_monitoring": self.enable_op_monitoring,
         }
 
         if self.datadog_api_key:
-            configs["datadog"] = {
-                "api_key": self.datadog_api_key
-            }
+            configs["datadog"] = {"api_key": self.datadog_api_key}
 
         return configs
 
@@ -277,7 +246,7 @@ class DagsterConfig(BaseSettings):
             "date_partitioning": {
                 "enabled": self.enable_date_partitioning,
                 "start_date": self.partition_start_date,
-                "format": "%Y-%m-%d"
+                "format": "%Y-%m-%d",
             }
         }
 
@@ -312,67 +281,46 @@ run_launcher:
             for key, value in launcher_config.items():
                 yaml_content += f"    {key}: {value}\n"
 
-        yaml_content += f"""
+        yaml_content += (
+            f"""
 run_storage:
   module: dagster_postgres.run_storage
   class: DagsterPostgresRunStorage
   config:
     {storage_backend}:
-      hostname: {storage_config[storage_backend][storage_backend]['hostname']}
-      username: {storage_config[storage_backend][storage_backend]['username']}
-      password: {storage_config[storage_backend][storage_backend]['password']}
-      db_name: {storage_config[storage_backend][storage_backend]['db_name']}
-      port: {storage_config[storage_backend][storage_backend]['port']}
+      hostname: {storage_config[storage_backend][storage_backend]["hostname"]}
+      username: {storage_config[storage_backend][storage_backend]["username"]}
+      password: {storage_config[storage_backend][storage_backend]["password"]}
+      db_name: {storage_config[storage_backend][storage_backend]["db_name"]}
+      port: {storage_config[storage_backend][storage_backend]["port"]}
 
 event_log_storage:
   module: dagster_postgres.event_log
   class: DagsterPostgresEventLogStorage
   config:
     {storage_backend}:
-      hostname: {storage_config[storage_backend][storage_backend]['hostname']}
-      username: {storage_config[storage_backend][storage_backend]['username']}
-      password: {storage_config[storage_backend][storage_backend]['password']}
-      db_name: {storage_config[storage_backend][storage_backend]['db_name']}
-      port: {storage_config[storage_backend][storage_backend]['port']}
+      hostname: {storage_config[storage_backend][storage_backend]["hostname"]}
+      username: {storage_config[storage_backend][storage_backend]["username"]}
+      password: {storage_config[storage_backend][storage_backend]["password"]}
+      db_name: {storage_config[storage_backend][storage_backend]["db_name"]}
+      port: {storage_config[storage_backend][storage_backend]["port"]}
 
 schedule_storage:
   module: dagster_postgres.schedule_storage
   class: DagsterPostgresScheduleStorage
   config:
     {storage_backend}:
-      hostname: {storage_config[storage_backend][storage_backend]['hostname']}
-      username: {storage_config[storage_backend][storage_backend]['username']}
-      password: {storage_config[storage_backend][storage_backend]['password']}
-      db_name: {storage_config[storage_backend][storage_backend]['db_name']}
-      port: {storage_config[storage_backend][storage_backend]['port']}
+      hostname: {storage_config[storage_backend][storage_backend]["hostname"]}
+      username: {storage_config[storage_backend][storage_backend]["username"]}
+      password: {storage_config[storage_backend][storage_backend]["password"]}
+      db_name: {storage_config[storage_backend][storage_backend]["db_name"]}
+      port: {storage_config[storage_backend][storage_backend]["port"]}
 
 compute_logs:
   module: dagster._core.storage.local_compute_log_manager
   class: LocalComputeLogManager
   config:
-    base_dir: {compute_log_config['LocalComputeLogManager']['base_dir']}
-
-local_artifact_storage:
-  module: dagster._core.storage.root
-  class: LocalArtifactStorage
-  config:
-    base_dir: {self.dagster_home}/storage
-
-telemetry:
-  enabled: false
-""" if storage_backend == "postgres_db" else f"""
-# Dagster Configuration - SQLite Development Mode
-# Generated automatically - do not edit manually
-
-storage:
-  sqlite:
-    base_dir: {storage_config[storage_backend][storage_backend]['base_dir']}
-
-compute_logs:
-  module: dagster._core.storage.local_compute_log_manager
-  class: LocalComputeLogManager
-  config:
-    base_dir: {compute_log_config['LocalComputeLogManager']['base_dir']}
+    base_dir: {compute_log_config["LocalComputeLogManager"]["base_dir"]}
 
 local_artifact_storage:
   module: dagster._core.storage.root
@@ -383,6 +331,31 @@ local_artifact_storage:
 telemetry:
   enabled: false
 """
+            if storage_backend == "postgres_db"
+            else f"""
+# Dagster Configuration - SQLite Development Mode
+# Generated automatically - do not edit manually
+
+storage:
+  sqlite:
+    base_dir: {storage_config[storage_backend][storage_backend]["base_dir"]}
+
+compute_logs:
+  module: dagster._core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: {compute_log_config["LocalComputeLogManager"]["base_dir"]}
+
+local_artifact_storage:
+  module: dagster._core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: {self.dagster_home}/storage
+
+telemetry:
+  enabled: false
+"""
+        )
 
         return yaml_content.strip()
 
@@ -395,12 +368,14 @@ telemetry:
         }
 
         if self.dagster_postgres_db:
-            env_vars.update({
-                "DAGSTER_POSTGRES_DB": self.dagster_postgres_db,
-                "DAGSTER_POSTGRES_USER": self.dagster_postgres_user,
-                "DAGSTER_POSTGRES_PASSWORD": self.dagster_postgres_password,
-                "DAGSTER_POSTGRES_HOST": self.dagster_postgres_host,
-                "DAGSTER_POSTGRES_PORT": str(self.dagster_postgres_port),
-            })
+            env_vars.update(
+                {
+                    "DAGSTER_POSTGRES_DB": self.dagster_postgres_db,
+                    "DAGSTER_POSTGRES_USER": self.dagster_postgres_user,
+                    "DAGSTER_POSTGRES_PASSWORD": self.dagster_postgres_password,
+                    "DAGSTER_POSTGRES_HOST": self.dagster_postgres_host,
+                    "DAGSTER_POSTGRES_PORT": str(self.dagster_postgres_port),
+                }
+            )
 
         return env_vars

@@ -2,6 +2,7 @@
 Security Configuration
 Provides comprehensive security settings for production deployment
 """
+
 from __future__ import annotations
 
 import json
@@ -101,7 +102,7 @@ class SecretManager(BaseSettings):
 
         secrets_data[key] = value
 
-        with open(self._local_secrets_file, 'w') as f:
+        with open(self._local_secrets_file, "w") as f:
             json.dump(secrets_data, f, indent=2)
 
     def _get_local_secret(self, key: str) -> str:
@@ -121,9 +122,10 @@ class SecretManager(BaseSettings):
         """Retrieve secret from AWS Secrets Manager."""
         try:
             import boto3
-            client = boto3.client('secretsmanager', region_name=self.aws_region)
+
+            client = boto3.client("secretsmanager", region_name=self.aws_region)
             response = client.get_secret_value(SecretId=key)
-            return response['SecretString']
+            return response["SecretString"]
         except ImportError:
             raise ValueError("boto3 is required for AWS secrets manager")
         except Exception as e:
@@ -133,7 +135,8 @@ class SecretManager(BaseSettings):
         """Store secret in AWS Secrets Manager."""
         try:
             import boto3
-            client = boto3.client('secretsmanager', region_name=self.aws_region)
+
+            client = boto3.client("secretsmanager", region_name=self.aws_region)
             client.create_secret(Name=key, SecretString=value)
         except ImportError:
             raise ValueError("boto3 is required for AWS secrets manager")
@@ -144,9 +147,10 @@ class SecretManager(BaseSettings):
         """Retrieve secret from HashiCorp Vault."""
         try:
             import hvac
+
             client = hvac.Client(url=self.vault_url)
             response = client.secrets.kv.v2.read_secret_version(path=key)
-            return response['data']['data'][key]
+            return response["data"]["data"][key]
         except ImportError:
             raise ValueError("hvac is required for HashiCorp Vault")
         except Exception as e:
@@ -156,6 +160,7 @@ class SecretManager(BaseSettings):
         """Store secret in HashiCorp Vault."""
         try:
             import hvac
+
             client = hvac.Client(url=self.vault_url)
             client.secrets.kv.v2.create_or_update_secret(path=key, secret={key: value})
         except ImportError:
@@ -205,7 +210,9 @@ class SecurityConfig(BaseSettings):
     auth_enabled: bool = Field(default=True)
     auth_type: str = Field(default="jwt")  # basic, oauth2, jwt
     basic_auth_username: str | None = Field(default=None)  # Must be set via environment
-    basic_auth_password: str | None = Field(default=None)  # Must be set via environment - NEVER USE DEFAULTS
+    basic_auth_password: str | None = Field(
+        default=None
+    )  # Must be set via environment - NEVER USE DEFAULTS
     admin_username: str | None = Field(default=None)  # Must be set via environment
     hashed_password: str | None = Field(default=None)  # Must be generated with strong password
 
@@ -231,9 +238,7 @@ class SecurityConfig(BaseSettings):
     cors_allowed_methods: list[str] = Field(
         default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     )
-    cors_allowed_headers: list[str] = Field(
-        default_factory=lambda: ["*"]
-    )
+    cors_allowed_headers: list[str] = Field(default_factory=lambda: ["*"])
     cors_allow_credentials: bool = Field(default=True)
 
     # Rate Limiting
@@ -307,10 +312,7 @@ class SecurityConfig(BaseSettings):
     vault_mount_point: str = Field(default="secret")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="allow"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     @field_validator("basic_auth_password")
@@ -419,7 +421,7 @@ class SecurityConfig(BaseSettings):
                 "encryption_enabled": True,
                 "security_audit_log_enabled": True,
                 "ip_filtering_enabled": True,
-            }
+            },
         }
 
         result = overrides.get(environment, {})
@@ -431,7 +433,9 @@ class SecurityConfig(BaseSettings):
 
         if self.security_headers_enabled:
             if self.hsts_enabled:
-                headers["Strict-Transport-Security"] = f"max-age={self.hsts_max_age}; includeSubDomains"
+                headers["Strict-Transport-Security"] = (
+                    f"max-age={self.hsts_max_age}; includeSubDomains"
+                )
 
             if self.content_type_nosniff:
                 headers["X-Content-Type-Options"] = "nosniff"
@@ -484,7 +488,9 @@ class SecurityConfig(BaseSettings):
         if self.require_numbers and not any(c.isdigit() for c in password):
             return False
 
-        if self.require_special_chars and not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+        if self.require_special_chars and not any(
+            c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password
+        ):
             return False
 
         return True
@@ -521,28 +527,28 @@ class SecurityConfig(BaseSettings):
         self._login_attempts: dict[str, list] = {}
 
         # Add test-expected attributes
-        self.jwt_secret_key = kwargs.get('jwt_secret_key') or self.jwt_secret_key
-        self.jwt_algorithm = kwargs.get('jwt_algorithm', self.jwt_algorithm)
-        self.jwt_expire_minutes = kwargs.get('jwt_expire_minutes', 30)
-        self.api_key_length = kwargs.get('api_key_length', 32)
-        self.password_min_length = kwargs.get('password_min_length', 8)
-        self.password_require_special_chars = kwargs.get('password_require_special_chars', True)
-        self.session_timeout_minutes = kwargs.get('session_timeout_minutes', 60)
-        self.max_login_attempts = kwargs.get('max_login_attempts', 5)
-        self.lockout_duration_minutes = kwargs.get('lockout_duration_minutes', 15)
+        self.jwt_secret_key = kwargs.get("jwt_secret_key") or self.jwt_secret_key
+        self.jwt_algorithm = kwargs.get("jwt_algorithm", self.jwt_algorithm)
+        self.jwt_expire_minutes = kwargs.get("jwt_expire_minutes", 30)
+        self.api_key_length = kwargs.get("api_key_length", 32)
+        self.password_min_length = kwargs.get("password_min_length", 8)
+        self.password_require_special_chars = kwargs.get("password_require_special_chars", True)
+        self.session_timeout_minutes = kwargs.get("session_timeout_minutes", 60)
+        self.max_login_attempts = kwargs.get("max_login_attempts", 5)
+        self.lockout_duration_minutes = kwargs.get("lockout_duration_minutes", 15)
 
         # Validate test parameters
-        if hasattr(self, 'jwt_expire_minutes') and self.jwt_expire_minutes <= 0:
+        if hasattr(self, "jwt_expire_minutes") and self.jwt_expire_minutes <= 0:
             raise ValueError("JWT expire minutes must be positive")
-        if hasattr(self, 'api_key_length') and self.api_key_length < 16:
+        if hasattr(self, "api_key_length") and self.api_key_length < 16:
             raise ValueError("API key length must be at least 16")
-        if hasattr(self, 'password_min_length') and self.password_min_length < 4:
+        if hasattr(self, "password_min_length") and self.password_min_length < 4:
             raise ValueError("Password minimum length must be at least 4")
-        if hasattr(self, 'session_timeout_minutes') and self.session_timeout_minutes <= 0:
+        if hasattr(self, "session_timeout_minutes") and self.session_timeout_minutes <= 0:
             raise ValueError("Session timeout must be positive")
-        if hasattr(self, 'max_login_attempts') and self.max_login_attempts <= 0:
+        if hasattr(self, "max_login_attempts") and self.max_login_attempts <= 0:
             raise ValueError("Max login attempts must be positive")
-        if hasattr(self, 'lockout_duration_minutes') and self.lockout_duration_minutes <= 0:
+        if hasattr(self, "lockout_duration_minutes") and self.lockout_duration_minutes <= 0:
             raise ValueError("Lockout duration must be positive")
 
     def generate_api_key(self) -> str:
@@ -552,20 +558,17 @@ class SecurityConfig(BaseSettings):
     def hash_password(self, password: str) -> str:
         """Hash a password using bcrypt."""
         salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
     def verify_password(self, password: str, hashed: str) -> bool:
         """Verify a password against its hash."""
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
     def create_jwt_token(self, payload: dict[str, Any]) -> str:
         """Create a JWT token."""
         # Add standard claims
         now = datetime.utcnow()
-        payload.update({
-            'iat': now,
-            'exp': now + timedelta(minutes=self.jwt_expire_minutes)
-        })
+        payload.update({"iat": now, "exp": now + timedelta(minutes=self.jwt_expire_minutes)})
 
         return jwt.encode(payload, self.jwt_secret_key, algorithm=self.jwt_algorithm)
 
@@ -591,8 +594,7 @@ class SecurityConfig(BaseSettings):
         # Keep only recent attempts (within lockout duration)
         cutoff = now - timedelta(minutes=self.lockout_duration_minutes)
         self._login_attempts[user_id] = [
-            attempt for attempt in self._login_attempts[user_id]
-            if attempt > cutoff
+            attempt for attempt in self._login_attempts[user_id] if attempt > cutoff
         ]
 
     def is_user_locked(self, user_id: str) -> bool:
@@ -604,48 +606,45 @@ class SecurityConfig(BaseSettings):
         cutoff = now - timedelta(minutes=self.lockout_duration_minutes)
 
         # Count recent failed attempts
-        recent_attempts = [
-            attempt for attempt in self._login_attempts[user_id]
-            if attempt > cutoff
-        ]
+        recent_attempts = [attempt for attempt in self._login_attempts[user_id] if attempt > cutoff]
 
         return len(recent_attempts) >= self.max_login_attempts
 
     def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary (excluding sensitive data)."""
         return {
-            'encryption': {
-                'algorithm': self.encryption.algorithm,
-                'key_size': self.encryption.key_size,
-                'mode': self.encryption.mode,
-                'key_derivation': self.encryption.key_derivation,
-                'iterations': self.encryption.iterations,
-                'salt_length': self.encryption.salt_length
+            "encryption": {
+                "algorithm": self.encryption.algorithm,
+                "key_size": self.encryption.key_size,
+                "mode": self.encryption.mode,
+                "key_derivation": self.encryption.key_derivation,
+                "iterations": self.encryption.iterations,
+                "salt_length": self.encryption.salt_length,
             },
-            'secret_manager': {
-                'provider': self.secret_manager.provider,
-                'vault_url': self.secret_manager.vault_url,
-                'aws_region': self.secret_manager.aws_region,
-                'azure_vault_url': self.secret_manager.azure_vault_url
+            "secret_manager": {
+                "provider": self.secret_manager.provider,
+                "vault_url": self.secret_manager.vault_url,
+                "aws_region": self.secret_manager.aws_region,
+                "azure_vault_url": self.secret_manager.azure_vault_url,
             },
-            'jwt_algorithm': self.jwt_algorithm,
-            'api_key_length': self.api_key_length,
-            'password_min_length': self.password_min_length,
-            'password_require_special_chars': self.password_require_special_chars,
-            'session_timeout_minutes': self.session_timeout_minutes,
-            'max_login_attempts': self.max_login_attempts,
-            'lockout_duration_minutes': self.lockout_duration_minutes,
-            'auth_enabled': self.auth_enabled,
-            'https_enabled': self.https_enabled,
-            'rate_limiting_enabled': self.rate_limiting_enabled
+            "jwt_algorithm": self.jwt_algorithm,
+            "api_key_length": self.api_key_length,
+            "password_min_length": self.password_min_length,
+            "password_require_special_chars": self.password_require_special_chars,
+            "session_timeout_minutes": self.session_timeout_minutes,
+            "max_login_attempts": self.max_login_attempts,
+            "lockout_duration_minutes": self.lockout_duration_minutes,
+            "auth_enabled": self.auth_enabled,
+            "https_enabled": self.https_enabled,
+            "rate_limiting_enabled": self.rate_limiting_enabled,
         }
 
     def log_security_event(self, event_type: str, details: dict[str, Any]) -> None:
         """Log security events."""
         log_message = f"Security event: {event_type} - {details}"
 
-        if event_type in ['login_failure', 'unauthorized_access']:
-            if event_type == 'unauthorized_access':
+        if event_type in ["login_failure", "unauthorized_access"]:
+            if event_type == "unauthorized_access":
                 logger.error(log_message)
             else:
                 logger.warning(log_message)

@@ -47,6 +47,7 @@ from .etl_comprehensive_observability import get_etl_observability_manager
 from .grafana_enterprise_dashboards import export_grafana_dashboards, get_grafana_configurator
 from .health_checks import HealthChecker, HealthStatus, check_system_health, get_health_checker
 from .metrics_collector import MetricsCollector, get_metrics_collector, record_etl_run
+from .security_metrics import SecurityMetricType, SecurityEventSeverity
 
 # Import all monitoring components
 from .monitoring_orchestrator_enterprise import (

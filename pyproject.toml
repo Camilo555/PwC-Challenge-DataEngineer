@@ -50,8 +50,8 @@ npm = "^0.1.1"
 # Orchestration
 dagster = "^1.8.13"
 dagster-webserver = "^1.8.13"
-# Alternative: Apache Airflow (optional due to dependency conflicts with some packages)
-apache-airflow = {version = "^2.10.4", optional = true}
+# Alternative: Apache Airflow (commented out due to dependency conflicts)
+# apache-airflow = {version = "^2.10.4", optional = true}
 # dbt
 dbt-postgres = "^1.7.4"
 dbt-spark = {extras = ["PyHive"], version = "^1.7.4"}
@@ -71,7 +71,7 @@ kafka-python = "^2.0.2"
 # OpenTelemetry/Distributed Tracing
 opentelemetry-api = "^1.27.0"
 opentelemetry-sdk = "^1.27.0"
-opentelemetry-exporter-jaeger-thrift = "^1.27.0"
+# opentelemetry-exporter-jaeger-thrift = "^1.27.0"  # Commented out due to potential conflicts
 opentelemetry-exporter-otlp = "^1.27.0"
 opentelemetry-instrumentation-fastapi = "^0.48b0"
 opentelemetry-instrumentation-sqlalchemy = "^0.48b0"

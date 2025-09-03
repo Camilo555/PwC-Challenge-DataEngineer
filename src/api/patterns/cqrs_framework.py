@@ -10,7 +10,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from core.caching.redis_cache import RedisCache
 from core.logging import get_logger

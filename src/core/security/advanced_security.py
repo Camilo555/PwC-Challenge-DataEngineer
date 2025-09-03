@@ -14,10 +14,14 @@ from datetime import datetime, timedelta
 from enum import Enum
 from ipaddress import AddressValueError, IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-import geoip2.database
-import geoip2.errors
+try:
+    import geoip2.database
+    import geoip2.errors
+    GEOIP_AVAILABLE = True
+except ImportError:
+    GEOIP_AVAILABLE = False
 from fastapi import Request
 
 from core.config.security_config import SecurityConfig
@@ -136,11 +140,13 @@ class GeoLocationService:
         self.reader = None
         self.logger = get_logger(__name__)
 
-        if self.geoip_db_path and self.geoip_db_path.exists():
+        if GEOIP_AVAILABLE and self.geoip_db_path and self.geoip_db_path.exists():
             try:
                 self.reader = geoip2.database.Reader(str(self.geoip_db_path))
             except Exception as e:
                 self.logger.warning(f"Failed to load GeoIP database: {e}")
+        elif not GEOIP_AVAILABLE:
+            self.logger.info("GeoIP2 not available - geolocation features disabled")
 
     def get_location(self, ip_address: str) -> dict[str, str] | None:
         """Get geolocation information for IP address"""
@@ -182,7 +188,7 @@ class GeoLocationService:
                 else 0.0,
             }
 
-        except (geoip2.errors.AddressNotFoundError, Exception) as e:
+        except Exception as e:
             self.logger.debug(f"Geolocation lookup failed for {ip_address}: {e}")
             return None
 

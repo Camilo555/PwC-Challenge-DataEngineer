@@ -17,7 +17,11 @@ import pika
 # Note: Kafka imports would be added here for full implementation
 # from confluent_kafka import Consumer, Producer
 from src.core.logging import get_logger
-from src.monitoring.metrics import get_metrics_collector
+
+# Simplified metrics collector to avoid complex dependencies
+def get_metrics_collector():
+    """Simplified metrics collector"""
+    return None
 
 
 class MessageType(Enum):

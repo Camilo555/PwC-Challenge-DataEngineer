@@ -281,7 +281,7 @@ class SecurityDistributedTracer:
             'user_id': context.user_id,
             'source_ip': context.source_ip,
             'risk_score': context.risk_score,
-            **details or {}
+            **(details or {})
         }
         
         if level == "ERROR":

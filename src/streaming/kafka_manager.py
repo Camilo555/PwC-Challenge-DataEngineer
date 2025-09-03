@@ -348,7 +348,7 @@ class KafkaManager:
         except Exception as e:
             self.logger.error(f"Failed to initialize Kafka admin client: {str(e)}")
 
-    def create_producer(self, config: ProducerConfig | None = None) -> KafkaProducer:
+    def create_producer(self, config: AdvancedProducerConfig | None = None) -> KafkaProducer:
         """
         Create Kafka producer with optimized configuration
 
@@ -360,7 +360,7 @@ class KafkaManager:
         """
         try:
             if not config:
-                config = ProducerConfig(bootstrap_servers=self.bootstrap_servers)
+                config = AdvancedProducerConfig(bootstrap_servers=self.bootstrap_servers)
 
             producer_config = {
                 "bootstrap_servers": config.bootstrap_servers,
@@ -386,7 +386,7 @@ class KafkaManager:
             raise
 
     def create_consumer(
-        self, topics: list[str], group_id: str, config: ConsumerConfig | None = None
+        self, topics: list[str], group_id: str, config: AdvancedConsumerConfig | None = None
     ) -> KafkaConsumer:
         """
         Create Kafka consumer for specified topics
@@ -401,7 +401,7 @@ class KafkaManager:
         """
         try:
             if not config:
-                config = ConsumerConfig(bootstrap_servers=self.bootstrap_servers, group_id=group_id)
+                config = AdvancedConsumerConfig(bootstrap_servers=self.bootstrap_servers, group_id=group_id)
 
             consumer_config = {
                 "bootstrap_servers": config.bootstrap_servers,

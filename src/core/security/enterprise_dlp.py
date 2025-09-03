@@ -12,7 +12,11 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
-import phonenumbers
+try:
+    import phonenumbers
+    PHONENUMBERS_AVAILABLE = True
+except ImportError:
+    PHONENUMBERS_AVAILABLE = False
 from cryptography.fernet import Fernet
 
 from core.logging import get_logger
@@ -384,12 +388,13 @@ class SensitiveDataDetector:
                 return min(1.0, base_confidence + 0.2)
 
         # Phone number validation
-        try:
-            parsed = phonenumbers.parse(text, None)
-            if phonenumbers.is_valid_number(parsed):
-                return min(1.0, base_confidence + 0.15)
-        except:
-            pass
+        if PHONENUMBERS_AVAILABLE:
+            try:
+                parsed = phonenumbers.parse(text, None)
+                if phonenumbers.is_valid_number(parsed):
+                    return min(1.0, base_confidence + 0.15)
+            except:
+                pass
 
         return base_confidence
 

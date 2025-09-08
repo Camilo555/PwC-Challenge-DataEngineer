@@ -76,7 +76,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports
@@ -141,7 +141,7 @@ jobs:
         fail_ci_if_error: false
     
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: unit-test-results-${{ matrix.python-version }}
@@ -189,7 +189,7 @@ jobs:
           --tb=short
     
     - name: Upload data quality test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: data-quality-results
@@ -284,7 +284,7 @@ jobs:
           -m "not slow"
     
     - name: Upload integration test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: integration-test-results
@@ -338,7 +338,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload API test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: api-test-results
@@ -401,7 +401,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload infrastructure test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: infrastructure-test-results
@@ -461,7 +461,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload security test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-test-results
@@ -510,7 +510,7 @@ jobs:
           -m "not slow"
     
     - name: Upload performance test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: performance-test-results
@@ -669,7 +669,7 @@ jobs:
         python scripts/generate_test_report.py test-results/ > comprehensive-test-report.md || echo "Report generation script not found"
     
     - name: Upload comprehensive report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: comprehensive-test-report
@@ -728,7 +728,7 @@ jobs:
         echo "Quality Gate: PASSED" >> deployment-artifacts/build-info.txt
     
     - name: Upload deployment artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: deployment-artifacts-${{ github.run_number }}
         path: deployment-artifacts/
@@ -795,7 +795,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload extended test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: extended-test-results

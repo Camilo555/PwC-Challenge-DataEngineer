@@ -37,7 +37,7 @@ jobs:
     
     steps:
     - name: Checkout monitoring scripts
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Health Check - API Endpoints
       run: |
@@ -109,7 +109,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Performance Monitoring - API Response Times
       run: |
@@ -195,7 +195,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -269,7 +269,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Security Monitoring - SSL/TLS Check
       run: |

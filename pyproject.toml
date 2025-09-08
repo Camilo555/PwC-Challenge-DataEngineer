@@ -33,7 +33,7 @@ elasticsearch = "^9.1.0"
 python-multipart = "^0.0.20"
 pypdf2 = "^3.0.1"
 pandas = "^2.3.2"
-polars = "^1.18.0"
+polars = "^1.33.0"
 numpy = "^2.2.6"
 # Security dependencies
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}

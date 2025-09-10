@@ -1,0 +1,582 @@
+# Istio Service Mesh Installation Configuration
+# Enterprise-grade service mesh for all BMAD stories
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: control-plane
+  namespace: istio-system
+spec:
+  # Global Istio configuration
+  values:
+    global:
+      meshID: pwc-data-platform-mesh
+      multiCluster:
+        clusterName: pwc-primary-cluster
+      network: primary-network
+      
+      # Pilot configuration for service discovery
+      pilot:
+        env:
+          EXTERNAL_ISTIOD: false
+          ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION: true
+          
+      # Proxy configuration for all sidecars
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        # Enable distributed tracing
+        tracer: jaeger
+        
+      # mTLS configuration
+      defaultConfigVisibilitySettings:
+        - 
+      # Enable automatic sidecar injection
+      defaultRevision: default
+      
+    # Prometheus integration
+    telemetry:
+      v2:
+        enabled: true
+        prometheus:
+          configOverride:
+            metric_relabeling_configs:
+            - source_labels: [__name__]
+              regex: 'istio_.*'
+              target_label: __tmp_istio_metric
+            - source_labels: [__tmp_istio_metric]
+              regex: '.+'
+              target_label: __keep_me
+              
+  # Component specifications
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        hpaSpec:
+          maxReplicas: 5
+          minReplicas: 2
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: istiod
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+        env:
+        - name: PILOT_ENABLE_WORKLOAD_ENTRY_CROSS_CLUSTER
+          value: "true"
+        - name: PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY
+          value: "true"
+        - name: PILOT_TRACE_SAMPLING
+          value: "1.0"
+        - name: PILOT_ENABLE_STATUS
+          value: "true"
+          
+    # Ingress Gateway configuration
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi
+        hpaSpec:
+          maxReplicas: 10
+          minReplicas: 3
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: istio-ingressgateway
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+        service:
+          type: LoadBalancer
+          ports:
+          - port: 15021
+            targetPort: 15021
+            name: status-port
+            protocol: TCP
+          - port: 80
+            targetPort: 8080
+            name: http2
+            protocol: TCP
+          - port: 443
+            targetPort: 8443
+            name: https
+            protocol: TCP
+          - port: 31400
+            targetPort: 31400
+            name: tcp
+            protocol: TCP
+          - port: 15443
+            targetPort: 15443
+            name: tls
+            protocol: TCP
+        overlays:
+        - kind: Deployment
+          name: istio-ingressgateway
+          patches:
+          - path: spec.template.spec.containers[0].env[-1]
+            value:
+              name: ISTIO_META_ROUTER_MODE
+              value: "sni-dnat"
+              
+    # Egress Gateway for external services
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        hpaSpec:
+          maxReplicas: 5
+          minReplicas: 2
+        service:
+          type: ClusterIP
+          ports:
+          - port: 80
+            name: http2
+          - port: 443
+            name: https
+          - port: 15443
+            name: tls
+            
+    # CNI component for network policy
+    cni:
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi
+            
+  # Advanced configuration
+  meshConfig:
+    # Default traffic policy
+    defaultConfig:
+      proxyStatsMatcher:
+        inclusionRegexps:
+        - ".*outlier_detection.*"
+        - ".*circuit_breaker.*"
+        - ".*upstream_rq_retry.*"
+        - ".*_cx_.*"
+        exclusionRegexps:
+        - ".*osconfig.*"
+      # Concurrency settings
+      concurrency: 2
+      # Automatic protocol detection
+      proxyMetadata:
+        PILOT_ENABLE_IP_AUTOALLOCATE: "true"
+        
+    # Access log configuration
+    accessLogFile: /dev/stdout
+    accessLogFormat: |
+      [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
+      %RESPONSE_CODE% %RESPONSE_FLAGS% %RESPONSE_CODE_DETAILS% %CONNECTION_TERMINATION_DETAILS%
+      "%UPSTREAM_TRANSPORT_FAILURE_REASON%" %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%
+      "%REQ(X-FORWARDED-FOR)%" "%REQ(USER-AGENT)%" "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
+      %UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_REMOTE_ADDRESS%
+      %REQUESTED_SERVER_NAME% %ROUTE_NAME%
+
+    # Enable distributed tracing
+    defaultProviders:
+      tracing:
+      - jaeger
+      metrics:
+      - prometheus
+      accessLogging:
+      - otel
+      
+    # Extension providers
+    extensionProviders:
+    - name: jaeger
+      envoyOtelAls:
+        service: jaeger-collector.istio-system.svc.cluster.local
+        port: 4317
+    - name: prometheus
+      prometheus: {}
+    - name: otel
+      envoyOtelAls:
+        service: opentelemetry-collector.istio-system.svc.cluster.local
+        port: 4317
+        
+    # Service mesh policies
+    trustDomain: cluster.local
+    
+---
+# Gateway configuration for external traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: pwc-platform-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTP traffic (redirect to HTTPS)
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*.pwc-platform.com"
+    tls:
+      httpsRedirect: true
+  # HTTPS traffic
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "api.pwc-platform.com"
+    - "dashboard.pwc-platform.com"
+    - "mobile.pwc-platform.com"
+    - "developer.pwc-platform.com"
+    tls:
+      mode: SIMPLE
+      credentialName: pwc-platform-tls
+  # gRPC traffic for mobile apps
+  - port:
+      number: 443
+      name: grpc-tls
+      protocol: HTTPS
+    hosts:
+    - "grpc.pwc-platform.com"
+    tls:
+      mode: SIMPLE
+      credentialName: pwc-platform-grpc-tls
+      
+---
+# Virtual Service for API routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-routing
+  namespace: istio-system
+spec:
+  hosts:
+  - "api.pwc-platform.com"
+  gateways:
+  - pwc-platform-gateway
+  http:
+  # Mobile API routes with enhanced performance
+  - match:
+    - uri:
+        prefix: "/mobile/"
+    route:
+    - destination:
+        host: mobile-api-service.api.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    headers:
+      response:
+        add:
+          X-Mobile-Optimized: "true"
+          Cache-Control: "public, max-age=300"
+    timeout: 15s
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+      
+  # AI/LLM API routes
+  - match:
+    - uri:
+        prefix: "/ai/"
+    route:
+    - destination:
+        host: ai-service.ai.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    timeout: 30s # Longer timeout for AI processing
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      
+  # Analytics API routes
+  - match:
+    - uri:
+        prefix: "/analytics/"
+    route:
+    - destination:
+        host: analytics-api-service.analytics.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    timeout: 20s
+    retries:
+      attempts: 3
+      perTryTimeout: 7s
+      
+  # Real-time WebSocket connections
+  - match:
+    - uri:
+        prefix: "/ws/"
+    - headers:
+        upgrade:
+          exact: "websocket"
+    route:
+    - destination:
+        host: realtime-service.realtime.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    timeout: 0s # No timeout for WebSocket connections
+    
+  # Default API routes
+  - route:
+    - destination:
+        host: api-gateway-service.api.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+
+---
+# Virtual Service for Dashboard
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: dashboard-routing
+  namespace: istio-system
+spec:
+  hosts:
+  - "dashboard.pwc-platform.com"
+  gateways:
+  - pwc-platform-gateway
+  http:
+  - route:
+    - destination:
+        host: dashboard-service.dashboard.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    headers:
+      response:
+        add:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+    timeout: 30s
+
+---
+# Service Entry for external AI services
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-ai-services
+  namespace: istio-system
+spec:
+  hosts:
+  - api.openai.com
+  - api.anthropic.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Service Entry for external cloud services
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-cloud-services
+  namespace: istio-system
+spec:
+  hosts:
+  - "*.amazonaws.com"
+  - "*.azure.com"
+  - "*.googleapis.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Destination Rules for circuit breaker and load balancing
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api-services-circuit-breaker
+  namespace: istio-system
+spec:
+  host: "*.api.svc.cluster.local"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        consecutiveGatewayErrors: 5
+        idleTimeout: 90s
+        h2UpgradePolicy: UPGRADE
+    loadBalancer:
+      simple: LEAST_REQUEST
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+      
+---
+# Destination Rule for AI services (higher timeouts)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ai-services-circuit-breaker
+  namespace: istio-system
+spec:
+  host: "*.ai.svc.cluster.local"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 60s
+      http:
+        http1MaxPendingRequests: 25
+        http2MaxRequests: 50
+        maxRequestsPerConnection: 5
+        maxRetries: 2
+        consecutiveGatewayErrors: 3
+        idleTimeout: 300s
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 3
+      interval: 60s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 30
+      
+---
+# Peer Authentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT # Enforce mTLS for all services
+    
+---
+# Authorization Policy for API access control
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-access-control
+  namespace: api
+spec:
+  rules:
+  # Allow authenticated requests to API services
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        
+---
+# Authorization Policy for admin access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: admin-access-control
+  namespace: admin
+spec:
+  rules:
+  # Restrict admin operations to authorized users
+  - from:
+    - source:
+        requestPrincipals: ["*"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+    when:
+    - key: request.headers[x-user-role]
+      values: ["admin", "platform-admin"]
+      
+---
+# Telemetry configuration for enhanced observability
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: default-metrics
+  namespace: istio-system
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        destination_service_name:
+          operation: UPSERT
+          value: "%{DESTINATION_SERVICE_NAME | 'unknown'}"
+        source_app:
+          operation: UPSERT
+          value: "%{SOURCE_APP | 'unknown'}"
+        
+---
+# Telemetry for access logs
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: access-logging
+  namespace: istio-system
+spec:
+  accessLogging:
+  - providers:
+    - name: otel

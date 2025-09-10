@@ -1,0 +1,587 @@
+# Enterprise Redis Cluster for Real-Time BI Dashboard
+# High-availability Redis cluster with auto-scaling and monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-config
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+data:
+  redis.conf: |
+    # Network and Security
+    bind 0.0.0.0
+    port 6379
+    timeout 0
+    tcp-keepalive 300
+    
+    # Memory Management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # Cluster Configuration
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 15000
+    cluster-announce-ip ${REDIS_CLUSTER_ANNOUNCE_IP}
+    cluster-announce-port 6379
+    cluster-announce-bus-port 16379
+    
+    # Performance Tuning
+    tcp-backlog 511
+    databases 16
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    
+    # Logging
+    loglevel notice
+    syslog-enabled yes
+    syslog-ident redis-cluster
+    
+    # Persistence
+    dir /data
+    dbfilename dump.rdb
+    
+    # Client Settings
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+    
+    # Pub/Sub for real-time updates
+    notify-keyspace-events Ex
+
+---
+# Redis Cluster StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  serviceName: redis-cluster
+  replicas: 6
+  selector:
+    matchLabels:
+      app: redis-cluster
+      component: caching
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+        component: caching
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: redis-service-account
+      
+      # Anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - redis-cluster
+            topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - memory-optimized
+      
+      initContainers:
+      # Redis cluster initialization
+      - name: redis-cluster-init
+        image: redis:7.2-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          # Wait for all Redis nodes to be ready
+          echo "Waiting for Redis nodes to be ready..."
+          for i in $(seq 0 5); do
+            until redis-cli -h redis-cluster-${i}.redis-cluster -p 6379 ping; do
+              echo "Waiting for redis-cluster-${i}..."
+              sleep 2
+            done
+          done
+          
+          # Create cluster if not exists
+          if ! redis-cli -h redis-cluster-0.redis-cluster -p 6379 cluster nodes | grep -q master; then
+            echo "Creating Redis cluster..."
+            redis-cli --cluster create \
+              redis-cluster-0.redis-cluster:6379 \
+              redis-cluster-1.redis-cluster:6379 \
+              redis-cluster-2.redis-cluster:6379 \
+              redis-cluster-3.redis-cluster:6379 \
+              redis-cluster-4.redis-cluster:6379 \
+              redis-cluster-5.redis-cluster:6379 \
+              --cluster-replicas 1 \
+              --cluster-yes
+          fi
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+      
+      containers:
+      # Redis container
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        - containerPort: 16379
+          name: cluster-bus
+        
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        - name: REDIS_CLUSTER_ANNOUNCE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+        
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis
+          readOnly: true
+        - name: redis-data
+          mountPath: /data
+      
+      # Redis Exporter for Prometheus
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        ports:
+        - containerPort: 9121
+          name: metrics
+        
+        env:
+        - name: REDIS_ADDR
+          value: "redis://localhost:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      
+      # Sidecar for cluster management
+      - name: redis-sentinel
+        image: redis:7.2-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            # Monitor cluster health
+            redis-cli -a ${REDIS_PASSWORD} cluster info
+            # Check for failed nodes and auto-failover
+            redis-cli -a ${REDIS_PASSWORD} cluster nodes | grep fail && {
+              echo "Failed node detected, attempting recovery..."
+              redis-cli -a ${REDIS_PASSWORD} cluster reset soft
+            }
+            sleep 30
+          done
+        
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-cluster-config
+          items:
+          - key: redis.conf
+            path: redis.conf
+  
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+      labels:
+        app: redis-cluster
+        component: caching
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 50Gi
+
+---
+# Headless Service for Redis Cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+  - name: cluster-bus
+    port: 16379
+    targetPort: 16379
+  - name: metrics
+    port: 9121
+    targetPort: 9121
+  selector:
+    app: redis-cluster
+    component: caching
+
+---
+# Service for Redis Client Access
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-client
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+  selector:
+    app: redis-cluster
+    component: caching
+
+---
+# Redis Authentication Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+type: Opaque
+data:
+  password: cHdDUmVkaXNDbHVzdGVyUGFzc3dvcmQyMDI0IQ== # base64 encoded
+
+---
+# ServiceAccount for Redis Cluster
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-service-account
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+
+---
+# Redis Cluster HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: redis-cluster-hpa
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: redis-cluster
+  minReplicas: 6
+  maxReplicas: 18
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 180
+      selectPolicy: Min
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 300
+      selectPolicy: Min
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Custom metric: Redis connections
+  - type: Pods
+    pods:
+      metric:
+        name: redis_connected_clients
+        selector:
+          matchLabels:
+            app: redis-cluster
+      target:
+        type: AverageValue
+        averageValue: "500"
+
+---
+# PodDisruptionBudget for Redis Cluster
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-cluster-pdb
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  selector:
+    matchLabels:
+      app: redis-cluster
+      component: caching
+  minAvailable: 4  # Ensure at least 4 nodes remain during disruptions
+
+---
+# Network Policy for Redis Cluster
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-cluster-network-policy
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cluster
+      component: caching
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow access from WebSocket gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app: websocket-gateway
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow access from API pods
+  - from:
+    - podSelector:
+        matchLabels:
+          component: api
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow inter-cluster communication
+  - from:
+    - podSelector:
+        matchLabels:
+          app: redis-cluster
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 16379
+  # Allow metrics collection
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9121
+  egress:
+  # Allow inter-cluster communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis-cluster
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 16379
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-cluster-monitor
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  selector:
+    matchLabels:
+      app: redis-cluster
+      component: caching
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# PrometheusRule for Redis Alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: redis-cluster-alerts
+  namespace: default
+  labels:
+    app: redis-cluster
+    component: caching
+spec:
+  groups:
+  - name: redis-cluster.rules
+    rules:
+    - alert: RedisClusterDown
+      expr: up{job="redis-cluster"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Redis cluster instance is down"
+        description: "Redis cluster instance {{ $labels.instance }} has been down for more than 1 minute."
+    
+    - alert: RedisClusterHighMemoryUsage
+      expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Redis cluster high memory usage"
+        description: "Redis cluster instance {{ $labels.instance }} memory usage is above 90%"
+    
+    - alert: RedisClusterHighConnections
+      expr: redis_connected_clients > 800
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Redis cluster high connection count"
+        description: "Redis cluster instance {{ $labels.instance }} has {{ $value }} connections"
+    
+    - alert: RedisClusterSlowQueries
+      expr: increase(redis_slowlog_length[5m]) > 0
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Redis cluster slow queries detected"
+        description: "Redis cluster instance {{ $labels.instance }} has slow queries in the last 5 minutes"

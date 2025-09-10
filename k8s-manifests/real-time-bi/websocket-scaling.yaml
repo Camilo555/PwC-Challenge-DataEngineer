@@ -1,0 +1,460 @@
+# Real-Time BI Dashboard WebSocket Scaling Configuration
+# Supports high-concurrency WebSocket connections with auto-scaling
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: websocket-gateway
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+    tier: gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: websocket-gateway
+      component: real-time-bi
+  template:
+    metadata:
+      labels:
+        app: websocket-gateway
+        component: real-time-bi
+        tier: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: websocket-service-account
+      
+      # Anti-affinity to spread across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - websocket-gateway
+              topologyKey: kubernetes.io/hostname
+      
+      containers:
+      - name: websocket-gateway
+        image: pwc-retail-platform-websocket:latest
+        ports:
+        - containerPort: 3000
+          name: websocket
+          protocol: TCP
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: WS_PORT
+          value: "3000"
+        - name: REDIS_CLUSTER_ENDPOINTS
+          value: "redis-cluster-0.redis-cluster:6379,redis-cluster-1.redis-cluster:6379,redis-cluster-2.redis-cluster:6379"
+        - name: MAX_CONNECTIONS_PER_INSTANCE
+          value: "10000"
+        - name: HEARTBEAT_INTERVAL
+          value: "30000"
+        - name: CONNECTION_TIMEOUT
+          value: "60000"
+        - name: ENABLE_CLUSTERING
+          value: "true"
+        - name: CLUSTER_ADAPTER
+          value: "redis"
+        - name: LOG_LEVEL
+          value: "info"
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: websocket-gateway-service
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+spec:
+  type: LoadBalancer
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 86400  # 24 hours
+  ports:
+  - name: websocket
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: websocket-gateway
+    component: real-time-bi
+
+---
+# HPA for WebSocket Gateway
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: websocket-gateway-hpa
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: websocket-gateway
+  minReplicas: 3
+  maxReplicas: 30
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 120
+      selectPolicy: Min
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+  # Active WebSocket connections
+  - type: Pods
+    pods:
+      metric:
+        name: websocket_active_connections
+        selector:
+          matchLabels:
+            app: websocket-gateway
+      target:
+        type: AverageValue
+        averageValue: "8000"
+  # Message throughput
+  - type: Pods
+    pods:
+      metric:
+        name: websocket_messages_per_second
+        selector:
+          matchLabels:
+            app: websocket-gateway
+      target:
+        type: AverageValue
+        averageValue: "1000"
+
+---
+# VPA for Resource Optimization
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: websocket-gateway-vpa
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: websocket-gateway
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: websocket-gateway
+      mode: Auto
+      minAllowed:
+        cpu: 200m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 4000m
+        memory: 8Gi
+      controlledResources:
+      - cpu
+      - memory
+      controlledValues: RequestsAndLimits
+
+---
+# KEDA ScaledObject for Event-Driven Scaling
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: websocket-gateway-keda
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+spec:
+  scaleTargetRef:
+    name: websocket-gateway
+  minReplicaCount: 3
+  maxReplicaCount: 50
+  pollingInterval: 15
+  cooldownPeriod: 120
+  idleReplicaCount: 3
+  triggers:
+  # Redis connection count trigger
+  - type: redis
+    metadata:
+      address: redis-cluster-0.redis-cluster:6379
+      listName: websocket_connections
+      listLength: "5000"
+  # Prometheus metrics trigger
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus-server:9090
+      metricName: websocket_connection_rate
+      threshold: "100"
+      query: rate(websocket_connections_total[1m])
+
+---
+# PodDisruptionBudget for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: websocket-gateway-pdb
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+spec:
+  selector:
+    matchLabels:
+      app: websocket-gateway
+      component: real-time-bi
+  minAvailable: 2
+  unhealthyPodEvictionPolicy: AlwaysAllow
+
+---
+# ServiceAccount for WebSocket Gateway
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: websocket-service-account
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/websocket-gateway-role
+
+---
+# Network Policy for WebSocket Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: websocket-gateway-network-policy
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+spec:
+  podSelector:
+    matchLabels:
+      app: websocket-gateway
+      component: real-time-bi
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from load balancer
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow egress to Redis cluster
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis-cluster
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow HTTPS for external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# ConfigMap for WebSocket Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: websocket-gateway-config
+  namespace: default
+  labels:
+    app: websocket-gateway
+    component: real-time-bi
+data:
+  config.json: |
+    {
+      "server": {
+        "port": 3000,
+        "host": "0.0.0.0",
+        "maxConnections": 10000,
+        "timeout": 60000,
+        "heartbeatInterval": 30000
+      },
+      "redis": {
+        "cluster": true,
+        "nodes": [
+          {
+            "host": "redis-cluster-0.redis-cluster",
+            "port": 6379
+          },
+          {
+            "host": "redis-cluster-1.redis-cluster",
+            "port": 6379
+          },
+          {
+            "host": "redis-cluster-2.redis-cluster",
+            "port": 6379
+          }
+        ],
+        "options": {
+          "enableReadyCheck": true,
+          "redisOptions": {
+            "password": null,
+            "connectTimeout": 10000,
+            "commandTimeout": 5000,
+            "retryDelayOnFailover": 100,
+            "maxRetriesPerRequest": 3
+          }
+        }
+      },
+      "websocket": {
+        "pingTimeout": 5000,
+        "pingInterval": 25000,
+        "upgradeTimeout": 10000,
+        "maxHttpBufferSize": 1e6,
+        "allowEIO3": false,
+        "cors": {
+          "origin": "*",
+          "methods": ["GET", "POST"],
+          "credentials": true
+        },
+        "transports": ["websocket", "polling"]
+      },
+      "clustering": {
+        "enabled": true,
+        "adapter": "redis",
+        "sticky": true,
+        "sessionAffinity": "client-ip"
+      },
+      "monitoring": {
+        "metrics": {
+          "enabled": true,
+          "port": 8080,
+          "path": "/metrics"
+        },
+        "healthcheck": {
+          "enabled": true,
+          "path": "/health"
+        },
+        "readiness": {
+          "enabled": true,
+          "path": "/ready"
+        }
+      },
+      "security": {
+        "rateLimit": {
+          "windowMs": 15 * 60 * 1000,
+          "max": 1000,
+          "message": "Too many requests from this IP"
+        },
+        "cors": {
+          "origin": ["https://dashboard.bmad.pwc.internal"],
+          "credentials": true
+        },
+        "helmet": {
+          "contentSecurityPolicy": {
+            "directives": {
+              "defaultSrc": ["'self'"],
+              "connectSrc": ["'self'", "wss:", "ws:"],
+              "scriptSrc": ["'self'", "'unsafe-inline'"],
+              "styleSrc": ["'self'", "'unsafe-inline'"]
+            }
+          }
+        }
+      }
+    }

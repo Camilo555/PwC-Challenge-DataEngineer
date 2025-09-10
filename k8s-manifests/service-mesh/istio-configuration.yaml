@@ -1,0 +1,274 @@
+# Istio Service Mesh Configuration for PwC BMAD Platform
+# Provides advanced traffic management, security, and observability
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    name: istio-system
+    istio-injection: disabled
+
+---
+# Istio Gateway for External Traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: bmad-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: bmad-tls-cert
+    hosts:
+    - api.bmad.pwc.internal
+    - dashboard.bmad.pwc.internal
+    - analytics.bmad.pwc.internal
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - api.bmad.pwc.internal
+    - dashboard.bmad.pwc.internal
+    - analytics.bmad.pwc.internal
+    redirect:
+      httpsRedirect: true
+
+---
+# Virtual Service for API Traffic Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: bmad-api-vs
+  namespace: istio-system
+spec:
+  hosts:
+  - api.bmad.pwc.internal
+  gateways:
+  - bmad-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/api/v1/health"
+    route:
+    - destination:
+        host: pwc-retail-platform-api-service.default.svc.cluster.local
+        port:
+          number: 80
+    timeout: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+  - match:
+    - uri:
+        prefix: "/api/v1/"
+    route:
+    - destination:
+        host: pwc-retail-platform-api-service.default.svc.cluster.local
+        port:
+          number: 80
+        subset: stable
+      weight: 90
+    - destination:
+        host: pwc-retail-platform-api-service.default.svc.cluster.local
+        port:
+          number: 80
+        subset: canary
+      weight: 10
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,gateway-error,connect-failure,refused-stream
+    timeout: 30s
+
+---
+# Destination Rule for Load Balancing and Circuit Breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: bmad-api-dr
+  namespace: istio-system
+spec:
+  host: pwc-retail-platform-api-service.default.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 5
+        idleTimeout: 900s
+        h2UpgradePolicy: UPGRADE
+    circuitBreaker:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+    outlierDetection:
+      consecutive5xxErrors: 3
+      consecutiveGatewayErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  subsets:
+  - name: stable
+    labels:
+      version: v1
+    trafficPolicy:
+      loadBalancer:
+        simple: ROUND_ROBIN
+  - name: canary
+    labels:
+      version: v2
+    trafficPolicy:
+      loadBalancer:
+        simple: RANDOM
+
+---
+# Service Entry for External Dependencies
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-database
+  namespace: istio-system
+spec:
+  hosts:
+  - pwc-retail-prod-postgres.cluster-xyz.us-east-1.rds.amazonaws.com
+  ports:
+  - number: 5432
+    name: postgres
+    protocol: TCP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# AuthorizationPolicy for Zero-Trust Security
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: bmad-api-authz
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: pwc-retail-platform-api
+      component: api
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+    - source:
+        namespaces: ["monitoring"]
+  - from:
+    - source:
+        namespaces: ["default"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+    when:
+    - key: request.headers[authorization]
+      values: ["Bearer *"]
+
+---
+# PeerAuthentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# EnvoyFilter for Advanced Traffic Management
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: bmad-rate-limit
+  namespace: default
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-retail-platform-api
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.local_ratelimit
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          stat_prefix: local_rate_limiter
+          token_bucket:
+            max_tokens: 1000
+            tokens_per_fill: 100
+            fill_interval: 60s
+          filter_enabled:
+            runtime_key: local_rate_limit_enabled
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+          filter_enforced:
+            runtime_key: local_rate_limit_enforced
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+
+---
+# Telemetry Configuration for Observability
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        request_protocol:
+          operation: UPSERT
+          value: "%{REQUEST_PROTOCOL}"
+        response_code:
+          operation: UPSERT
+          value: "%{RESPONSE_CODE}"
+  tracing:
+  - providers:
+    - name: jaeger
+  accessLogging:
+  - providers:
+    - name: otel

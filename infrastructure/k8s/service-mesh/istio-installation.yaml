@@ -1,0 +1,443 @@
+# Istio Service Mesh Installation for BMAD Platform
+# Enterprise-grade service mesh for multi-cloud microservices
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: bmad-control-plane
+  namespace: istio-system
+spec:
+  revision: "1-20-2"
+  
+  # Values configuration for production deployment
+  values:
+    pilot:
+      traceSampling: 1.0
+      resources:
+        requests:
+          cpu: 500m
+          memory: 2Gi
+        limits:
+          cpu: 2000m
+          memory: 8Gi
+      env:
+        EXTERNAL_ISTIOD: false
+        PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION: true
+        PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY: true
+        PILOT_TRACE_SAMPLING: 100.0
+
+    global:
+      meshID: bmad-mesh
+      multiCluster:
+        clusterName: bmad-primary
+      network: bmad-network
+      
+      # Multi-cloud configuration
+      meshNetworks:
+        bmad-network:
+          endpoints:
+          - fromRegistry: bmad-primary
+          gateways:
+          - address: 0.0.0.0
+            port: 443
+            
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+        logLevel: warning
+        componentLogLevel: "misc:error"
+        
+      # Security and compliance
+      defaultPodDisruptionBudget:
+        enabled: true
+        minAvailable: 1
+        
+      # Telemetry configuration
+      tracer:
+        zipkin:
+          address: jaeger-collector.observability.svc.cluster.local:9411
+          
+  # Component configuration
+  components:
+    pilot:
+      k8s:
+        env:
+          - name: PILOT_ENABLE_STATUS
+            value: "true"
+          - name: PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION
+            value: "true"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 8Gi
+        hpaSpec:
+          maxReplicas: 5
+          minReplicas: 2
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+        podDisruptionBudget:
+          minAvailable: 1
+          
+    proxy:
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+            
+    # Ingress Gateway for external traffic
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+      k8s:
+        service:
+          type: LoadBalancer
+          loadBalancerIP: ""
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+            service.beta.kubernetes.io/azure-load-balancer-type: "standard"
+            cloud.google.com/neg: '{"ingress": true}'
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+        hpaSpec:
+          maxReplicas: 10
+          minReplicas: 3
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+        podDisruptionBudget:
+          minAvailable: 2
+          
+    # Egress Gateway for external service calls
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+        hpaSpec:
+          maxReplicas: 3
+          minReplicas: 2
+          
+  # Advanced mesh configuration
+  meshConfig:
+    # Enable auto-injection
+    defaultConfig:
+      gatewayTopology:
+        numTrustedProxies: 2
+      proxyStatsMatcher:
+        exclusionRegexps:
+        - ".*circuit_breakers.*"
+        - ".*upstream_rq_retry.*"
+        - ".*upstream_rq_pending.*"
+        inclusionRegexps:
+        - ".*_cx_.*"
+      
+    # Security configuration  
+    trustDomain: cluster.local
+    trustDomainAliases:
+    - bmad-platform.com
+    
+    # Telemetry
+    defaultProviders:
+      metrics:
+      - prometheus
+      tracing:
+      - jaeger
+      accessLogging:
+      - envoy
+      
+    # Extension providers
+    extensionProviders:
+    - name: prometheus
+      prometheus: {}
+    - name: jaeger
+      envoyOtelAls:
+        service: jaeger-collector.observability.svc.cluster.local
+        port: 4317
+    - name: envoy
+      envoyFileAccessLog:
+        path: /dev/stdout
+        
+---
+# Gateway for BMAD Platform Traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: bmad-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTPS traffic
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: bmad-tls-secret
+    hosts:
+    - "api.bmad-platform.com"
+    - "app.bmad-platform.com"
+    - "analytics.bmad-platform.com"
+    - "mobile.bmad-platform.com"
+    
+  # HTTP redirect to HTTPS
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "api.bmad-platform.com"
+    - "app.bmad-platform.com"
+    - "analytics.bmad-platform.com"
+    - "mobile.bmad-platform.com"
+    tls:
+      httpsRedirect: true
+
+---
+# Virtual Service for BMAD Platform Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: bmad-platform-vs
+  namespace: istio-system
+spec:
+  hosts:
+  - "api.bmad-platform.com"
+  - "app.bmad-platform.com"
+  - "analytics.bmad-platform.com"
+  - "mobile.bmad-platform.com"
+  gateways:
+  - bmad-gateway
+  http:
+  # API Routes
+  - match:
+    - uri:
+        prefix: /api/v1/
+    - headers:
+        host:
+          exact: api.bmad-platform.com
+    route:
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: v1
+      weight: 90
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: v2
+      weight: 10
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+      retryOn: 5xx
+      
+  # Mobile App Routes (Story 4.1)
+  - match:
+    - uri:
+        prefix: /mobile/
+    - headers:
+        host:
+          exact: mobile.bmad-platform.com
+    route:
+    - destination:
+        host: bmad-mobile-service.default.svc.cluster.local
+        port:
+          number: 8080
+    headers:
+      request:
+        add:
+          x-mobile-optimized: "true"
+      response:
+        add:
+          cache-control: "public, max-age=300"
+          
+  # Analytics Routes
+  - match:
+    - uri:
+        prefix: /analytics/
+    - headers:
+        host:
+          exact: analytics.bmad-platform.com
+    route:
+    - destination:
+        host: bmad-analytics-service.default.svc.cluster.local
+        port:
+          number: 8080
+    timeout: 30s
+    
+  # Web Application Routes
+  - match:
+    - headers:
+        host:
+          exact: app.bmad-platform.com
+    route:
+    - destination:
+        host: bmad-web-service.default.svc.cluster.local
+        port:
+          number: 80
+
+---
+# Destination Rules for Load Balancing and Circuit Breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: bmad-api-destination-rule
+  namespace: default
+spec:
+  host: bmad-api-service.default.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        tcpKeepalive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 64
+        http2MaxRequests: 1024
+        maxRequestsPerConnection: 2
+        maxRetries: 3
+        consecutiveGatewayErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50
+        minHealthPercent: 50
+    circuitBreaker:
+      consecutiveGatewayErrors: 5
+      consecutiveServerErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+      splitExternalLocalOriginErrors: false
+    loadBalancer:
+      simple: LEAST_CONN
+      consistentHash:
+        httpHeaderName: "x-user-id"
+    outlierDetection:
+      consecutive5xxErrors: 5
+      consecutiveGatewayErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+      
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 50
+  - name: v2
+    labels:
+      version: v2
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 20
+
+---
+# Security Policies
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: bmad-mtls-policy
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Authorization Policy for BMAD Platform
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: bmad-auth-policy
+  namespace: default
+spec:
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/default/sa/bmad-frontend"
+        - "cluster.local/ns/default/sa/bmad-mobile"
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        paths: ["/api/*"]
+  - from:
+    - source:
+        namespaces: ["default", "bmad-system"]
+    to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/health", "/ready", "/metrics"]
+
+---
+# Telemetry Configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: bmad-metrics
+  namespace: default
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        request_protocol:
+          operation: UPSERT
+          value: "http"
+  tracing:
+  - providers:
+    - name: jaeger
+  accessLogging:
+  - providers:
+    - name: envoy

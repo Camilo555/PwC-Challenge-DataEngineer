@@ -1,0 +1,568 @@
+# Horizontal and Vertical Pod Autoscaling for BMAD Platform
+# ML-driven auto-scaling from 3 to 50+ instances with predictive scaling
+
+---
+# Horizontal Pod Autoscaler for API Services
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bmad-api-hpa
+  namespace: default
+  labels:
+    app: bmad-api
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-api-deployment
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  # Custom metrics for business logic scaling
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  # External metrics for predictive scaling
+  - type: External
+    external:
+      metric:
+        name: predicted_load
+        selector:
+          matchLabels:
+            service: bmad-api
+      target:
+        type: Value
+        value: "80"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# Vertical Pod Autoscaler for API Services
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-api-vpa
+  namespace: default
+  labels:
+    app: bmad-api
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-api-deployment
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3
+  resourcePolicy:
+    containerPolicies:
+    - containerName: bmad-api
+      maxAllowed:
+        cpu: 4
+        memory: 8Gi
+      minAllowed:
+        cpu: 100m
+        memory: 256Mi
+      controlledResources:
+      - cpu
+      - memory
+      controlledValues: RequestsAndLimits
+
+---
+# HPA for Mobile Service (Story 4.1)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bmad-mobile-hpa
+  namespace: default
+  labels:
+    app: bmad-mobile
+    component: autoscaling
+    story: "4.1"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-mobile-deployment
+  minReplicas: 2
+  maxReplicas: 25
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Mobile-specific metrics
+  - type: Pods
+    pods:
+      metric:
+        name: mobile_active_sessions
+      target:
+        type: AverageValue
+        averageValue: "200"
+  - type: External
+    external:
+      metric:
+        name: mobile_app_downloads_rate
+        selector:
+          matchLabels:
+            platform: mobile
+      target:
+        type: Value
+        value: "50"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 180
+      policies:
+      - type: Percent
+        value: 15
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+# HPA for AI Vector Database Service (Story 4.2)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bmad-vector-db-hpa
+  namespace: default
+  labels:
+    app: bmad-vector-db
+    component: autoscaling
+    story: "4.2"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-vector-db-deployment
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  # AI/ML specific metrics
+  - type: Pods
+    pods:
+      metric:
+        name: vector_search_queries_per_second
+      target:
+        type: AverageValue
+        averageValue: "500"
+  - type: Pods
+    pods:
+      metric:
+        name: embedding_generation_queue_depth
+      target:
+        type: AverageValue
+        averageValue: "100"
+  - type: External
+    external:
+      metric:
+        name: ml_model_inference_latency
+        selector:
+          matchLabels:
+            model_type: embeddings
+      target:
+        type: Value
+        value: "50"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Longer stabilization for ML workloads
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 200
+        periodSeconds: 60
+
+---
+# VPA for Vector Database
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-vector-db-vpa
+  namespace: default
+  labels:
+    app: bmad-vector-db
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-vector-db-deployment
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: vector-db
+      maxAllowed:
+        cpu: 8
+        memory: 32Gi
+      minAllowed:
+        cpu: 500m
+        memory: 2Gi
+      controlledResources:
+      - cpu
+      - memory
+      controlledValues: RequestsAndLimits
+
+---
+# HPA for Analytics Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bmad-analytics-hpa
+  namespace: default
+  labels:
+    app: bmad-analytics
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-analytics-deployment
+  minReplicas: 2
+  maxReplicas: 30
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Analytics-specific metrics
+  - type: Pods
+    pods:
+      metric:
+        name: analytics_queries_per_second
+      target:
+        type: AverageValue
+        averageValue: "50"
+  - type: Pods
+    pods:
+      metric:
+        name: data_processing_queue_depth
+      target:
+        type: AverageValue
+        averageValue: "200"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 45
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+# Custom Resource for ML-Driven Predictive Scaling
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predictive-scaling-config
+  namespace: default
+  labels:
+    component: ml-autoscaling
+data:
+  config.yaml: |
+    predictive_scaling:
+      enabled: true
+      model_endpoint: "http://ml-predictor-service.ml-system.svc.cluster.local:8080/predict"
+      prediction_window: 900  # 15 minutes
+      metrics_history: 7200   # 2 hours
+      confidence_threshold: 0.8
+      
+      models:
+        load_prediction:
+          type: "time_series"
+          features:
+            - cpu_utilization
+            - memory_utilization
+            - request_rate
+            - queue_depth
+            - time_of_day
+            - day_of_week
+          update_frequency: 300  # 5 minutes
+          
+        anomaly_detection:
+          type: "isolation_forest"
+          features:
+            - request_latency
+            - error_rate
+            - resource_utilization
+          threshold: 0.95
+          
+      scaling_policies:
+        api_service:
+          min_replicas: 3
+          max_replicas: 50
+          scale_up_threshold: 80
+          scale_down_threshold: 30
+          cooldown_period: 180
+          
+        mobile_service:
+          min_replicas: 2
+          max_replicas: 25
+          scale_up_threshold: 70
+          scale_down_threshold: 25
+          cooldown_period: 120
+          
+        vector_db:
+          min_replicas: 3
+          max_replicas: 20
+          scale_up_threshold: 85
+          scale_down_threshold: 40
+          cooldown_period: 300
+
+---
+# KEDA ScaledObject for Event-Driven Autoscaling
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: bmad-queue-scaler
+  namespace: default
+  labels:
+    app: bmad-worker
+    component: event-driven-scaling
+spec:
+  scaleTargetRef:
+    name: bmad-worker-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 100
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+  # RabbitMQ queue depth scaling
+  - type: rabbitmq
+    metadata:
+      protocol: amqp
+      queueName: bmad-data-processing
+      mode: QueueLength
+      value: "10"
+      activationValue: "5"
+    authenticationRef:
+      name: rabbitmq-auth
+  # Kafka consumer lag scaling
+  - type: kafka
+    metadata:
+      bootstrapServers: kafka-cluster.kafka.svc.cluster.local:9092
+      consumerGroup: bmad-analytics-consumer
+      topic: bmad-events
+      lagThreshold: "100"
+      activationLagThreshold: "50"
+    authenticationRef:
+      name: kafka-auth
+  # Redis stream scaling
+  - type: redis-streams
+    metadata:
+      address: redis-cluster.redis.svc.cluster.local:6379
+      stream: bmad-realtime-events
+      consumerGroup: bmad-processors
+      pendingEntriesCount: "50"
+    authenticationRef:
+      name: redis-auth
+
+---
+# ML-Driven Predictive Scaling Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-predictor-service
+  namespace: ml-system
+  labels:
+    app: ml-predictor
+    component: predictive-scaling
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ml-predictor
+  template:
+    metadata:
+      labels:
+        app: ml-predictor
+    spec:
+      containers:
+      - name: ml-predictor
+        image: bmad/ml-predictor:v1.2.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MODEL_PATH
+          value: "/models/load_prediction_v2.pkl"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: PREDICTION_INTERVAL
+          value: "300"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+          readOnly: true
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: ml-models-pvc
+
+---
+# Service for ML Predictor
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-predictor-service
+  namespace: ml-system
+  labels:
+    app: ml-predictor
+spec:
+  selector:
+    app: ml-predictor
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  type: ClusterIP
+
+---
+# Custom Metrics Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-metrics-config
+  namespace: monitoring
+  labels:
+    component: custom-metrics
+data:
+  adapter_config.yaml: |
+    rules:
+    - seriesQuery: 'bmad_requests_per_second{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^bmad_(.*)_per_second"
+        as: "${1}_per_second"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])'
+        
+    - seriesQuery: 'bmad_mobile_active_sessions{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^bmad_mobile_(.*)"
+        as: "mobile_${1}"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+        
+    - seriesQuery: 'bmad_vector_search_queries{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^bmad_vector_(.*)_queries"
+        as: "vector_${1}_queries_per_second"
+      metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[1m])'
+        
+    - seriesQuery: 'bmad_ml_model_inference_latency_ms{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^bmad_ml_model_(.*)_latency_ms"
+        as: "ml_model_${1}_latency"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[5m])'

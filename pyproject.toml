@@ -83,7 +83,7 @@ opentelemetry-instrumentation = "^0.48b0"
 psutil = "^7.0.0"
 # DataDog APM and monitoring
 ddtrace = "^2.18.1"
-datadog = "^0.49.1"
+datadog = "^0.52.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

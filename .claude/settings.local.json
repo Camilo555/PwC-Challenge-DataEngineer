@@ -43,7 +43,9 @@
       "Bash(git log:*)",
       "Bash(git rm:*)",
       "WebSearch",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(pytest:*)",
+      "Bash(echo:*)"
     ],
     "defaultMode": "acceptEdits"
   }

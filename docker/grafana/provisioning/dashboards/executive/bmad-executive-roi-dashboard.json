@@ -1,0 +1,710 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "bmad-executive-roi",
+    "title": "BMAD Executive ROI Dashboard - $27.8M Implementation",
+    "description": "Executive dashboard tracking ROI and business impact across all 10 BMAD stories with real-time financial metrics",
+    "tags": ["executive", "bmad", "roi", "business-value", "c-suite"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total BMAD Investment Value",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(bmad_story_business_value_dollars)",
+            "legendFormat": "Total Investment",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Total business value across all 10 BMAD stories",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 20000000},
+                {"color": "green", "value": 25000000}
+              ]
+            },
+            "custom": {
+              "displayMode": "basic",
+              "textMode": "value_and_name"
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Overall ROI Achievement",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "bmad_overall_roi_percentage",
+            "legendFormat": "ROI %",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall return on investment across all BMAD stories",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 200,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 80},
+                {"color": "green", "value": 120},
+                {"color": "dark-green", "value": 150}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 3,
+        "title": "Platform Health Score",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "bmad_platform_health_score",
+            "legendFormat": "Health Score",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall platform health across all BMAD components",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 90},
+                {"color": "green", "value": 95},
+                {"color": "dark-green", "value": 99}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 4,
+        "title": "Business Value at Risk",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(bmad_story_business_value_dollars * (1 - bmad_story_health_score/100))",
+            "legendFormat": "Value at Risk",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Total business value currently at risk due to performance issues",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1000000},
+                {"color": "red", "value": 5000000}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 5,
+        "title": "ROI by BMAD Story",
+        "type": "barchart",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "bmad_story_roi_percentage by (story_name, story_value)",
+            "legendFormat": "{{story_name}} (${{story_value}}M)",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "ROI achievement for each BMAD story showing business value",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "custom": {
+              "orientation": "horizontal",
+              "barWidth": 0.8,
+              "groupWidth": 0.7,
+              "barRadius": 0.5,
+              "fullHighlight": true,
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false}
+            },
+            "color": {"mode": "continuous-GrYlRd"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 80},
+                {"color": "green", "value": 100},
+                {"color": "dark-green", "value": 120}
+              ]
+            },
+            "mappings": [
+              {
+                "type": "range",
+                "options": {
+                  "from": 0,
+                  "to": 80,
+                  "result": {
+                    "text": "Below Target",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "range", 
+                "options": {
+                  "from": 80,
+                  "to": 100,
+                  "result": {
+                    "text": "On Track",
+                    "color": "yellow"
+                  }
+                }
+              },
+              {
+                "type": "range",
+                "options": {
+                  "from": 100,
+                  "to": null,
+                  "result": {
+                    "text": "Exceeding",
+                    "color": "green"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "single", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]},
+          "displayMode": "basic",
+          "orientation": "horizontal",
+          "barWidth": 0.8,
+          "groupWidth": 0.7,
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 0,
+          "barRadius": 0.5,
+          "fullHighlight": true
+        }
+      },
+      {
+        "id": 6,
+        "title": "Key Business Metrics Trend",
+        "type": "timeseries",
+        "gridPos": {"h": 10, "w": 12, "x": 0, "y": 18},
+        "targets": [
+          {
+            "expr": "bmad_total_daily_users",
+            "legendFormat": "Daily Active Users",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "interval": "1h"
+          },
+          {
+            "expr": "rate(bmad_total_transactions[1h])",
+            "legendFormat": "Transactions/Hour",
+            "refId": "B",
+            "datasource": "Prometheus",
+            "interval": "1h"
+          },
+          {
+            "expr": "bmad_customer_satisfaction_score * 100",
+            "legendFormat": "Customer Satisfaction %",
+            "refId": "C",
+            "datasource": "Prometheus",
+            "interval": "1h"
+          }
+        ],
+        "description": "Key business metrics showing platform adoption and satisfaction",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "opacity",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Customer Satisfaction %"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}
+              ]
+            }
+          ]
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]},
+          "displayMode": "multi"
+        }
+      },
+      {
+        "id": 7,
+        "title": "Revenue Impact by Story",
+        "type": "piechart",
+        "gridPos": {"h": 10, "w": 12, "x": 12, "y": 18},
+        "targets": [
+          {
+            "expr": "bmad_story_revenue_impact_dollars by (story_name)",
+            "legendFormat": "{{story_name}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Revenue impact contribution by each BMAD story",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "custom": {
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false}
+            },
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "pieType": "donut",
+          "tooltip": {"mode": "single", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "percent"]},
+          "displayLabels": ["name", "percent"],
+          "unit": "short"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Critical Alerts Impact on Business Value",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "ALERTS{alertname=~\"BMAD.*\", severity=\"critical\"}",
+            "legendFormat": "",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "description": "Current critical alerts and their impact on business value",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "alertname": "Alert",
+                "story_id": "Story ID", 
+                "business_value": "Business Value",
+                "severity": "Severity",
+                "business_impact": "Business Impact"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "displayMode": "auto",
+              "filterable": true
+            },
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 2}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Severity"},
+              "properties": [
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background"
+                  }
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "critical": {
+                          "text": "CRITICAL",
+                          "color": "red"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "warning": {
+                          "text": "WARNING",
+                          "color": "yellow"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Business Value"
+            }
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "title": "SLO Compliance Dashboard",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 36},
+        "targets": [
+          {
+            "expr": "avg(bmad_slo_compliance_percentage)",
+            "legendFormat": "Overall SLO Compliance",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall SLO compliance across all BMAD stories",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99},
+                {"color": "dark-green", "value": 99.9}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 10,
+        "title": "Cost Optimization Savings",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 36},
+        "targets": [
+          {
+            "expr": "sum(bmad_cost_optimization_savings_dollars)",
+            "legendFormat": "Monthly Savings",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Monthly cost savings achieved through optimization",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 50000},
+                {"color": "green", "value": 100000},
+                {"color": "dark-green", "value": 200000}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 11,
+        "title": "Security Score",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 36},
+        "targets": [
+          {
+            "expr": "avg(bmad_security_score)",
+            "legendFormat": "Security Score",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall security posture score across all BMAD components",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 90},
+                {"color": "green", "value": 95},
+                {"color": "dark-green", "value": 99}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "center"
+        }
+      }
+    ],
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "schemaVersion": 30,
+    "version": 1,
+    "editable": true,
+    "templating": {
+      "list": [
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": "Prometheus",
+          "definition": "label_values(bmad_story_business_value_dollars, story_name)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "BMAD Story",
+          "multi": true,
+          "name": "story",
+          "options": [],
+          "query": {
+            "query": "label_values(bmad_story_business_value_dollars, story_name)",
+            "refId": "Prometheus-story-Variable-Query"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "production",
+            "value": "production"
+          },
+          "datasource": "Prometheus",
+          "definition": "label_values(bmad_platform_health_score, environment)",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Environment",
+          "multi": false,
+          "name": "environment",
+          "options": [],
+          "query": {
+            "query": "label_values(bmad_platform_health_score, environment)",
+            "refId": "Prometheus-environment-Variable-Query"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 0,
+          "type": "query"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        },
+        {
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "ALERTS{alertname=~\"BMAD.*\", severity=\"critical\"}",
+          "hide": false,
+          "iconColor": "red",
+          "name": "Critical BMAD Alerts",
+          "showIn": 0,
+          "step": "60s",
+          "tagKeys": "alertname,story_id",
+          "textFormat": "{{alertname}}: {{business_impact}}",
+          "titleFormat": "Critical Alert",
+          "type": "tags"
+        },
+        {
+          "datasource": "Prometheus", 
+          "enable": true,
+          "expr": "changes(bmad_story_deployment_version[24h]) > 0",
+          "hide": false,
+          "iconColor": "green",
+          "name": "BMAD Deployments",
+          "showIn": 0,
+          "step": "60s",
+          "tagKeys": "story_id,version",
+          "textFormat": "{{story_id}} deployed version {{version}}",
+          "titleFormat": "Deployment",
+          "type": "tags"
+        }
+      ]
+    },
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": ["bmad", "technical"],
+        "targetBlank": true,
+        "title": "Technical Dashboards",
+        "tooltip": "View detailed technical monitoring dashboards",
+        "type": "dashboards",
+        "url": ""
+      },
+      {
+        "asDropdown": false,
+        "icon": "doc",
+        "includeVars": false,
+        "keepTime": false,
+        "tags": [],
+        "targetBlank": true,
+        "title": "BMAD Documentation",
+        "tooltip": "Access BMAD implementation documentation",
+        "type": "link",
+        "url": "https://docs.pwc.com/bmad-implementation"
+      }
+    ]
+  },
+  "folderId": null,
+  "overwrite": true
+}

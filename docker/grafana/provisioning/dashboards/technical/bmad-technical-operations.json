@@ -1,0 +1,725 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "bmad-technical-ops",
+    "title": "BMAD Technical Operations - Platform Monitoring",
+    "description": "Comprehensive technical monitoring for all 10 BMAD stories with performance, security, and infrastructure metrics",
+    "tags": ["technical", "bmad", "infrastructure", "performance", "operations"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Performance Overview",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(bmad_api_duration_seconds_bucket[5m])) * 1000",
+            "legendFormat": "95th Percentile Latency (ms)",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(bmad_api_requests_total[5m])",
+            "legendFormat": "Request Rate (req/s)",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "(rate(bmad_api_requests_total{status=~\"5..\"} [5m]) / rate(bmad_api_requests_total[5m])) * 100",
+            "legendFormat": "Error Rate (%)",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "API performance metrics across all BMAD endpoints",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "line"}
+            },
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 100}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Error Rate (%)"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+                {"id": "custom.axisPlacement", "value": "right"}
+              ]
+            }
+          ]
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}
+        }
+      },
+      {
+        "id": 2,
+        "title": "Infrastructure Health",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "avg(bmad_infrastructure_health_score)",
+            "legendFormat": "Infrastructure Health",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Overall infrastructure health score",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 90},
+                {"color": "green", "value": 95},
+                {"color": "dark-green", "value": 99}
+              ]
+            },
+            "custom": {
+              "displayMode": "gradient"
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 3,
+        "title": "BMAD Story Health Status",
+        "type": "heatmap",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "bmad_story_health_score by (story_id, story_name)",
+            "legendFormat": "{{story_name}}",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "format": "time_series"
+          }
+        ],
+        "description": "Health status heatmap for all BMAD stories over time",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "scaleDistribution": {"type": "linear"}
+            },
+            "color": {
+              "mode": "continuous-GrYlRd",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 85},
+                {"color": "green", "value": 95}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "calculate": false,
+          "cellGap": 2,
+          "cellValues": {},
+          "color": {
+            "exponent": 0.5,
+            "fill": "dark-orange",
+            "mode": "spectrum",
+            "reverse": false,
+            "scale": "exponential",
+            "scheme": "Spectral",
+            "steps": 64
+          },
+          "exemplars": {
+            "color": "rgba(255,0,255,0.7)"
+          },
+          "filterValues": {
+            "le": 1e-9
+          },
+          "legend": {
+            "show": true
+          },
+          "rowsFrame": {
+            "layout": "auto"
+          },
+          "tooltip": {
+            "show": true,
+            "yHistogram": false
+          },
+          "yAxis": {
+            "axisPlacement": "left",
+            "reverse": false,
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Database Performance Metrics",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+        "targets": [
+          {
+            "expr": "rate(bmad_db_queries_total[5m])",
+            "legendFormat": "Queries/sec",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_db_connections_active",
+            "legendFormat": "Active Connections",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(bmad_db_query_duration_seconds_bucket[5m])) * 1000",
+            "legendFormat": "95th Percentile Query Time (ms)",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Database performance across all BMAD data stores",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          }
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}
+        }
+      },
+      {
+        "id": 5,
+        "title": "Data Quality Metrics",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+        "targets": [
+          {
+            "expr": "bmad_data_completeness_percentage",
+            "legendFormat": "Completeness",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_data_accuracy_percentage",
+            "legendFormat": "Accuracy",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_data_freshness_score",
+            "legendFormat": "Freshness",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Data quality metrics across all BMAD datasets",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 85},
+                {"color": "green", "value": 95}
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 6,
+        "title": "ML Model Performance",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
+        "targets": [
+          {
+            "expr": "bmad_ml_model_accuracy by (model_name)",
+            "legendFormat": "{{model_name}} Accuracy",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(bmad_ml_inference_duration_seconds_bucket[5m])) * 1000 by (model_name)",
+            "legendFormat": "{{model_name}} Inference Time (ms)",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(bmad_ml_predictions_total[5m]) by (model_name)",
+            "legendFormat": "{{model_name}} Predictions/sec",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "ML model performance metrics for AI/LLM analytics",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byRegexp", "options": ".*Accuracy.*"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {"id": "custom.axisPlacement", "value": "right"}
+              ]
+            }
+          ]
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}
+        }
+      },
+      {
+        "id": 7,
+        "title": "Security Monitoring",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26},
+        "targets": [
+          {
+            "expr": "bmad_security_incidents_total",
+            "legendFormat": "Security Incidents",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_failed_auth_attempts_total",
+            "legendFormat": "Failed Auth Attempts",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_compliance_score",
+            "legendFormat": "Compliance Score",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Security and compliance monitoring metrics",
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Compliance Score"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "steps": [
+                      {"color": "red", "value": 0},
+                      {"color": "yellow", "value": 90},
+                      {"color": "green", "value": 95}
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Mobile Analytics Performance",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34},
+        "targets": [
+          {
+            "expr": "bmad_mobile_app_launch_time_seconds by (platform)",
+            "legendFormat": "{{platform}} App Launch Time",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_mobile_crash_rate by (platform)",
+            "legendFormat": "{{platform}} Crash Rate",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(bmad_mobile_screen_views_total[5m]) by (platform)",
+            "legendFormat": "{{platform}} Screen Views/sec",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Mobile analytics platform performance metrics",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byRegexp", "options": ".*Launch Time.*"},
+              "properties": [
+                {"id": "unit", "value": "s"}
+              ]
+            },
+            {
+              "matcher": {"id": "byRegexp", "options": ".*Crash Rate.*"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {"id": "custom.axisPlacement", "value": "right"}
+              ]
+            }
+          ]
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}
+        }
+      },
+      {
+        "id": 9,
+        "title": "Real-time Streaming Metrics",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34},
+        "targets": [
+          {
+            "expr": "bmad_streaming_latency_seconds by (stream_name)",
+            "legendFormat": "{{stream_name}} Latency",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "rate(bmad_streaming_events_total[5m]) by (stream_name)",
+            "legendFormat": "{{stream_name}} Events/sec",
+            "refId": "B",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "bmad_streaming_backlog_size by (stream_name)",
+            "legendFormat": "{{stream_name}} Backlog",
+            "refId": "C",
+            "datasource": "Prometheus"
+          }
+        ],
+        "description": "Real-time streaming performance metrics",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {"mode": "none", "group": "A"},
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "scaleDistribution": {"type": "linear"},
+              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "thresholdsStyle": {"mode": "off"}
+            },
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byRegexp", "options": ".*Latency.*"},
+              "properties": [
+                {"id": "unit", "value": "s"}
+              ]
+            }
+          ]
+        },
+        "options": {
+          "tooltip": {"mode": "multi", "sort": "desc"},
+          "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"]}
+        }
+      },
+      {
+        "id": 10,
+        "title": "Infrastructure Resource Utilization",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 42},
+        "targets": [
+          {
+            "expr": "bmad_cpu_usage_percentage by (instance, story_id)",
+            "legendFormat": "",
+            "refId": "A",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "bmad_memory_usage_percentage by (instance, story_id)",
+            "legendFormat": "",
+            "refId": "B",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "bmad_disk_usage_percentage by (instance, story_id)",
+            "legendFormat": "",
+            "refId": "C",
+            "datasource": "Prometheus",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "description": "Infrastructure resource utilization by BMAD story and instance",
+        "transformations": [
+          {
+            "id": "seriesToColumns",
+            "options": {
+              "byField": "instance"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true
+              },
+              "indexByName": {},
+              "renameByName": {
+                "instance": "Instance",
+                "story_id": "Story ID",
+                "Value #A": "CPU %",
+                "Value #B": "Memory %",
+                "Value #C": "Disk %"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "center",
+              "displayMode": "color-background",
+              "filterable": true
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 70},
+                {"color": "red", "value": 90}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": false,
+              "displayName": "Story ID"
+            }
+          ]
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "schemaVersion": 30,
+    "version": 1,
+    "editable": true,
+    "templating": {
+      "list": [
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": "Prometheus",
+          "definition": "label_values(bmad_story_health_score, story_id)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Story ID",
+          "multi": true,
+          "name": "story_id",
+          "options": [],
+          "query": {
+            "query": "label_values(bmad_story_health_score, story_id)",
+            "refId": "Prometheus-story_id-Variable-Query"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": "Prometheus",
+          "definition": "label_values(bmad_api_requests_total, instance)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Instance",
+          "multi": true,
+          "name": "instance",
+          "options": [],
+          "query": {
+            "query": "label_values(bmad_api_requests_total, instance)",
+            "refId": "Prometheus-instance-Variable-Query"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "links": []
+  },
+  "folderId": null,
+  "overwrite": true
+}

@@ -115,16 +115,81 @@ class DataDogExecutiveDashboards:
         """Initialize executive-level KPIs"""
         
         executive_kpis = [
-            # CEO Overview KPIs
+            # BMAD Implementation ROI KPIs
             ExecutiveKPI(
-                name="total_revenue",
-                title="Total Revenue",
-                description="Total revenue generated across all channels",
+                name="bmad_roi_total",
+                title="BMAD Implementation ROI",
+                description="Total ROI from BMAD platform implementation ($15.5M+ target)",
                 category=KPICategory.FINANCIAL,
                 tier=MetricTier.CRITICAL,
-                target_value=1000000.0,
-                warning_threshold=800000.0,
-                critical_threshold=600000.0,
+                target_value=15500000.0,
+                warning_threshold=12000000.0,
+                critical_threshold=8000000.0,
+                unit="currency",
+                format_type="currency",
+                board_visible=True
+            ),
+            ExecutiveKPI(
+                name="real_time_bi_revenue",
+                title="Story 1.1 BI Dashboard Revenue Impact",
+                description="Revenue generated from real-time BI dashboard insights",
+                category=KPICategory.FINANCIAL,
+                tier=MetricTier.CRITICAL,
+                target_value=4200000.0,
+                warning_threshold=3000000.0,
+                critical_threshold=2000000.0,
+                unit="currency",
+                format_type="currency",
+                board_visible=True
+            ),
+            ExecutiveKPI(
+                name="ml_data_quality_savings",
+                title="Story 1.2 ML Data Quality Savings",
+                description="Cost savings from automated ML data quality framework",
+                category=KPICategory.FINANCIAL,
+                tier=MetricTier.CRITICAL,
+                target_value=2800000.0,
+                warning_threshold=2000000.0,
+                critical_threshold=1500000.0,
+                unit="currency",
+                format_type="currency",
+                board_visible=True
+            ),
+            ExecutiveKPI(
+                name="zero_trust_security_savings",
+                title="Story 2.1 Zero-Trust Security ROI",
+                description="Cost avoidance and efficiency gains from zero-trust security",
+                category=KPICategory.FINANCIAL,
+                tier=MetricTier.CRITICAL,
+                target_value=3500000.0,
+                warning_threshold=2500000.0,
+                critical_threshold=1800000.0,
+                unit="currency",
+                format_type="currency",
+                board_visible=True
+            ),
+            ExecutiveKPI(
+                name="api_performance_revenue",
+                title="Story 2.2 API Performance Revenue",
+                description="Revenue impact from optimized API performance (<25ms)",
+                category=KPICategory.FINANCIAL,
+                tier=MetricTier.CRITICAL,
+                target_value=2600000.0,
+                warning_threshold=1800000.0,
+                critical_threshold=1200000.0,
+                unit="currency",
+                format_type="currency",
+                board_visible=True
+            ),
+            ExecutiveKPI(
+                name="self_service_analytics_roi",
+                title="Story 3.1 Self-Service Analytics ROI",
+                description="ROI from self-service analytics and NLP query optimization",
+                category=KPICategory.FINANCIAL,
+                tier=MetricTier.CRITICAL,
+                target_value=2400000.0,
+                warning_threshold=1700000.0,
+                critical_threshold=1100000.0,
                 unit="currency",
                 format_type="currency",
                 board_visible=True

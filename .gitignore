@@ -138,6 +138,38 @@ playground/
 # Local Claude Code settings
 .claude/settings.local.json
 
+# === BMAD Project Specific ===
+# Agent todo files
+*-agent-todos.txt
+*_todos.txt
+todo-*.txt
+
+# Temporary agent directories
+.agents/
+
+# Test execution artifacts
+pytest.ini
+.coverage.*
+coverage-*.xml
+test-results/
+test-reports/
+junit.xml
+allure-results/
+
+# Documentation build artifacts
+docs/_build/
+docs/.doctrees/
+site/
+
+# Node.js (if documentation portal uses npm)
+node_modules/
+package-lock.json
+yarn.lock
+.npm/
+
+# GitHub Actions artifacts
+.github/.DS_Store
+
 # === API & Security ===
 # OAuth tokens and API keys
 *.token

@@ -89,6 +89,28 @@ datadog = "^0.49.1"
 pytest = "^8.4.1"
 pytest-asyncio = "^1.1.0"
 pytest-cov = "^6.0.0"
+pytest-benchmark = "^5.1.0"
+pytest-xdist = "^3.5.0"
+pytest-mock = "^3.12.0"
+pytest-html = "^4.1.1"
+pytest-json-report = "^1.5.0"
+pytest-timeout = "^2.3.1"
+pytest-random-order = "^1.1.0"
+pytest-clarity = "^1.0.1"
+pytest-sugar = "^1.0.0"
+pytest-httpx = "^0.30.0"
+pytest-postgresql = "^6.1.0"
+testcontainers = "^4.8.2"
+locust = "^2.31.8"
+mutmut = "^2.4.3"
+bandit = "^1.7.9"
+safety = "^3.2.10"
+hypothesis = "^6.115.6"
+great-expectations = "^1.2.4"
+faker = "^33.1.0"
+responses = "^0.25.3"
+websocket-client = "^1.8.0"
+pytest-websocket = "^0.1.0"
 ruff = "^0.12.10"
 black = "^25.1.0"
 mypy = "^1.14.1"
@@ -97,7 +119,6 @@ ipython = "^8.32.0"
 jupyter = "^1.1.1"
 notebook = "^7.3.2"
 memory-profiler = "^0.61.0"
-pytest-benchmark = "^5.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -149,15 +170,53 @@ namespace_packages = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers --strict-config --cov=src"
+addopts = [
+    "-ra",
+    "-q", 
+    "--strict-markers",
+    "--strict-config",
+    "--cov=src",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-fail-under=95",
+    "--html=reports/pytest-report.html",
+    "--json-report",
+    "--json-report-file=reports/pytest-report.json",
+    "--durations=10",
+    "--tb=short"
+]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+timeout = 300
 markers = [
-    "performance: marks tests as performance benchmarks (slow tests)",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests"
+    "unit: Unit tests with >95% coverage target",
+    "integration: Integration tests with external dependencies", 
+    "e2e: End-to-end tests with full system validation",
+    "performance: Performance and load testing",
+    "security: Security and penetration testing", 
+    "smoke: Critical path smoke tests",
+    "regression: Regression test suite",
+    "story_1_1: Real-Time BI Dashboard tests",
+    "story_1_2: ML Data Quality Framework tests", 
+    "story_2_1: Zero-Trust Security tests",
+    "story_2_2: API Performance tests",
+    "story_3_1: Self-Service Analytics tests",
+    "slow: Tests that take >5 seconds to execute",
+    "fast: Tests that execute in <1 second",
+    "database: Tests requiring database connections",
+    "api: Tests for API endpoints",
+    "websocket: Tests for WebSocket functionality",
+    "ml: Machine learning model tests",
+    "data_quality: Data validation and quality tests"
+]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning"
 ]
 
 [tool.coverage.run]

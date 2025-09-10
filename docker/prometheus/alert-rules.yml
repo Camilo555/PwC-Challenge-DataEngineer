@@ -50,7 +50,60 @@ groups:
   - name: application.rules
     interval: 15s
     rules:
-      # API Response Time
+      # Critical <15ms SLA Monitoring Rules
+      - alert: API15msSLAViolationCritical
+        expr: histogram_quantile(0.95, rate(api_response_time_ms_bucket[5m])) > 15
+        for: 1m
+        labels:
+          severity: critical
+          component: api-performance
+          sla_type: "15ms_target"
+        annotations:
+          summary: "CRITICAL: <15ms SLA violation detected"
+          description: "95th percentile API response time {{ $value }}ms exceeds 15ms SLA target"
+          business_impact: "Production SLA breach affecting $27.8M+ platform performance"
+          runbook_url: "https://runbooks.pwc.com/15ms-sla-violation"
+
+      # <15ms SLA Compliance Rate
+      - alert: API15msSLAComplianceBelow95Percent
+        expr: (api_sla_compliant_total / api_requests_total) * 100 < 95
+        for: 5m
+        labels:
+          severity: warning
+          component: api-performance
+          sla_type: "compliance_rate"
+        annotations:
+          summary: "<15ms SLA compliance below 95% target"
+          description: "SLA compliance rate {{ $value }}% below 95% target over 5 minutes"
+          business_impact: "SLA target not met, performance degradation detected"
+
+      # Ultra-fast Response Time Achievement
+      - alert: API5msUltraFastTargetMissed
+        expr: histogram_quantile(0.50, rate(api_response_time_ms_bucket[5m])) > 5
+        for: 10m
+        labels:
+          severity: info
+          component: api-performance
+          sla_type: "ultra_fast"
+        annotations:
+          summary: "Ultra-fast <5ms target missed"
+          description: "Median response time {{ $value }}ms exceeds 5ms ultra-fast target"
+          business_impact: "Opportunity for performance optimization identified"
+
+      # Cache Hit Rate Below Target (affecting <15ms SLA)
+      - alert: CacheHitRateBelow95Percent
+        expr: api_cache_hit_rate < 95
+        for: 5m
+        labels:
+          severity: warning
+          component: cache-performance
+          sla_type: "cache_efficiency"
+        annotations:
+          summary: "Cache hit rate below 95% target"
+          description: "Cache hit rate {{ $value }}% below 95% target, impacting <15ms SLA"
+          business_impact: "Cache efficiency degraded, response times may increase"
+
+      # Legacy High Response Time Alert (kept for backwards compatibility)
       - alert: HighAPIResponseTime
         expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-service"}[5m])) > 2.0
         for: 2m
@@ -58,7 +111,7 @@ groups:
           severity: warning
           component: api
         annotations:
-          summary: "High API response time"
+          summary: "High API response time (legacy alert)"
           description: "95th percentile response time is {{ $value }}s for API service"
 
       # API Error Rate
@@ -621,19 +674,20 @@ groups:
           description: "Compliance score {{ $value }}% below 98% for $3.2M security story"
           business_impact: "Regulatory risk exposure, $3.2M business value threatened"
 
-      # BMAD Story 4: API Performance ($2.1M)
+      # BMAD Story 4: API Performance ($2.1M) - Enhanced <15ms SLA Monitoring
       - alert: BMADAPIPerformanceSLOBreach
-        expr: histogram_quantile(0.95, rate(bmad_api_duration_seconds_bucket{story_id="4"}[5m])) > 0.05
+        expr: histogram_quantile(0.95, rate(bmad_api_duration_seconds_bucket{story_id="4"}[5m])) > 0.015
         for: 2m
         labels:
-          severity: warning
+          severity: critical
           component: api-performance
           story_id: "4"
           business_value: "2.1M"
         annotations:
-          summary: "API performance SLO breach"
-          description: "95th percentile API latency {{ $value }}ms exceeds 50ms SLO for $2.1M API story"
-          business_impact: "User experience degraded, $2.1M API business value at risk"
+          summary: "API performance <15ms SLO breach - CRITICAL"
+          description: "95th percentile API latency {{ $value }}ms exceeds 15ms SLO for $2.1M API story"
+          business_impact: "Critical performance degradation, $2.1M API business value at risk"
+          runbook_url: "https://runbooks.pwc.com/api-performance-15ms-sla"
 
       # BMAD Story 4.1: Mobile Analytics ($2.8M)
       - alert: BMADMobilePerformanceDegradation

@@ -1,0 +1,638 @@
+# BMAD Platform DNS Configuration with Multi-Cloud Failover
+# Enterprise-grade DNS management with global routing and disaster recovery
+
+---
+# External DNS Deployment for Automatic DNS Management
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+  namespace: kube-system
+  labels:
+    app: external-dns
+    component: dns-management
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: external-dns
+  template:
+    metadata:
+      labels:
+        app: external-dns
+    spec:
+      serviceAccountName: external-dns
+      containers:
+      - name: external-dns
+        image: k8s.gcr.io/external-dns/external-dns:v0.14.0
+        args:
+        - --source=service
+        - --source=ingress
+        - --source=istio-gateway
+        - --domain-filter=bmad-platform.com
+        - --provider=cloudflare
+        - --cloudflare-proxied
+        - --cloudflare-dns-records-per-page=100
+        - --registry=txt
+        - --txt-owner-id=bmad-external-dns
+        - --txt-prefix=bmad-
+        - --interval=30s
+        - --log-format=json
+        - --log-level=info
+        - --policy=upsert-only
+        - --annotation-filter=external-dns.alpha.kubernetes.io/hostname
+        env:
+        - name: CF_API_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-credentials
+              key: email
+        - name: CF_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-credentials
+              key: api-key
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        securityContext:
+          fsGroup: 65534
+          runAsNonRoot: true
+          runAsUser: 65534
+
+---
+# Service Account for External DNS
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-dns
+  namespace: kube-system
+  labels:
+    app: external-dns
+
+---
+# ClusterRole for External DNS
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-dns
+  labels:
+    app: external-dns
+rules:
+- apiGroups: [""]
+  resources: ["services","endpoints","pods"]
+  verbs: ["get","watch","list"]
+- apiGroups: ["extensions","networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get","watch","list"]
+- apiGroups: ["networking.istio.io"]
+  resources: ["gateways","virtualservices"]
+  verbs: ["get","watch","list"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["list","watch"]
+
+---
+# ClusterRoleBinding for External DNS
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-dns-viewer
+  labels:
+    app: external-dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-dns
+subjects:
+- kind: ServiceAccount
+  name: external-dns
+  namespace: kube-system
+
+---
+# DNS Configuration for Multi-Cloud Failover
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-failover-config
+  namespace: kube-system
+  labels:
+    component: dns-failover
+data:
+  dns-config.yaml: |
+    # Primary DNS Configuration - Cloudflare
+    primary_dns:
+      provider: cloudflare
+      zone_id: "your-cloudflare-zone-id"
+      email: "dns-admin@bmad-platform.com"
+      api_key_secret: "cloudflare-credentials"
+      
+      # Main domain records
+      records:
+        - name: "bmad-platform.com"
+          type: "A"
+          ttl: 300
+          priority: 1
+          targets:
+            - aws_lb: "aws-alb.us-west-2.elb.amazonaws.com"
+            - azure_lb: "bmad-appgw.westus2.cloudapp.azure.com"
+            - gcp_lb: "35.186.224.25"
+        
+        - name: "api.bmad-platform.com"
+          type: "CNAME"
+          ttl: 300
+          target: "bmad-platform.com"
+          
+        - name: "mobile.bmad-platform.com"
+          type: "CNAME"
+          ttl: 300
+          target: "bmad-platform.com"
+          
+        - name: "analytics.bmad-platform.com"
+          type: "CNAME"
+          ttl: 300
+          target: "bmad-platform.com"
+    
+    # Secondary DNS Configuration - AWS Route53
+    secondary_dns:
+      provider: route53
+      hosted_zone_id: "Z1234567890ABC"
+      region: "us-west-2"
+      access_key_secret: "route53-credentials"
+      
+      # Failover routing policies
+      routing_policies:
+        - name: "primary-aws"
+          type: "weighted"
+          weight: 60
+          health_check_id: "aws-health-check"
+          
+        - name: "secondary-azure"
+          type: "weighted"
+          weight: 30
+          health_check_id: "azure-health-check"
+          
+        - name: "tertiary-gcp"
+          type: "weighted"
+          weight: 10
+          health_check_id: "gcp-health-check"
+    
+    # Geographic DNS Routing
+    geographic_routing:
+      enabled: true
+      regions:
+        us_east:
+          primary: "aws"
+          secondary: "azure"
+          latency_routing: true
+        us_west:
+          primary: "aws"
+          secondary: "gcp"
+          latency_routing: true
+        europe:
+          primary: "azure"
+          secondary: "aws"
+          latency_routing: true
+        asia_pacific:
+          primary: "gcp"
+          secondary: "aws"
+          latency_routing: true
+    
+    # Health Check Configuration
+    health_checks:
+      aws_health_check:
+        url: "https://api.bmad-platform.com/health"
+        interval: 30
+        timeout: 10
+        threshold: 3
+        port: 443
+        protocol: "HTTPS"
+        
+      azure_health_check:
+        url: "https://api.bmad-platform.com/health"
+        interval: 30
+        timeout: 10
+        threshold: 3
+        port: 443
+        protocol: "HTTPS"
+        
+      gcp_health_check:
+        url: "https://api.bmad-platform.com/health"
+        interval: 30
+        timeout: 10
+        threshold: 3
+        port: 443
+        protocol: "HTTPS"
+
+---
+# DNS Health Check CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dns-health-check
+  namespace: kube-system
+  labels:
+    component: dns-monitoring
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: dns-checker
+            image: tutum/dnsutils
+            command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Checking DNS resolution..."
+              nslookup bmad-platform.com
+              nslookup api.bmad-platform.com
+              nslookup mobile.bmad-platform.com
+              nslookup analytics.bmad-platform.com
+              
+              echo "Checking global DNS propagation..."
+              for server in 8.8.8.8 1.1.1.1 208.67.222.222; do
+                echo "Checking DNS server: $server"
+                nslookup bmad-platform.com $server
+              done
+              
+              echo "DNS health check completed"
+          restartPolicy: OnFailure
+
+---
+# CoreDNS Configuration for Internal DNS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  labels:
+    component: internal-dns
+data:
+  bmad.server: |
+    bmad-platform.internal:53 {
+        errors
+        health {
+            lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+            pods insecure
+            fallthrough in-addr.arpa ip6.arpa
+            ttl 30
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+            max_concurrent 1000
+        }
+        cache 30
+        loop
+        reload
+        loadbalance
+        
+        # Custom internal domains
+        file /etc/coredns/db.bmad-platform.internal bmad-platform.internal
+        
+        # Service discovery
+        template IN A bmad-platform.internal {
+            match "^([^.]+)\.bmad-platform\.internal\.$"
+            answer "{{ .Name }} 300 IN A {{ .Group 1 | service_ip }}"
+            fallthrough
+        }
+    }
+
+  db.bmad-platform.internal: |
+    $ORIGIN bmad-platform.internal.
+    @    3600 IN SOA sns.dns.icann.org. noc.dns.icann.org. (
+                    2024010101 ; serial
+                    7200       ; refresh (2 hours)
+                    3600       ; retry (1 hour)
+                    1209600    ; expire (2 weeks)
+                    3600       ; minimum (1 hour)
+                    )
+
+    ; Internal service records
+    api                     IN A   10.0.1.10
+    mobile                  IN A   10.0.1.11
+    analytics               IN A   10.0.1.12
+    vector-db               IN A   10.0.1.13
+    monitoring              IN A   10.0.1.14
+    
+    ; Load balancer records
+    lb-primary              IN A   10.0.1.100
+    lb-secondary            IN A   10.0.1.101
+    
+    ; Database records
+    postgres-primary        IN A   10.0.2.10
+    postgres-replica        IN A   10.0.2.11
+    redis-cluster           IN A   10.0.2.20
+    elasticsearch           IN A   10.0.2.30
+
+---
+# DNS over HTTPS (DoH) Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doh-proxy-config
+  namespace: kube-system
+  labels:
+    component: dns-security
+data:
+  doh-proxy.conf: |
+    # DNS over HTTPS Proxy Configuration
+    upstream cloudflare-doh {
+        server 1.1.1.1:443;
+        server 1.0.0.1:443;
+    }
+    
+    upstream google-doh {
+        server 8.8.8.8:443;
+        server 8.8.4.4:443;
+    }
+    
+    upstream quad9-doh {
+        server 9.9.9.9:443;
+        server 149.112.112.112:443;
+    }
+    
+    server {
+        listen 443 ssl http2;
+        server_name dns.bmad-platform.com;
+        
+        ssl_certificate /etc/ssl/certs/dns-cert.pem;
+        ssl_certificate_key /etc/ssl/private/dns-key.pem;
+        
+        location /dns-query {
+            proxy_pass https://cloudflare-doh/dns-query;
+            proxy_set_header Host 1.1.1.1;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+
+---
+# DNS Monitoring Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-monitor
+  namespace: monitoring
+  labels:
+    app: dns-monitor
+    component: dns-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dns-monitor
+  template:
+    metadata:
+      labels:
+        app: dns-monitor
+    spec:
+      containers:
+      - name: dns-monitor
+        image: prom/blackbox-exporter:latest
+        args:
+        - --config.file=/etc/blackbox_exporter/config.yml
+        - --web.listen-address=:9115
+        ports:
+        - containerPort: 9115
+        volumeMounts:
+        - name: config
+          mountPath: /etc/blackbox_exporter
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 256Mi
+            cpu: 200m
+      volumes:
+      - name: config
+        configMap:
+          name: blackbox-dns-config
+
+---
+# Blackbox Exporter DNS Config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-dns-config
+  namespace: monitoring
+  labels:
+    component: dns-monitoring
+data:
+  config.yml: |
+    modules:
+      dns_bmad_platform:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: "bmad-platform.com"
+          query_type: "A"
+          valid_rcodes:
+          - NOERROR
+          validate_answer_rrs:
+            fail_if_not_matches_regexp:
+            - "bmad-platform.com.\t300\tIN\tA\t.*"
+          preferred_ip_protocol: "ip4"
+      
+      dns_api_endpoint:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: "api.bmad-platform.com"
+          query_type: "CNAME"
+          valid_rcodes:
+          - NOERROR
+      
+      dns_mobile_endpoint:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: "mobile.bmad-platform.com"
+          query_type: "CNAME"
+          valid_rcodes:
+          - NOERROR
+
+---
+# DNS ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dns-monitor
+  namespace: monitoring
+  labels:
+    app: dns-monitor
+spec:
+  selector:
+    matchLabels:
+      app: dns-monitor
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+
+---
+# DNS Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-monitor
+  namespace: monitoring
+  labels:
+    app: dns-monitor
+spec:
+  selector:
+    app: dns-monitor
+  ports:
+  - name: http
+    port: 9115
+    targetPort: 9115
+
+---
+# DNS Alerts for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dns-alerts
+  namespace: monitoring
+  labels:
+    component: dns-monitoring
+spec:
+  groups:
+  - name: dns
+    rules:
+    - alert: DNSResolutionFailed
+      expr: probe_success{job="blackbox-dns"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "DNS resolution failed"
+        description: "DNS resolution for {{ $labels.target }} has been failing for more than 2 minutes"
+    
+    - alert: DNSHighLatency
+      expr: probe_duration_seconds{job="blackbox-dns"} > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "DNS resolution latency high"
+        description: "DNS resolution for {{ $labels.target }} is taking more than 1 second"
+    
+    - alert: DNSRecordMismatch
+      expr: probe_dns_lookup_time_seconds{job="blackbox-dns"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "DNS record validation failed"
+        description: "DNS record for {{ $labels.target }} does not match expected pattern"
+
+---
+# Geographic DNS Routing Controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geo-dns-controller
+  namespace: kube-system
+  labels:
+    app: geo-dns-controller
+    component: geographic-routing
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: geo-dns-controller
+  template:
+    metadata:
+      labels:
+        app: geo-dns-controller
+    spec:
+      serviceAccountName: geo-dns-controller
+      containers:
+      - name: controller
+        image: bmad/geo-dns-controller:v1.0.0
+        args:
+        - --config-file=/etc/config/geo-dns.yaml
+        - --sync-interval=30s
+        - --log-level=info
+        env:
+        - name: CLOUDFLARE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-credentials
+              key: api-key
+        - name: CLOUDFLARE_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-credentials
+              key: email
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+      volumes:
+      - name: config
+        configMap:
+          name: dns-failover-config
+
+---
+# Service Account for Geo DNS Controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: geo-dns-controller
+  namespace: kube-system
+  labels:
+    app: geo-dns-controller
+
+---
+# ClusterRole for Geo DNS Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: geo-dns-controller
+  labels:
+    app: geo-dns-controller
+rules:
+- apiGroups: [""]
+  resources: ["services","endpoints","nodes"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get","list","watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# ClusterRoleBinding for Geo DNS Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: geo-dns-controller
+  labels:
+    app: geo-dns-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: geo-dns-controller
+subjects:
+- kind: ServiceAccount
+  name: geo-dns-controller
+  namespace: kube-system

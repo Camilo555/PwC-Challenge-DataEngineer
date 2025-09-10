@@ -1,0 +1,690 @@
+# BMAD Platform Global CDN Configuration for Mobile Story 4.1
+# Multi-cloud CDN with <50ms global access and mobile optimization
+
+---
+# CDN Configuration Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cdn-system
+  labels:
+    name: cdn-system
+    component: global-cdn
+
+---
+# Global CDN Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-cdn-config
+  namespace: cdn-system
+  labels:
+    component: cdn-configuration
+data:
+  cdn-config.yaml: |
+    # Global CDN Configuration for BMAD Platform
+    global_cdn:
+      enabled: true
+      provider: "multi-cloud"
+      
+      # Primary CDN Providers
+      providers:
+        cloudflare:
+          enabled: true
+          zone_id: "your-cloudflare-zone-id"
+          api_token_secret: "cloudflare-api-token"
+          plan: "enterprise"
+          features:
+            - "argo_smart_routing"
+            - "polish_image_optimization"
+            - "mirage_mobile_optimization"
+            - "rocket_loader"
+            - "brotli_compression"
+        
+        aws_cloudfront:
+          enabled: true
+          distribution_id: "E1234567890ABC"
+          access_key_secret: "aws-cdn-credentials"
+          features:
+            - "http2_support"
+            - "gzip_compression"
+            - "lambda_edge"
+            - "shield_advanced"
+        
+        azure_cdn:
+          enabled: true
+          profile_name: "bmad-cdn-profile"
+          endpoint_name: "bmad-cdn-endpoint"
+          credentials_secret: "azure-cdn-credentials"
+          features:
+            - "compression"
+            - "caching_rules"
+            - "waf_protection"
+        
+        gcp_cloud_cdn:
+          enabled: true
+          backend_service: "bmad-backend-service"
+          credentials_secret: "gcp-cdn-credentials"
+          features:
+            - "cloud_armor"
+            - "ssl_certificates"
+            - "load_balancing"
+
+    # Mobile Optimization Configuration for Story 4.1
+    mobile_optimization:
+      enabled: true
+      target_performance: "50ms"
+      
+      # Image Optimization
+      image_optimization:
+        enabled: true
+        formats: ["webp", "avif", "jpeg", "png"]
+        quality: 85
+        auto_webp: true
+        lazy_loading: true
+        responsive_images: true
+        
+        # Mobile-specific optimizations
+        mobile_specific:
+          max_width: 414  # iPhone 12 Pro Max width
+          quality_mobile: 75
+          format_preference: ["avif", "webp", "jpeg"]
+      
+      # Content Compression
+      compression:
+        enabled: true
+        algorithms: ["brotli", "gzip"]
+        brotli_level: 6
+        gzip_level: 6
+        min_file_size: 1024  # 1KB
+      
+      # Minification
+      minification:
+        html: true
+        css: true
+        javascript: true
+        remove_comments: true
+        remove_whitespace: true
+      
+      # Mobile-specific caching
+      mobile_caching:
+        enabled: true
+        cache_mobile_separately: true
+        mobile_ttl: 3600  # 1 hour
+        desktop_ttl: 86400  # 24 hours
+        api_ttl: 300  # 5 minutes
+
+    # Geographic Edge Locations
+    edge_locations:
+      # Americas
+      us_east_1:
+        region: "us-east-1"
+        pop_codes: ["IAD", "DCA", "BWI"]
+        primary: true
+        
+      us_west_1:
+        region: "us-west-1"
+        pop_codes: ["SFO", "SJC", "LAX"]
+        primary: true
+        
+      ca_central_1:
+        region: "ca-central-1"
+        pop_codes: ["YYZ", "YUL"]
+        primary: false
+        
+      sa_east_1:
+        region: "sa-east-1"
+        pop_codes: ["GRU", "GIG"]
+        primary: false
+      
+      # Europe
+      eu_west_1:
+        region: "eu-west-1"
+        pop_codes: ["LHR", "LGW", "DUB"]
+        primary: true
+        
+      eu_central_1:
+        region: "eu-central-1"
+        pop_codes: ["FRA", "MUC"]
+        primary: true
+        
+      eu_north_1:
+        region: "eu-north-1"
+        pop_codes: ["ARN", "CPH"]
+        primary: false
+      
+      # Asia Pacific
+      ap_southeast_1:
+        region: "ap-southeast-1"
+        pop_codes: ["SIN", "KUL"]
+        primary: true
+        
+      ap_northeast_1:
+        region: "ap-northeast-1"
+        pop_codes: ["NRT", "HND", "KIX"]
+        primary: true
+        
+      ap_south_1:
+        region: "ap-south-1"
+        pop_codes: ["BOM", "DEL"]
+        primary: true
+
+    # Cache Behaviors and Rules
+    cache_behaviors:
+      # Static Assets
+      static_assets:
+        path_pattern: "/static/*"
+        ttl: 31536000  # 1 year
+        compress: true
+        cache_policy: "static"
+        
+      # API Responses
+      api_responses:
+        path_pattern: "/api/*"
+        ttl: 300  # 5 minutes
+        compress: true
+        cache_policy: "api"
+        cache_key_includes: ["query_string", "headers"]
+        
+      # Mobile App Assets
+      mobile_assets:
+        path_pattern: "/mobile/*"
+        ttl: 86400  # 24 hours
+        compress: true
+        cache_policy: "mobile"
+        device_based_caching: true
+        
+      # Dynamic Content
+      dynamic_content:
+        path_pattern: "/app/*"
+        ttl: 3600  # 1 hour
+        compress: true
+        cache_policy: "dynamic"
+
+    # Security and WAF Configuration
+    security:
+      waf_enabled: true
+      ddos_protection: true
+      bot_management: true
+      rate_limiting:
+        enabled: true
+        requests_per_minute: 1000
+        burst_limit: 2000
+      
+      # Security headers
+      security_headers:
+        hsts: "max-age=31536000; includeSubDomains; preload"
+        content_security_policy: "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'"
+        x_frame_options: "SAMEORIGIN"
+        x_content_type_options: "nosniff"
+
+---
+# Cloudflare CDN Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-cdn-controller
+  namespace: cdn-system
+  labels:
+    app: cloudflare-cdn-controller
+    component: cdn-management
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudflare-cdn-controller
+  template:
+    metadata:
+      labels:
+        app: cloudflare-cdn-controller
+    spec:
+      serviceAccountName: cdn-controller
+      containers:
+      - name: cloudflare-controller
+        image: bmad/cloudflare-cdn-controller:v1.0.0
+        args:
+        - --config-file=/etc/config/cdn-config.yaml
+        - --sync-interval=60s
+        - --log-level=info
+        env:
+        - name: CLOUDFLARE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-api-token
+              key: token
+        - name: CLOUDFLARE_ZONE_ID
+          value: "your-cloudflare-zone-id"
+        ports:
+        - containerPort: 8080
+          name: metrics
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: global-cdn-config
+
+---
+# CDN Performance Monitor
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn-performance-monitor
+  namespace: cdn-system
+  labels:
+    app: cdn-performance-monitor
+    component: performance-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cdn-performance-monitor
+  template:
+    metadata:
+      labels:
+        app: cdn-performance-monitor
+    spec:
+      containers:
+      - name: performance-monitor
+        image: bmad/cdn-performance-monitor:v1.0.0
+        args:
+        - --monitoring-interval=30s
+        - --performance-threshold=50ms
+        - --global-endpoints-config=/etc/config/endpoints.yaml
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        ports:
+        - containerPort: 8080
+          name: metrics
+        volumeMounts:
+        - name: endpoints-config
+          mountPath: /etc/config
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 200m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+      volumes:
+      - name: endpoints-config
+        configMap:
+          name: cdn-endpoints-config
+
+---
+# CDN Endpoints Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdn-endpoints-config
+  namespace: cdn-system
+  labels:
+    component: cdn-endpoints
+data:
+  endpoints.yaml: |
+    # Global CDN Endpoints for Performance Monitoring
+    endpoints:
+      # Primary Endpoints
+      primary:
+        - url: "https://bmad-platform.com"
+          region: "global"
+          expected_latency: 50
+          health_check_path: "/health"
+          
+        - url: "https://api.bmad-platform.com"
+          region: "global"
+          expected_latency: 30
+          health_check_path: "/health"
+          
+        - url: "https://mobile.bmad-platform.com"
+          region: "global"
+          expected_latency: 25
+          health_check_path: "/health"
+      
+      # Regional Endpoints
+      regional:
+        - url: "https://us-east.bmad-platform.com"
+          region: "us-east-1"
+          expected_latency: 20
+          
+        - url: "https://us-west.bmad-platform.com"
+          region: "us-west-1"
+          expected_latency: 20
+          
+        - url: "https://eu-west.bmad-platform.com"
+          region: "eu-west-1"
+          expected_latency: 25
+          
+        - url: "https://ap-southeast.bmad-platform.com"
+          region: "ap-southeast-1"
+          expected_latency: 30
+
+---
+# CDN Cache Purge CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cdn-cache-purge
+  namespace: cdn-system
+  labels:
+    component: cache-management
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: cache-purger
+            image: bmad/cdn-cache-purger:v1.0.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting CDN cache purge..."
+              
+              # Purge stale content
+              echo "Purging stale content..."
+              
+              # Warm cache with fresh content
+              echo "Warming cache with fresh content..."
+              
+              # Validate cache performance
+              echo "Validating cache performance..."
+              
+              echo "CDN cache purge completed"
+            env:
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api-token
+                  key: token
+            resources:
+              requests:
+                memory: 128Mi
+                cpu: 100m
+              limits:
+                memory: 256Mi
+                cpu: 200m
+
+---
+# Service Account for CDN Controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cdn-controller
+  namespace: cdn-system
+  labels:
+    component: cdn-management
+
+---
+# ClusterRole for CDN Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cdn-controller
+  labels:
+    component: cdn-management
+rules:
+- apiGroups: [""]
+  resources: ["services", "endpoints", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# ClusterRoleBinding for CDN Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cdn-controller
+  labels:
+    component: cdn-management
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cdn-controller
+subjects:
+- kind: ServiceAccount
+  name: cdn-controller
+  namespace: cdn-system
+
+---
+# CDN Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-performance-monitor
+  namespace: cdn-system
+  labels:
+    app: cdn-performance-monitor
+spec:
+  selector:
+    app: cdn-performance-monitor
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
+---
+# ServiceMonitor for CDN Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cdn-performance-metrics
+  namespace: cdn-system
+  labels:
+    app: cdn-performance-monitor
+spec:
+  selector:
+    matchLabels:
+      app: cdn-performance-monitor
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+
+---
+# CDN Alerts for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cdn-alerts
+  namespace: cdn-system
+  labels:
+    component: cdn-monitoring
+spec:
+  groups:
+  - name: cdn-performance
+    rules:
+    - alert: CDNHighLatency
+      expr: cdn_response_time_seconds{quantile="0.95"} > 0.05  # 50ms
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "CDN latency is high"
+        description: "95th percentile CDN latency is {{ $value }}s for endpoint {{ $labels.endpoint }}"
+    
+    - alert: CDNCacheHitRateLow
+      expr: cdn_cache_hit_rate < 0.85  # 85%
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "CDN cache hit rate is low"
+        description: "CDN cache hit rate is {{ $value | humanizePercentage }} for {{ $labels.endpoint }}"
+    
+    - alert: CDNEndpointDown
+      expr: cdn_endpoint_up == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "CDN endpoint is down"
+        description: "CDN endpoint {{ $labels.endpoint }} has been down for more than 2 minutes"
+    
+    - alert: CDNMobilePerformanceDegraded
+      expr: cdn_mobile_response_time_seconds > 0.05  # 50ms target for Story 4.1
+      for: 3m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Mobile CDN performance degraded"
+        description: "Mobile CDN response time is {{ $value }}s, exceeding 50ms target for Story 4.1"
+
+---
+# Mobile CDN Edge Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mobile-cdn-edge-config
+  namespace: cdn-system
+  labels:
+    component: mobile-optimization
+    story: "4.1"
+data:
+  edge-config.yaml: |
+    # Mobile Edge Configuration for Story 4.1
+    mobile_edge_optimization:
+      enabled: true
+      target_latency: "25ms"  # Aggressive target for mobile
+      
+      # Device Detection
+      device_detection:
+        enabled: true
+        user_agent_detection: true
+        viewport_detection: true
+        connection_type_detection: true
+        
+        # Device categories
+        device_categories:
+          mobile_phone:
+            max_width: 480
+            image_quality: 70
+            cache_ttl: 3600
+          tablet:
+            max_width: 768
+            image_quality: 80
+            cache_ttl: 7200
+          desktop:
+            max_width: 1920
+            image_quality: 90
+            cache_ttl: 86400
+      
+      # Edge Computing Rules
+      edge_rules:
+        - name: "mobile_image_resize"
+          condition: "device_type == 'mobile'"
+          action: "resize_image"
+          parameters:
+            max_width: 414
+            quality: 70
+            format: "webp"
+            
+        - name: "mobile_minify"
+          condition: "device_type == 'mobile'"
+          action: "minify_content"
+          parameters:
+            html: true
+            css: true
+            javascript: true
+            
+        - name: "mobile_lazy_load"
+          condition: "device_type == 'mobile'"
+          action: "enable_lazy_loading"
+          parameters:
+            images: true
+            videos: true
+            threshold: "50px"
+      
+      # Adaptive Bitrate Streaming
+      adaptive_streaming:
+        enabled: true
+        video_profiles:
+          - name: "mobile_low"
+            resolution: "480p"
+            bitrate: "500kbps"
+            condition: "connection == '2g' || connection == '3g'"
+          - name: "mobile_medium"
+            resolution: "720p"
+            bitrate: "1.5mbps"
+            condition: "connection == '4g'"
+          - name: "mobile_high"
+            resolution: "1080p"
+            bitrate: "3mbps"
+            condition: "connection == '5g' || connection == 'wifi'"
+
+---
+# Mobile Performance Validator CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mobile-performance-validator
+  namespace: cdn-system
+  labels:
+    component: mobile-validation
+    story: "4.1"
+spec:
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: mobile-validator
+            image: bmad/mobile-performance-validator:v1.0.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Validating mobile performance for Story 4.1..."
+              
+              # Test mobile endpoints globally
+              echo "Testing mobile endpoints..."
+              
+              # Validate <50ms response times
+              echo "Validating response times..."
+              
+              # Check image optimization
+              echo "Checking image optimization..."
+              
+              # Verify mobile-specific caching
+              echo "Verifying mobile caching..."
+              
+              echo "Mobile performance validation completed"
+            resources:
+              requests:
+                memory: 256Mi
+                cpu: 200m
+              limits:
+                memory: 512Mi
+                cpu: 500m

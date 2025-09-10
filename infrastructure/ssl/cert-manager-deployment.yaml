@@ -1,0 +1,572 @@
+# BMAD Platform SSL Certificate Management with Let's Encrypt
+# Enterprise-grade certificate automation with multi-cloud support
+
+---
+# Cert-Manager Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    name: cert-manager
+    component: ssl-management
+    project: bmad-platform
+
+---
+# Cert-Manager CRDs Installation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-manager-install
+  namespace: cert-manager
+  labels:
+    component: ssl-management
+data:
+  install.sh: |
+    #!/bin/bash
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.2/cert-manager.crds.yaml
+
+---
+# Cert-Manager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+    component: controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cert-manager
+  template:
+    metadata:
+      labels:
+        app: cert-manager
+    spec:
+      serviceAccountName: cert-manager
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cert-manager
+        image: quay.io/jetstack/cert-manager-controller:v1.13.2
+        args:
+        - --v=2
+        - --cluster-resource-namespace=$(POD_NAMESPACE)
+        - --leader-election-namespace=cert-manager
+        - --acme-http01-solver-image=quay.io/jetstack/cert-manager-acmesolver:v1.13.2
+        - --max-concurrent-challenges=60
+        ports:
+        - containerPort: 9402
+          name: http-metrics
+          protocol: TCP
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 9402
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+          successThreshold: 1
+          failureThreshold: 8
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9402
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+---
+# Cert-Manager Webhook Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
+  labels:
+    app: webhook
+    component: webhook
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: webhook
+  template:
+    metadata:
+      labels:
+        app: webhook
+    spec:
+      serviceAccountName: cert-manager-webhook
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cert-manager
+        image: quay.io/jetstack/cert-manager-webhook:v1.13.2
+        args:
+        - --v=2
+        - --secure-port=10250
+        - --dynamic-serving-ca-secret-namespace=$(POD_NAMESPACE)
+        - --dynamic-serving-ca-secret-name=cert-manager-webhook-ca
+        - --dynamic-serving-dns-names=cert-manager-webhook,cert-manager-webhook.cert-manager,cert-manager-webhook.cert-manager.svc
+        ports:
+        - name: https
+          protocol: TCP
+          containerPort: 10250
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 6080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 6080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+---
+# Cert-Manager CA Injector
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager-cainjector
+  namespace: cert-manager
+  labels:
+    app: cainjector
+    component: cainjector
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cainjector
+  template:
+    metadata:
+      labels:
+        app: cainjector
+    spec:
+      serviceAccountName: cert-manager-cainjector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cert-manager
+        image: quay.io/jetstack/cert-manager-cainjector:v1.13.2
+        args:
+        - --v=2
+        - --leader-election-namespace=cert-manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 512Mi
+
+---
+# Service Account for Cert-Manager
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+
+---
+# Service Account for Webhook
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
+  labels:
+    app: webhook
+
+---
+# Service Account for CA Injector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-cainjector
+  namespace: cert-manager
+  labels:
+    app: cainjector
+
+---
+# ClusterRole for Cert-Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-manager-controller-issuers
+  labels:
+    app: cert-manager
+rules:
+- apiGroups: ["cert-manager.io"]
+  resources: ["issuers", "clusterissuers"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["cert-manager.io"]
+  resources: ["issuers/status", "clusterissuers/status"]
+  verbs: ["update", "patch"]
+- apiGroups: ["acme.cert-manager.io"]
+  resources: ["challenges", "orders"]
+  verbs: ["create", "delete", "get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+---
+# ClusterRoleBinding for Cert-Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-manager-controller-issuers
+  labels:
+    app: cert-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cert-manager-controller-issuers
+subjects:
+- name: cert-manager
+  namespace: cert-manager
+  kind: ServiceAccount
+
+---
+# Let's Encrypt Production Issuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    component: ssl-issuer
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ssl-admin@bmad-platform.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    # HTTP01 solver for standard domains
+    - http01:
+        ingress:
+          class: nginx
+          podTemplate:
+            spec:
+              nodeSelector:
+                "kubernetes.io/os": linux
+    # DNS01 solver for wildcard certificates
+    - dns01:
+        cloudflare:
+          email: dns-admin@bmad-platform.com
+          apiKeySecretRef:
+            name: cloudflare-api-key-secret
+            key: api-key
+    # AWS Route53 solver for AWS domains
+    - dns01:
+        route53:
+          region: us-west-2
+          accessKeyID: AKIA...
+          secretAccessKeySecretRef:
+            name: route53-credentials
+            key: secret-access-key
+    # Azure DNS solver for Azure domains
+    - dns01:
+        azureDNS:
+          clientID: azure-client-id
+          clientSecretSecretRef:
+            name: azure-dns-credentials
+            key: client-secret
+          subscriptionID: azure-subscription-id
+          tenantID: azure-tenant-id
+          resourceGroupName: bmad-dns-rg
+
+---
+# Let's Encrypt Staging Issuer for Testing
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    component: ssl-issuer
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ssl-admin@bmad-platform.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+    - dns01:
+        cloudflare:
+          email: dns-admin@bmad-platform.com
+          apiKeySecretRef:
+            name: cloudflare-api-key-secret
+            key: api-key
+
+---
+# Wildcard Certificate for BMAD Platform
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bmad-wildcard-cert
+  namespace: default
+  labels:
+    component: ssl-certificate
+spec:
+  secretName: bmad-wildcard-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "bmad-platform.com"
+  - "*.bmad-platform.com"
+  - "api.bmad-platform.com"
+  - "mobile.bmad-platform.com"
+  - "analytics.bmad-platform.com"
+  - "admin.bmad-platform.com"
+  - "monitoring.bmad-platform.com"
+  - "grafana.bmad-platform.com"
+  - "kibana.bmad-platform.com"
+
+---
+# API Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bmad-api-cert
+  namespace: default
+  labels:
+    component: ssl-certificate
+    service: api
+spec:
+  secretName: bmad-api-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "api.bmad-platform.com"
+  - "api-v1.bmad-platform.com"
+  - "api-v2.bmad-platform.com"
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days before expiry
+
+---
+# Mobile Service Certificate for Story 4.1
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bmad-mobile-cert
+  namespace: default
+  labels:
+    component: ssl-certificate
+    service: mobile
+    story: "4.1"
+spec:
+  secretName: bmad-mobile-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "mobile.bmad-platform.com"
+  - "m.bmad-platform.com"
+  - "app.bmad-platform.com"
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days before expiry
+
+---
+# Analytics Service Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bmad-analytics-cert
+  namespace: default
+  labels:
+    component: ssl-certificate
+    service: analytics
+spec:
+  secretName: bmad-analytics-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "analytics.bmad-platform.com"
+  - "data.bmad-platform.com"
+  - "reports.bmad-platform.com"
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days before expiry
+
+---
+# Certificate Monitoring ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cert-manager-metrics
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+spec:
+  selector:
+    matchLabels:
+      app: cert-manager
+  endpoints:
+  - port: http-metrics
+    interval: 30s
+    path: /metrics
+
+---
+# SSL Certificate Renewal CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cert-renewal-check
+  namespace: cert-manager
+  labels:
+    component: ssl-monitoring
+spec:
+  schedule: "0 6 * * *"  # Daily at 6 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cert-checker
+            image: quay.io/jetstack/cert-manager-ctl:v1.13.2
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Checking certificate renewals..."
+              kubectl get certificates --all-namespaces
+              echo "Certificate check completed"
+          restartPolicy: OnFailure
+
+---
+# SSL Certificate Expiry Alert
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager-alerts
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+spec:
+  groups:
+  - name: cert-manager
+    rules:
+    - alert: CertManagerCertExpirySoon
+      expr: cert_manager_certificate_expiration_timestamp_seconds - time() < 86400 * 7
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Certificate expiring soon"
+        description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 7 days"
+    
+    - alert: CertManagerCertNotReady
+      expr: cert_manager_certificate_ready_status{condition="False"} == 1
+      for: 15m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Certificate not ready"
+        description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} has been not ready for more than 15 minutes"
+
+---
+# Webhook Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
+  labels:
+    app: webhook
+spec:
+  type: ClusterIP
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app: webhook
+
+---
+# ValidatingAdmissionWebhook
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionWebhook
+metadata:
+  name: cert-manager-webhook
+  labels:
+    app: webhook
+  annotations:
+    cert-manager.io/inject-ca-from: cert-manager/cert-manager-webhook-ca
+webhooks:
+- name: webhook.cert-manager.io
+  rules:
+  - operations: ["CREATE", "UPDATE"]
+    apiGroups: ["cert-manager.io"]
+    apiVersions: ["v1"]
+    resources: ["*/*"]
+  clientConfig:
+    service:
+      name: cert-manager-webhook
+      namespace: cert-manager
+      path: /validate
+  admissionReviewVersions: ["v1"]
+  sideEffects: None
+  failurePolicy: Fail

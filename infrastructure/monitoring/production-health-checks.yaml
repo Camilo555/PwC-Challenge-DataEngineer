@@ -1,0 +1,744 @@
+# BMAD Platform Production Health Checks and Monitoring
+# Comprehensive health monitoring with 99.99% availability target
+
+---
+# Health Check Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: health-checks
+  labels:
+    name: health-checks
+    component: production-monitoring
+
+---
+# Global Health Check Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-check-config
+  namespace: health-checks
+  labels:
+    component: health-monitoring
+data:
+  config.yaml: |
+    # Global Health Check Configuration
+    health_checks:
+      global:
+        enabled: true
+        interval: 30  # seconds
+        timeout: 10   # seconds
+        retries: 3
+        success_threshold: 1
+        failure_threshold: 3
+        
+      # Service Health Checks
+      services:
+        bmad_api:
+          enabled: true
+          endpoint: "https://api.bmad-platform.com/health"
+          method: "GET"
+          expected_status: 200
+          expected_body_contains: "healthy"
+          timeout: 5
+          interval: 15
+          critical: true
+          
+        bmad_mobile:
+          enabled: true
+          endpoint: "https://mobile.bmad-platform.com/health"
+          method: "GET" 
+          expected_status: 200
+          expected_body_contains: "ready"
+          timeout: 3
+          interval: 10
+          critical: true
+          story: "4.1"
+          
+        bmad_analytics:
+          enabled: true
+          endpoint: "https://analytics.bmad-platform.com/health"
+          method: "GET"
+          expected_status: 200
+          timeout: 10
+          interval: 30
+          critical: false
+          
+        bmad_vector_db:
+          enabled: true
+          endpoint: "http://vector-db.default.svc.cluster.local:8080/health"
+          method: "GET"
+          expected_status: 200
+          timeout: 15
+          interval: 60
+          critical: true
+          story: "4.2"
+      
+      # Database Health Checks
+      databases:
+        postgresql:
+          enabled: true
+          host: "postgres.database.svc.cluster.local"
+          port: 5432
+          database: "bmad_platform"
+          username_secret: "postgres-credentials"
+          timeout: 10
+          interval: 30
+          critical: true
+          
+        redis:
+          enabled: true
+          host: "redis.database.svc.cluster.local"
+          port: 6379
+          timeout: 5
+          interval: 15
+          critical: true
+          
+        elasticsearch:
+          enabled: true
+          host: "elasticsearch.database.svc.cluster.local"
+          port: 9200
+          timeout: 10
+          interval: 30
+          critical: false
+      
+      # Infrastructure Health Checks
+      infrastructure:
+        kubernetes_api:
+          enabled: true
+          endpoint: "https://kubernetes.default.svc.cluster.local"
+          timeout: 5
+          interval: 60
+          critical: true
+          
+        nginx_ingress:
+          enabled: true
+          endpoint: "http://nginx-ingress-metrics.ingress-nginx.svc.cluster.local:10254/healthz"
+          timeout: 5
+          interval: 30
+          critical: true
+          
+        cert_manager:
+          enabled: true
+          endpoint: "http://cert-manager.cert-manager.svc.cluster.local:9402/healthz"
+          timeout: 5
+          interval: 300
+          critical: false
+
+---
+# Blackbox Exporter Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+  namespace: health-checks
+  labels:
+    component: blackbox-monitoring
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: []  # Defaults to 2xx
+          method: GET
+          headers:
+            Host: bmad-platform.com
+            Accept-Language: en-US
+          no_follow_redirects: false
+          preferred_ip_protocol: "ip4"
+          ip_protocol_fallback: false
+          
+      http_post_2xx:
+        prober: http
+        timeout: 10s
+        http:
+          method: POST
+          headers:
+            Content-Type: application/json
+          body: '{"health": "check"}'
+          valid_status_codes: [200, 201, 202]
+          
+      tcp_connect:
+        prober: tcp
+        timeout: 5s
+        
+      ping:
+        prober: icmp
+        timeout: 5s
+        icmp:
+          preferred_ip_protocol: "ip4"
+          
+      dns:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: "bmad-platform.com"
+          query_type: "A"
+          valid_rcodes:
+          - NOERROR
+          validate_answer_rrs:
+            fail_if_matches_regexp:
+            - ".*127.0.0.1"
+          validate_authority_rrs:
+            fail_if_matches_regexp:
+            - ".*127.0.0.1"
+          validate_additional_rrs:
+            fail_if_matches_regexp:
+            - ".*127.0.0.1"
+            
+      ssl_cert:
+        prober: tcp
+        timeout: 10s
+        tcp:
+          query_response:
+          - expect: "^SSH-2.0-"
+          - send: "SSH-2.0-blackbox-ssh-check"
+          tls: true
+          tls_config:
+            insecure_skip_verify: false
+            
+      # Mobile-specific health check for Story 4.1
+      mobile_performance:
+        prober: http
+        timeout: 3s  # Strict timeout for mobile
+        http:
+          valid_http_versions: ["HTTP/2.0"]
+          method: GET
+          headers:
+            User-Agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15"
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+          preferred_ip_protocol: "ip4"
+          body_size_limit: 1048576  # 1MB limit for mobile
+          
+      # Vector DB health check for Story 4.2  
+      vector_db_health:
+        prober: http
+        timeout: 15s
+        http:
+          method: POST
+          headers:
+            Content-Type: application/json
+          body: '{"query": {"vector": [0.1, 0.2, 0.3], "k": 1}}'
+          valid_status_codes: [200, 201]
+
+---
+# Blackbox Exporter Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  namespace: health-checks
+  labels:
+    app: blackbox-exporter
+    component: health-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  template:
+    metadata:
+      labels:
+        app: blackbox-exporter
+    spec:
+      containers:
+      - name: blackbox-exporter
+        image: prom/blackbox-exporter:latest
+        args:
+        - --config.file=/etc/blackbox_exporter/config.yml
+        - --web.listen-address=:9115
+        - --log.level=info
+        ports:
+        - containerPort: 9115
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9115
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9115
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        volumeMounts:
+        - name: config
+          mountPath: /etc/blackbox_exporter
+      volumes:
+      - name: config
+        configMap:
+          name: blackbox-config
+
+---
+# Blackbox Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  namespace: health-checks
+  labels:
+    app: blackbox-exporter
+spec:
+  selector:
+    app: blackbox-exporter
+  ports:
+  - name: http
+    port: 9115
+    targetPort: 9115
+  type: ClusterIP
+
+---
+# Health Check Orchestrator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-check-orchestrator
+  namespace: health-checks
+  labels:
+    app: health-check-orchestrator
+    component: health-coordination
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: health-check-orchestrator
+  template:
+    metadata:
+      labels:
+        app: health-check-orchestrator
+    spec:
+      serviceAccountName: health-check-orchestrator
+      containers:
+      - name: orchestrator
+        image: bmad/health-check-orchestrator:v1.0.0
+        args:
+        - --config-file=/etc/config/config.yaml
+        - --check-interval=30s
+        - --prometheus-url=http://prometheus.monitoring.svc.cluster.local:9090
+        - --alert-manager-url=http://alertmanager.monitoring.svc.cluster.local:9093
+        env:
+        - name: CLUSTER_NAME
+          value: "bmad-production"
+        - name: ENVIRONMENT
+          value: "production"
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8090
+          name: metrics
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 200m
+          limits:
+            memory: 1Gi
+            cpu: 1000m
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+      volumes:
+      - name: config
+        configMap:
+          name: health-check-config
+
+---
+# Service Account for Health Check Orchestrator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: health-check-orchestrator
+  namespace: health-checks
+  labels:
+    component: health-coordination
+
+---
+# ClusterRole for Health Check Orchestrator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: health-check-orchestrator
+  labels:
+    component: health-coordination
+rules:
+- apiGroups: [""]
+  resources: ["services", "endpoints", "pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# ClusterRoleBinding for Health Check Orchestrator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: health-check-orchestrator
+  labels:
+    component: health-coordination
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: health-check-orchestrator
+subjects:
+- kind: ServiceAccount
+  name: health-check-orchestrator
+  namespace: health-checks
+
+---
+# Health Check Orchestrator Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-check-orchestrator
+  namespace: health-checks
+  labels:
+    app: health-check-orchestrator
+spec:
+  selector:
+    app: health-check-orchestrator
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8090
+    targetPort: 8090
+  type: ClusterIP
+
+---
+# Production Health Monitoring Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-dashboard-config
+  namespace: health-checks
+  labels:
+    component: health-dashboard
+data:
+  dashboard.json: |
+    {
+      "dashboard": {
+        "title": "BMAD Platform Production Health Dashboard",
+        "tags": ["bmad", "production", "health"],
+        "timezone": "UTC",
+        "panels": [
+          {
+            "title": "Overall System Health",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "avg(up{job=~\"bmad.*\"})",
+                "legendFormat": "System Health"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 0.8},
+                    {"color": "green", "value": 0.95}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "Service Response Times",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "probe_duration_seconds{job=\"blackbox\"}",
+                "legendFormat": "{{instance}}"
+              }
+            ]
+          },
+          {
+            "title": "Mobile Performance (Story 4.1)",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "probe_duration_seconds{job=\"blackbox\", module=\"mobile_performance\"}",
+                "legendFormat": "Mobile Response Time"
+              }
+            ],
+            "yAxes": [
+              {
+                "max": 0.05,
+                "unit": "s",
+                "label": "Response Time (Target: <50ms)"
+              }
+            ]
+          },
+          {
+            "title": "Vector DB Health (Story 4.2)",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "probe_success{job=\"blackbox\", module=\"vector_db_health\"}",
+                "legendFormat": "Vector DB Status"
+              }
+            ]
+          },
+          {
+            "title": "SSL Certificate Expiry",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
+                "legendFormat": "Days to Expiry"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
+# ServiceMonitor for Health Checks
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: blackbox-exporter
+  namespace: health-checks
+  labels:
+    app: blackbox-exporter
+spec:
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+
+---
+# ServiceMonitor for Health Orchestrator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: health-check-orchestrator
+  namespace: health-checks
+  labels:
+    app: health-check-orchestrator
+spec:
+  selector:
+    matchLabels:
+      app: health-check-orchestrator
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+
+---
+# Health Check Alerts for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: health-check-alerts
+  namespace: health-checks
+  labels:
+    component: health-monitoring
+spec:
+  groups:
+  - name: health-checks
+    rules:
+    # Critical Service Down
+    - alert: ServiceDown
+      expr: probe_success == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Service {{ $labels.instance }} is down"
+        description: "{{ $labels.instance }} has been down for more than 2 minutes"
+    
+    # High Response Time
+    - alert: HighResponseTime
+      expr: probe_duration_seconds > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High response time for {{ $labels.instance }}"
+        description: "Response time is {{ $value }}s for {{ $labels.instance }}"
+    
+    # Mobile Performance Degradation (Story 4.1)
+    - alert: MobilePerformanceDegraded
+      expr: probe_duration_seconds{module="mobile_performance"} > 0.05
+      for: 3m
+      labels:
+        severity: critical
+        story: "4.1"
+      annotations:
+        summary: "Mobile performance degraded"
+        description: "Mobile response time is {{ $value }}s, exceeding 50ms target for Story 4.1"
+    
+    # Vector DB Health Issue (Story 4.2)
+    - alert: VectorDBUnhealthy
+      expr: probe_success{module="vector_db_health"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        story: "4.2"
+      annotations:
+        summary: "Vector DB is unhealthy"
+        description: "Vector DB health check failed for Story 4.2"
+    
+    # SSL Certificate Expiry Warning
+    - alert: SSLCertificateExpiringSoon
+      expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "SSL certificate expiring soon"
+        description: "SSL certificate for {{ $labels.instance }} expires in {{ $value }} days"
+    
+    # Database Connection Issues
+    - alert: DatabaseConnectionFailed
+      expr: probe_success{job="database-health"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Database connection failed"
+        description: "Cannot connect to database {{ $labels.instance }}"
+    
+    # System Availability Below Target
+    - alert: SystemAvailabilityBelowTarget
+      expr: avg_over_time(probe_success[5m]) < 0.9999  # 99.99% target
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "System availability below 99.99% target"
+        description: "System availability is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+---
+# Global Health Status Aggregator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-status-aggregator
+  namespace: health-checks
+  labels:
+    app: health-status-aggregator
+    component: status-aggregation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: health-status-aggregator
+  template:
+    metadata:
+      labels:
+        app: health-status-aggregator
+    spec:
+      containers:
+      - name: aggregator
+        image: bmad/health-status-aggregator:v1.0.0
+        args:
+        - --prometheus-url=http://prometheus.monitoring.svc.cluster.local:9090
+        - --update-interval=30s
+        - --availability-target=0.9999
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: TARGET_AVAILABILITY
+          value: "99.99"
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# Health Status Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-status-aggregator
+  namespace: health-checks
+  labels:
+    app: health-status-aggregator
+spec:
+  selector:
+    app: health-status-aggregator
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
+---
+# Health Status Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: health-status
+  namespace: health-checks
+  labels:
+    component: health-status
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - status.bmad-platform.com
+    secretName: health-status-tls
+  rules:
+  - host: status.bmad-platform.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: health-status-aggregator
+            port:
+              number: 8080

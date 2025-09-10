@@ -18,6 +18,25 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+# Mobile-specific rate limiting decorator
+def mobile_rate_limit(limit: int, window: int, burst_limit: int = None):
+    """
+    Mobile-optimized rate limiting decorator
+    
+    Args:
+        limit: Requests per window
+        window: Time window in seconds
+        burst_limit: Optional burst allowance
+    """
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # Mobile rate limiting logic would be implemented here
+            # For now, pass through to the actual function
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 class RateLimitExceeded(HTTPException):
     def __init__(self, detail: str = "Rate limit exceeded", retry_after: int | None = None):
         super().__init__(status_code=429, detail=detail)

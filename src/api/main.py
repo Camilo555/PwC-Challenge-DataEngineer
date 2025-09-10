@@ -388,6 +388,10 @@ from api.v1.routes.monitoring import router as monitoring_router
 from api.v2.routes.analytics import router as analytics_v2_router
 from api.v2.routes.sales import router as sales_v2_router
 
+# Import new story APIs (4.1 and 4.2)
+from api.v1.routes.mobile_analytics import router as mobile_analytics_router
+from api.v1.routes.ai_conversational_analytics import router as ai_conversational_router
+
 # Mount v1 routers with enhanced authentication
 app.include_router(auth_router, prefix="/api/v1")  # No auth required for auth endpoints
 app.include_router(health_router, prefix="/api/v1")
@@ -400,6 +404,10 @@ app.include_router(async_tasks_router, prefix="/api/v1", dependencies=auth_depen
 app.include_router(enterprise_router, prefix="/api/v1", dependencies=auth_dependency)
 app.include_router(monitoring_router, prefix="/api/v1", dependencies=auth_dependency)
 app.include_router(supabase_router, prefix="/api/v1", dependencies=auth_dependency)
+
+# Mount new story APIs with authentication
+app.include_router(mobile_analytics_router, prefix="/api/v1", dependencies=auth_dependency)  # Story 4.1: Mobile Analytics
+app.include_router(ai_conversational_router, prefix="/api/v1", dependencies=auth_dependency)  # Story 4.2: AI/LLM Conversational Analytics
 
 # Mount v2 routers with authentication
 app.include_router(sales_v2_router, prefix="/api/v2", dependencies=auth_dependency)

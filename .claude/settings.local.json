@@ -40,7 +40,10 @@
       "Bash(del test_integration_lightweight.py)",
       "Bash(poetry env remove:*)",
       "Bash(poetry show:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git rm:*)",
+      "WebSearch",
+      "Bash(git check-ignore:*)"
     ],
     "defaultMode": "acceptEdits"
   }

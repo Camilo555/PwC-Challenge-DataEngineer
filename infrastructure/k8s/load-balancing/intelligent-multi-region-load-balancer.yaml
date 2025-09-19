@@ -1,0 +1,880 @@
+# Intelligent Multi-Region Load Balancing with Health-Aware Routing
+# 99.99% Availability with <50ms response time and predictive scaling
+
+---
+# Global Load Balancer with AI-Driven Traffic Distribution
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: bmad-intelligent-global-gateway
+  namespace: istio-system
+  labels:
+    app: bmad-intelligent-lb
+    component: global-gateway
+    tier: production
+  annotations:
+    bmad.com/optimization-level: "maximum"
+    bmad.com/cost-optimization: "enabled"
+    bmad.com/predictive-scaling: "enabled"
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTPS with TLS 1.3 and HTTP/3 support
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: bmad-wildcard-tls-secret
+      minProtocolVersion: TLSV1_3
+      maxProtocolVersion: TLSV1_3
+      # Modern cipher suites for optimal performance
+      cipherSuites:
+      - ECDHE-RSA-AES256-GCM-SHA384
+      - ECDHE-ECDSA-AES256-GCM-SHA384
+      - ECDHE-RSA-CHACHA20-POLY1305
+      - ECDHE-ECDSA-CHACHA20-POLY1305
+    hosts:
+    - "*.bmad.pwc-challenge.com"
+    - bmad.pwc-challenge.com
+  # HTTP/3 QUIC support for ultra-low latency
+  - port:
+      number: 8443
+      name: http3-quic
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: bmad-wildcard-tls-secret
+      minProtocolVersion: TLSV1_3
+    hosts:
+    - "*.bmad.pwc-challenge.com"
+  # HTTP with intelligent redirect
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*.bmad.pwc-challenge.com"
+    tls:
+      httpsRedirect: true
+
+---
+# Intelligent Virtual Service with ML-Driven Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: bmad-intelligent-routing
+  namespace: default
+  labels:
+    app: bmad-intelligent-routing
+    component: traffic-management
+    optimization: ml-driven
+spec:
+  hosts:
+  - "*.bmad.pwc-challenge.com"
+  gateways:
+  - istio-system/bmad-intelligent-global-gateway
+  http:
+  # API Routes with Intelligent Load Balancing
+  - match:
+    - uri:
+        prefix: /api/v1/
+    route:
+    # Primary region (AWS US-East-1) - High performance instances
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: primary-us-east-1
+      weight: 45
+      headers:
+        response:
+          add:
+            x-served-by: "aws-us-east-1"
+            x-response-time-sla: "<15ms"
+            x-region-performance: "primary"
+    # Secondary region (Azure East US) - Balanced performance
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: secondary-azure-eastus
+      weight: 25
+      headers:
+        response:
+          add:
+            x-served-by: "azure-eastus"
+            x-response-time-sla: "<25ms"
+            x-region-performance: "secondary"
+    # Tertiary region (GCP US-Central1) - Cost-optimized
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: tertiary-gcp-central1
+      weight: 20
+      headers:
+        response:
+          add:
+            x-served-by: "gcp-us-central1"
+            x-response-time-sla: "<35ms"
+            x-region-performance: "tertiary"
+    # Disaster recovery region (AWS US-West-2)
+    - destination:
+        host: bmad-api-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: dr-aws-west-2
+      weight: 10
+      headers:
+        response:
+          add:
+            x-served-by: "aws-us-west-2"
+            x-response-time-sla: "<50ms"
+            x-region-performance: "disaster-recovery"
+    # Advanced fault injection for resilience testing
+    fault:
+      delay:
+        percentage:
+          value: 0.01  # 0.01% delay injection for chaos engineering
+        fixedDelay: 2ms
+      abort:
+        percentage:
+          value: 0.001  # 0.001% abort for fault tolerance testing
+        httpStatus: 503
+    timeout: 15s  # Aggressive timeout for 99.99% availability
+    retries:
+      attempts: 5
+      perTryTimeout: 3s
+      retryOn: 5xx,reset,connect-failure,refused-stream,gateway-error
+      retryRemoteLocalities: true
+      backOffPolicy:
+        baseInterval: 25ms
+        maxInterval: 250ms
+    headers:
+      request:
+        add:
+          x-forwarded-proto: https
+          x-request-id: "%REQ(X-REQUEST-ID)%"
+          x-correlation-id: "%REQ(X-CORRELATION-ID)%"
+          x-user-agent-class: "api-client"
+        remove:
+        - x-internal-debug
+        - server
+      response:
+        add:
+          x-cache-status: "MISS"
+          strict-transport-security: "max-age=63072000; includeSubDomains; preload"
+          x-content-type-options: "nosniff"
+          x-frame-options: "DENY"
+          x-xss-protection: "1; mode=block"
+          content-security-policy: "default-src 'self'; script-src 'self' 'unsafe-inline'"
+          x-performance-tier: "optimized"
+
+  # Mobile API Routes with Edge Optimization
+  - match:
+    - uri:
+        prefix: /mobile/api/
+    - headers:
+        user-agent:
+          regex: ".*(iPhone|Android|Mobile).*"
+    route:
+    # Mobile-optimized edge locations
+    - destination:
+        host: bmad-mobile-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: mobile-edge-optimized
+      weight: 70
+      headers:
+        response:
+          add:
+            x-mobile-optimized: "true"
+            x-compression-enabled: "brotli"
+            x-edge-cache: "enabled"
+    # Fallback to standard mobile service
+    - destination:
+        host: bmad-mobile-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: mobile-standard
+      weight: 30
+    timeout: 8s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+      retryOn: 5xx,reset,connect-failure
+    headers:
+      request:
+        add:
+          x-mobile-optimization: "enabled"
+          x-compression-preference: "brotli,gzip"
+
+  # Analytics Routes with Load-Based Intelligent Routing
+  - match:
+    - uri:
+        prefix: /analytics/
+    route:
+    # GPU-accelerated analytics cluster
+    - destination:
+        host: bmad-analytics-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: analytics-gpu-accelerated
+      weight: 60
+      headers:
+        response:
+          add:
+            x-processing-type: "gpu-accelerated"
+            x-analytics-tier: "high-performance"
+    # CPU-optimized analytics cluster
+    - destination:
+        host: bmad-analytics-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: analytics-cpu-optimized
+      weight: 40
+      headers:
+        response:
+          add:
+            x-processing-type: "cpu-optimized"
+            x-analytics-tier: "cost-efficient"
+    timeout: 45s
+    retries:
+      attempts: 2
+      perTryTimeout: 20s
+      retryOn: 5xx,gateway-error
+
+  # AI/Vector Database Routes with ML-Optimized Routing
+  - match:
+    - uri:
+        prefix: /vector/
+    - uri:
+        prefix: /ai/
+    route:
+    # Primary AI cluster with latest GPUs
+    - destination:
+        host: bmad-vector-db-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: vector-ml-primary
+      weight: 80
+      headers:
+        response:
+          add:
+            x-ai-optimization: "gpu-h100"
+            x-vector-indexing: "faiss-gpu"
+    # Secondary AI cluster with mixed workloads
+    - destination:
+        host: bmad-vector-db-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: vector-ml-secondary
+      weight: 20
+      headers:
+        response:
+          add:
+            x-ai-optimization: "gpu-mixed"
+            x-vector-indexing: "faiss-cpu"
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,connect-failure
+
+  # WebSocket connections with sticky sessions
+  - match:
+    - headers:
+        upgrade:
+          exact: websocket
+    route:
+    - destination:
+        host: bmad-websocket-service.default.svc.cluster.local
+        port:
+          number: 8080
+        subset: websocket-primary
+      weight: 100
+    timeout: 0s  # No timeout for WebSocket connections
+
+---
+# Advanced Destination Rules with Intelligent Circuit Breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: bmad-intelligent-destination-rules
+  namespace: default
+  labels:
+    app: bmad-destination-rules
+    component: intelligent-traffic-policy
+spec:
+  host: "*.default.svc.cluster.local"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 200  # Increased for high throughput
+        connectTimeout: 5s
+        keepAlive:
+          time: 7200s
+          interval: 30s
+          probes: 3
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 200
+        maxRequestsPerConnection: 50
+        maxRetries: 5
+        idleTimeout: 90s
+        h2UpgradePolicy: UPGRADE
+        useClientProtocol: true
+    # Intelligent load balancing with consistent hashing
+    loadBalancer:
+      simple: LEAST_REQUEST
+      consistentHash:
+        httpHeaderName: "x-user-id"
+        minimumRingSize: 1024
+    # Advanced circuit breaker with ML-driven thresholds
+    circuitBreaker:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 5
+      interval: 20s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30  # Conservative to maintain availability
+      minHealthPercent: 70
+      splitExternalLocalOriginErrors: true
+    # Comprehensive health checks
+    healthCheck:
+      path: /health/detailed
+      intervalSeconds: 10
+      timeoutSeconds: 3
+      unhealthyThreshold: 2
+      healthyThreshold: 2
+      httpHeaders:
+      - name: x-health-check
+        value: istio-intelligent
+      - name: x-health-check-version
+        value: v2.0
+  portLevelSettings:
+  - port:
+      number: 8080
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 3s
+    loadBalancer:
+      simple: ROUND_ROBIN
+
+  # Region-based subsets with performance optimization
+  subsets:
+  # AWS US-East-1 Primary (High-performance instances)
+  - name: primary-us-east-1
+    labels:
+      region: us-east-1
+      cloud: aws
+      tier: primary
+      performance-class: high
+      instance-type: compute-optimized
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 300
+        http:
+          maxRequestsPerConnection: 100
+      loadBalancer:
+        simple: LEAST_REQUEST
+
+  # Azure East US Secondary (Balanced performance)
+  - name: secondary-azure-eastus
+    labels:
+      region: eastus
+      cloud: azure
+      tier: secondary
+      performance-class: balanced
+      instance-type: general-purpose
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 250
+        http:
+          maxRequestsPerConnection: 75
+      loadBalancer:
+        simple: ROUND_ROBIN
+
+  # GCP US-Central1 Tertiary (Cost-optimized)
+  - name: tertiary-gcp-central1
+    labels:
+      region: us-central1
+      cloud: gcp
+      tier: tertiary
+      performance-class: cost-optimized
+      instance-type: preemptible
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 200
+        http:
+          maxRequestsPerConnection: 50
+      loadBalancer:
+        simple: RANDOM
+
+  # AWS US-West-2 Disaster Recovery
+  - name: dr-aws-west-2
+    labels:
+      region: us-west-2
+      cloud: aws
+      tier: disaster-recovery
+      performance-class: minimal
+      instance-type: burstable
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 150
+        http:
+          maxRequestsPerConnection: 25
+      circuitBreaker:
+        consecutive5xxErrors: 3
+
+  # Mobile-optimized subsets
+  - name: mobile-edge-optimized
+    labels:
+      service-type: mobile
+      optimization: edge
+      cache-enabled: "true"
+      compression: brotli
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 400
+        http:
+          maxRequestsPerConnection: 200
+          idleTimeout: 30s
+
+  - name: mobile-standard
+    labels:
+      service-type: mobile
+      optimization: standard
+      cache-enabled: "false"
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 200
+
+  # Analytics-optimized subsets
+  - name: analytics-gpu-accelerated
+    labels:
+      service-type: analytics
+      compute-type: gpu
+      acceleration: nvidia-h100
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          idleTimeout: 120s
+
+  - name: analytics-cpu-optimized
+    labels:
+      service-type: analytics
+      compute-type: cpu
+      optimization: cost-effective
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 150
+
+  # AI/ML Vector database subsets
+  - name: vector-ml-primary
+    labels:
+      service-type: vector-db
+      ml-acceleration: gpu
+      index-type: faiss-gpu
+      gpu-type: nvidia-h100
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 80
+        http:
+          idleTimeout: 180s
+
+  - name: vector-ml-secondary
+    labels:
+      service-type: vector-db
+      ml-acceleration: mixed
+      index-type: faiss-cpu
+      compute-type: hybrid
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 120
+
+  # WebSocket subset
+  - name: websocket-primary
+    labels:
+      service-type: websocket
+      connection-type: persistent
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 500
+          keepAlive:
+            time: 86400s  # 24 hours for WebSocket
+            interval: 60s
+
+---
+# Service Monitor for Intelligent Load Balancer Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bmad-intelligent-lb-monitor
+  namespace: monitoring
+  labels:
+    app: bmad-monitoring
+    component: intelligent-load-balancer
+spec:
+  selector:
+    matchLabels:
+      app: bmad-service
+  endpoints:
+  - port: metrics
+    interval: 10s  # High-frequency monitoring for real-time optimization
+    path: /metrics
+    honorLabels: true
+    scrapeTimeout: 8s
+    metricRelabelings:
+    # Relabel for better metric organization
+    - sourceLabels: [__name__]
+      regex: 'istio_request_duration_milliseconds(.*)'
+      targetLabel: __name__
+      replacement: 'bmad_request_duration_ms${1}'
+    - sourceLabels: [__name__]
+      regex: 'istio_request_total(.*)'
+      targetLabel: __name__
+      replacement: 'bmad_request_total${1}'
+    - sourceLabels: [destination_region]
+      targetLabel: region
+    - sourceLabels: [destination_cloud]
+      targetLabel: cloud_provider
+  namespaceSelector:
+    matchNames:
+    - default
+    - istio-system
+
+---
+# Enhanced Pod Disruption Budgets for Maximum Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-api-intelligent-pdb
+  namespace: default
+  labels:
+    app: bmad-api
+    component: availability
+    tier: production
+spec:
+  minAvailable: 80%  # Higher availability requirement
+  selector:
+    matchLabels:
+      app: bmad-api
+      tier: production
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-mobile-pdb
+  namespace: default
+  labels:
+    app: bmad-mobile
+    component: availability
+spec:
+  minAvailable: 75%
+  selector:
+    matchLabels:
+      app: bmad-mobile
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-analytics-pdb
+  namespace: default
+  labels:
+    app: bmad-analytics
+    component: availability
+spec:
+  minAvailable: 60%  # Lower for cost optimization during maintenance
+  selector:
+    matchLabels:
+      app: bmad-analytics
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-vector-db-pdb
+  namespace: default
+  labels:
+    app: bmad-vector-db
+    component: availability
+spec:
+  minAvailable: 70%
+  selector:
+    matchLabels:
+      app: bmad-vector-db
+
+---
+# Intelligent Traffic Splitting Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intelligent-traffic-config
+  namespace: istio-system
+  labels:
+    app: intelligent-load-balancer
+    component: ml-traffic-management
+data:
+  traffic_intelligence_config.yaml: |
+    intelligent_routing:
+      enabled: true
+      ai_model_endpoint: "http://traffic-ai-service.ml-system.svc.cluster.local:8080"
+      decision_interval_seconds: 30
+      learning_rate: 0.01
+      
+      # ML-based traffic distribution
+      ml_routing:
+        models:
+          latency_prediction:
+            type: "neural_network"
+            features:
+              - historical_latency
+              - cpu_utilization
+              - memory_utilization
+              - request_rate
+              - time_of_day
+              - day_of_week
+              - region_health_score
+            update_frequency_minutes: 5
+            
+          capacity_prediction:
+            type: "time_series_lstm"
+            features:
+              - historical_traffic
+              - resource_utilization
+              - auto_scaling_events
+              - seasonal_patterns
+            prediction_horizon_minutes: 30
+            
+          failure_prediction:
+            type: "anomaly_detection"
+            features:
+              - error_rates
+              - response_times
+              - resource_metrics
+              - health_check_status
+            alert_threshold: 0.95
+        
+        # Traffic distribution strategies
+        strategies:
+          performance_optimized:
+            weight_factors:
+              latency: 0.4
+              availability: 0.3
+              capacity: 0.2
+              cost: 0.1
+            
+          cost_optimized:
+            weight_factors:
+              cost: 0.4
+              capacity: 0.3
+              latency: 0.2
+              availability: 0.1
+            
+          balanced:
+            weight_factors:
+              latency: 0.25
+              availability: 0.25
+              capacity: 0.25
+              cost: 0.25
+      
+      # Health-aware routing
+      health_routing:
+        health_check_frequency_seconds: 10
+        health_degradation_threshold: 0.8
+        auto_failover_enabled: true
+        
+        health_metrics:
+          - name: "response_time_p95"
+            weight: 0.3
+            target: 50  # milliseconds
+            max_acceptable: 200
+            
+          - name: "error_rate"
+            weight: 0.25
+            target: 0.1  # 0.1%
+            max_acceptable: 1.0
+            
+          - name: "cpu_utilization"
+            weight: 0.2
+            target: 60  # 60%
+            max_acceptable: 90
+            
+          - name: "memory_utilization"
+            weight: 0.15
+            target: 70  # 70%
+            max_acceptable: 90
+            
+          - name: "active_connections"
+            weight: 0.1
+            target_percentage: 60
+            max_acceptable_percentage: 90
+        
+        failover_policies:
+          primary_to_secondary:
+            trigger_conditions:
+              - health_score: 0.7
+              - consecutive_failures: 3
+              - response_time_p95: 100
+            traffic_shift_percentage: 50
+            evaluation_period_seconds: 60
+            
+          cross_region_failover:
+            trigger_conditions:
+              - health_score: 0.5
+              - consecutive_failures: 5
+              - error_rate: 5.0
+            traffic_shift_percentage: 80
+            evaluation_period_seconds: 120
+            dns_update_enabled: true
+      
+      # Intelligent caching
+      edge_caching:
+        enabled: true
+        cache_providers: ["cloudflare", "fastly", "aws_cloudfront"]
+        
+        cache_policies:
+          api_responses:
+            ttl_seconds: 300  # 5 minutes
+            vary_headers: ["authorization", "accept-encoding"]
+            cache_key_include: ["query_params", "headers.x-user-type"]
+            
+          static_assets:
+            ttl_seconds: 86400  # 24 hours
+            compression_enabled: true
+            
+          mobile_api:
+            ttl_seconds: 600  # 10 minutes
+            compression_algorithm: "brotli"
+            cache_based_on_device: true
+        
+        invalidation:
+          auto_invalidation_patterns:
+            - "/api/v1/data/*"
+            - "/analytics/reports/*"
+          manual_invalidation_webhook: "https://api.bmad.pwc-challenge.com/cache/invalidate"
+      
+      # Performance optimization
+      optimization:
+        compression:
+          enabled: true
+          algorithms: ["brotli", "gzip"]
+          compression_level: 6
+          min_response_size_bytes: 1024
+          
+        connection_optimization:
+          http2_enabled: true
+          http3_enabled: true
+          keep_alive_timeout_seconds: 120
+          max_concurrent_streams: 100
+          
+        request_optimization:
+          request_id_header: "x-request-id"
+          correlation_id_header: "x-correlation-id"
+          timeout_gradient:
+            mobile_api: 5s
+            web_api: 10s
+            analytics_api: 30s
+            batch_api: 300s
+
+---
+# Network Security Policies for Load Balancer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-intelligent-lb-security
+  namespace: default
+  labels:
+    app: bmad-network-security
+    component: intelligent-load-balancer
+spec:
+  podSelector:
+    matchLabels:
+      app: bmad-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Istio ingress gateway
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - podSelector:
+        matchLabels:
+          app: istio-proxy
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8443
+    - protocol: TCP
+      port: 15090  # Envoy admin
+  # Allow health checks from monitoring systems
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 15021  # Istio health checks
+  # Allow internal service mesh communication
+  - from:
+    - podSelector:
+        matchLabels:
+          app: bmad-service
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow HTTPS for external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow internal service communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: bmad-service
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow communication with ML/AI services
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: ml-system
+    ports:
+    - protocol: TCP
+      port: 8080

@@ -1,0 +1,1004 @@
+# Intelligent Cloud-Native Backup and Disaster Recovery System
+# <1 Hour RTO with Multi-Region Replication and Automated Failover
+
+---
+# Namespace for Backup and DR Operations
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup-dr
+  labels:
+    app: bmad-backup-dr
+    component: disaster-recovery
+    tier: production
+    cost-optimization: enabled
+spec: {}
+
+---
+# ConfigMap for Backup and DR Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dr-policies
+  namespace: backup-dr
+  labels:
+    app: backup-dr
+    component: configuration
+data:
+  backup_policies.yaml: |
+    backup_configuration:
+      # Recovery Time Objective (RTO): <1 hour
+      # Recovery Point Objective (RPO): <5 minutes
+      rto_target_minutes: 60
+      rpo_target_minutes: 5
+      
+      # Multi-region backup strategy
+      backup_regions:
+        primary: "us-east-1"      # AWS Primary
+        secondary: "eastus"       # Azure Secondary  
+        tertiary: "us-central1"   # GCP Tertiary
+        
+      # Backup schedules and retention
+      schedules:
+        critical_data:
+          frequency: "*/5 * * * *"    # Every 5 minutes
+          retention_days: 90
+          compression: true
+          encryption: true
+          cross_region_replication: true
+          
+        application_data:
+          frequency: "*/15 * * * *"   # Every 15 minutes
+          retention_days: 30
+          compression: true
+          encryption: true
+          cross_region_replication: true
+          
+        system_configuration:
+          frequency: "0 */4 * * *"    # Every 4 hours
+          retention_days: 365
+          compression: true
+          encryption: true
+          version_control: true
+          
+        logs_and_metrics:
+          frequency: "0 */1 * * *"    # Every hour
+          retention_days: 90
+          compression: true
+          lifecycle_policies: true
+          
+      # Data classification and backup tiers
+      data_classification:
+        tier_1_critical:
+          description: "Business-critical data requiring immediate recovery"
+          rpo_minutes: 1
+          rto_minutes: 15
+          replication_factor: 3
+          backup_frequency: "continuous"
+          
+        tier_2_important:
+          description: "Important business data"
+          rpo_minutes: 5
+          rto_minutes: 30
+          replication_factor: 2
+          backup_frequency: "*/5 * * * *"
+          
+        tier_3_standard:
+          description: "Standard business data"
+          rpo_minutes: 15
+          rto_minutes: 60
+          replication_factor: 2
+          backup_frequency: "*/15 * * * *"
+          
+        tier_4_archival:
+          description: "Long-term archival data"
+          rpo_minutes: 60
+          rto_minutes: 240
+          replication_factor: 1
+          backup_frequency: "0 2 * * *"
+          
+  disaster_recovery_config.yaml: |
+    disaster_recovery:
+      # Automated failover configuration
+      automated_failover:
+        enabled: true
+        health_check_frequency_seconds: 30
+        failure_threshold: 3
+        recovery_threshold: 2
+        
+        # Failover triggers
+        triggers:
+          - name: "Primary Region Unavailable"
+            condition: "primary_region_health_score < 0.5"
+            action: "failover_to_secondary"
+            
+          - name: "Database Unavailable"
+            condition: "database_availability < 0.8"
+            action: "activate_standby_database"
+            
+          - name: "API Endpoint Failure"
+            condition: "api_error_rate > 0.1"
+            action: "redirect_traffic"
+            
+          - name: "Storage System Failure"
+            condition: "storage_availability < 0.9"
+            action: "switch_to_backup_storage"
+            
+      # Multi-region disaster recovery
+      regions:
+        primary:
+          name: "aws-us-east-1"
+          priority: 1
+          capacity_percentage: 100
+          health_weight: 0.5
+          
+        secondary:
+          name: "azure-eastus"
+          priority: 2
+          capacity_percentage: 80
+          health_weight: 0.3
+          
+        tertiary:
+          name: "gcp-us-central1"
+          priority: 3
+          capacity_percentage: 60
+          health_weight: 0.2
+          
+      # Recovery procedures
+      recovery_procedures:
+        database_recovery:
+          steps:
+            - "Assess database integrity"
+            - "Restore from latest backup"
+            - "Validate data consistency"
+            - "Update DNS records"
+            - "Redirect application traffic"
+          estimated_time_minutes: 45
+          
+        application_recovery:
+          steps:
+            - "Deploy application containers"
+            - "Restore configuration data"
+            - "Initialize load balancers"
+            - "Perform health checks"
+            - "Route traffic to recovered services"
+          estimated_time_minutes: 30
+          
+        infrastructure_recovery:
+          steps:
+            - "Provision infrastructure resources"
+            - "Restore network configuration"
+            - "Deploy monitoring systems"
+            - "Restore security policies"
+            - "Validate system functionality"
+          estimated_time_minutes: 60
+          
+      # Testing and validation
+      testing:
+        disaster_recovery_drills:
+          frequency: "monthly"
+          scope: "full_system"
+          automated: true
+          
+        backup_validation:
+          frequency: "daily"
+          sample_percentage: 10
+          integrity_checks: true
+          
+        recovery_time_testing:
+          frequency: "weekly"
+          rto_validation: true
+          rpo_validation: true
+          
+  compliance_config.yaml: |
+    compliance:
+      # Regulatory requirements
+      regulations:
+        gdpr:
+          enabled: true
+          data_retention_max_days: 2555  # 7 years
+          right_to_erasure: true
+          data_portability: true
+          
+        sox:
+          enabled: true
+          audit_trail: true
+          immutable_backups: true
+          segregation_of_duties: true
+          
+        hipaa:
+          enabled: false
+          encryption_required: true
+          access_controls: true
+          audit_logging: true
+          
+      # Audit and reporting
+      audit:
+        backup_audit_frequency: "daily"
+        recovery_test_reporting: "monthly"
+        compliance_reporting: "quarterly"
+        
+        audit_trails:
+          - backup_operations
+          - restore_operations
+          - access_attempts
+          - configuration_changes
+          - disaster_recovery_events
+          
+      # Data governance
+      data_governance:
+        data_classification_required: true
+        backup_encryption_required: true
+        cross_border_restrictions: true
+        data_residency_requirements: true
+
+---
+# Velero Backup System Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velero-backup-controller
+  namespace: backup-dr
+  labels:
+    app: velero-backup
+    component: backup-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: velero-backup
+  template:
+    metadata:
+      labels:
+        app: velero-backup
+        component: backup-controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8085"
+    spec:
+      serviceAccountName: velero-backup-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: velero
+        image: velero/velero:v1.12.1
+        imagePullPolicy: IfNotPresent
+        command:
+        - /velero
+        args:
+        - server
+        - --metrics-addr=0.0.0.0:8085
+        - --default-backup-storage-location=default
+        - --default-volume-snapshot-locations=default
+        - --backup-sync-period=5m
+        - --restore-resource-priorities=customresourcedefinitions,namespaces,storageclasses,volumesnapshotclass.snapshot.storage.k8s.io,volumesnapshotcontents.snapshot.storage.k8s.io,volumesnapshots.snapshot.storage.k8s.io,persistentvolumes,persistentvolumeclaims,secrets,configmaps,serviceaccounts,limitranges,pods,replicasets.apps,deployments.apps,services,endpoints,daemonsets.apps,statefulsets.apps,jobs.batch,cronjobs.batch
+        ports:
+        - name: metrics
+          containerPort: 8085
+          protocol: TCP
+        env:
+        - name: VELERO_NAMESPACE
+          value: backup-dr
+        - name: VELERO_SCRATCH_DIR
+          value: /scratch
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /credentials/cloud
+        - name: AWS_SHARED_CREDENTIALS_FILE
+          value: /credentials/cloud
+        - name: AZURE_CREDENTIALS_FILE
+          value: /credentials/cloud
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        volumeMounts:
+        - name: cloud-credentials
+          mountPath: /credentials
+          readOnly: true
+        - name: scratch
+          mountPath: /scratch
+        - name: plugins
+          mountPath: /plugins
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8085
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 8085
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: cloud-credentials
+        secret:
+          secretName: cloud-provider-credentials
+      - name: scratch
+        emptyDir: {}
+      - name: plugins
+        emptyDir: {}
+
+---
+# Multi-Cloud Backup Storage Locations
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: aws-primary-backup-storage
+  namespace: backup-dr
+  labels:
+    provider: aws
+    tier: primary
+spec:
+  provider: aws
+  objectStorage:
+    bucket: bmad-backup-primary-us-east-1
+    prefix: velero-backups
+  config:
+    region: us-east-1
+    s3ForcePathStyle: "false"
+    s3Url: https://s3.amazonaws.com
+    checksumAlgorithm: ""
+    enableSharedConfig: "true"
+    serverSideEncryption: AES256
+
+---
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: azure-secondary-backup-storage
+  namespace: backup-dr
+  labels:
+    provider: azure
+    tier: secondary
+spec:
+  provider: azure
+  objectStorage:
+    bucket: bmad-backup-secondary-eastus
+    prefix: velero-backups
+  config:
+    resourceGroup: bmad-backup-rg
+    storageAccount: bmadbackupsecondary
+    storageAccountKeyEnvVar: AZURE_STORAGE_ACCOUNT_ACCESS_KEY
+    subscriptionId: "${AZURE_SUBSCRIPTION_ID}"
+
+---
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: gcp-tertiary-backup-storage
+  namespace: backup-dr
+  labels:
+    provider: gcp
+    tier: tertiary
+spec:
+  provider: gcp
+  objectStorage:
+    bucket: bmad-backup-tertiary-us-central1
+    prefix: velero-backups
+  config:
+    project: bmad-pwc-challenge
+    location: us-central1
+    storageClass: STANDARD
+    kmsKeyName: projects/bmad-pwc-challenge/locations/us-central1/keyRings/backup-keys/cryptoKeys/velero-backup-key
+
+---
+# Volume Snapshot Locations
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: aws-ebs-snapshots
+  namespace: backup-dr
+  labels:
+    provider: aws
+spec:
+  provider: aws
+  config:
+    region: us-east-1
+    profile: "default"
+
+---
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: azure-disk-snapshots
+  namespace: backup-dr
+  labels:
+    provider: azure
+spec:
+  provider: azure
+  config:
+    apiTimeout: 5m0s
+    resourceGroup: bmad-backup-rg
+    subscriptionId: "${AZURE_SUBSCRIPTION_ID}"
+    incremental: "true"
+
+---
+# Critical Data Backup Schedule
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: critical-data-backup
+  namespace: backup-dr
+  labels:
+    backup-tier: tier-1-critical
+    frequency: continuous
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  template:
+    metadata:
+      labels:
+        backup-type: critical-data
+        tier: tier-1
+    includedNamespaces:
+    - default
+    - database
+    - authentication
+    includedResources:
+    - persistentvolumeclaims
+    - persistentvolumes
+    - secrets
+    - configmaps
+    - statefulsets
+    labelSelector:
+      matchLabels:
+        backup-tier: tier-1-critical
+    storageLocation: aws-primary-backup-storage
+    volumeSnapshotLocations:
+    - aws-ebs-snapshots
+    ttl: 2160h0m0s  # 90 days
+    hooks:
+      resources:
+      - name: database-backup-hook
+        includedNamespaces:
+        - database
+        labelSelector:
+          matchLabels:
+            app: postgresql
+        pre:
+        - exec:
+            command:
+            - /bin/bash
+            - -c
+            - "pg_dump -h localhost -U postgres -d bmad > /tmp/backup-$(date +%Y%m%d-%H%M%S).sql"
+            container: postgresql
+            onError: Continue
+        post:
+        - exec:
+            command:
+            - /bin/bash
+            - -c
+            - "rm -f /tmp/backup-*.sql"
+            container: postgresql
+
+---
+# Application Data Backup Schedule
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: application-data-backup
+  namespace: backup-dr
+  labels:
+    backup-tier: tier-2-important
+    frequency: frequent
+spec:
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  template:
+    metadata:
+      labels:
+        backup-type: application-data
+        tier: tier-2
+    includedNamespaces:
+    - default
+    - monitoring
+    - logging
+    includedResources:
+    - deployments
+    - services
+    - configmaps
+    - persistentvolumeclaims
+    labelSelector:
+      matchLabels:
+        backup-tier: tier-2-important
+    storageLocation: aws-primary-backup-storage
+    volumeSnapshotLocations:
+    - aws-ebs-snapshots
+    ttl: 720h0m0s  # 30 days
+
+---
+# Full System Backup Schedule
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: full-system-backup
+  namespace: backup-dr
+  labels:
+    backup-tier: tier-3-standard
+    frequency: regular
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  template:
+    metadata:
+      labels:
+        backup-type: full-system
+        tier: tier-3
+    includedNamespaces:
+    - "*"
+    storageLocation: azure-secondary-backup-storage
+    volumeSnapshotLocations:
+    - azure-disk-snapshots
+    ttl: 8760h0m0s  # 365 days
+    hooks:
+      resources:
+      - name: pre-backup-hook
+        includedNamespaces:
+        - default
+        pre:
+        - exec:
+            command:
+            - /bin/sh
+            - -c
+            - "echo 'Starting full system backup at $(date)' >> /var/log/backup.log"
+            container: backup-logger
+            onError: Continue
+
+---
+# Disaster Recovery Controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: disaster-recovery-controller
+  namespace: backup-dr
+  labels:
+    app: disaster-recovery
+    component: controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: disaster-recovery
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: disaster-recovery
+        component: controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: disaster-recovery-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: dr-controller
+        image: bmad/disaster-recovery-controller:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: RTO_TARGET_MINUTES
+          value: "60"
+        - name: RPO_TARGET_MINUTES
+          value: "5"
+        - name: HEALTH_CHECK_INTERVAL
+          value: "30s"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: GRAFANA_URL
+          value: "http://grafana.monitoring.svc.cluster.local:3000"
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: disaster-recovery-secrets
+              key: slack-webhook-url
+        - name: PAGERDUTY_INTEGRATION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: disaster-recovery-secrets
+              key: pagerduty-integration-key
+        # Multi-cloud credentials
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: aws-secret-access-key
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: azure-client-id
+        - name: AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: azure-client-secret
+        - name: AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: azure-tenant-id
+        - name: GCP_SERVICE_ACCOUNT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloud-provider-credentials
+              key: gcp-service-account-key
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: recovery-plans
+          mountPath: /app/recovery-plans
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: config
+        configMap:
+          name: backup-dr-policies
+      - name: recovery-plans
+        persistentVolumeClaim:
+          claimName: recovery-plans-storage
+      - name: logs
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+# PVC for Recovery Plans Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recovery-plans-storage
+  namespace: backup-dr
+  labels:
+    app: disaster-recovery
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3-optimized
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Service Account for Velero Backup
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: velero-backup-service-account
+  namespace: backup-dr
+  labels:
+    app: velero-backup
+    component: rbac
+
+---
+# Service Account for Disaster Recovery
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: disaster-recovery-service-account
+  namespace: backup-dr
+  labels:
+    app: disaster-recovery
+    component: rbac
+
+---
+# RBAC for Backup Operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: velero-backup-role
+  labels:
+    app: velero-backup
+    component: rbac
+rules:
+# Full access for backup operations
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+# Velero-specific resources
+- apiGroups: ["velero.io"]
+  resources: ["*"]
+  verbs: ["*"]
+# Volume snapshots
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
+  verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: velero-backup-rolebinding
+  labels:
+    app: velero-backup
+    component: rbac
+subjects:
+- kind: ServiceAccount
+  name: velero-backup-service-account
+  namespace: backup-dr
+roleRef:
+  kind: ClusterRole
+  name: velero-backup-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# RBAC for Disaster Recovery
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: disaster-recovery-role
+  labels:
+    app: disaster-recovery
+    component: rbac
+rules:
+# Read access to all resources for health monitoring
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+# Write access for recovery operations
+- apiGroups: [""]
+  resources: ["services", "endpoints", "pods"]
+  verbs: ["create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["create", "update", "patch", "delete", "scale"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["create", "update", "patch", "delete"]
+# Velero restore operations
+- apiGroups: ["velero.io"]
+  resources: ["restores", "backups", "schedules"]
+  verbs: ["create", "get", "list", "watch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: disaster-recovery-rolebinding
+  labels:
+    app: disaster-recovery
+    component: rbac
+subjects:
+- kind: ServiceAccount
+  name: disaster-recovery-service-account
+  namespace: backup-dr
+roleRef:
+  kind: ClusterRole
+  name: disaster-recovery-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Service for Disaster Recovery Controller
+apiVersion: v1
+kind: Service
+metadata:
+  name: disaster-recovery-service
+  namespace: backup-dr
+  labels:
+    app: disaster-recovery
+    component: service
+spec:
+  selector:
+    app: disaster-recovery
+    component: controller
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  type: ClusterIP
+
+---
+# ServiceMonitor for Backup and DR Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backup-dr-monitor
+  namespace: backup-dr
+  labels:
+    app: backup-dr
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: disaster-recovery
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+    scrapeTimeout: 25s
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'backup_(.+)'
+      targetLabel: __name__
+      replacement: 'bmad_backup_${1}'
+    - sourceLabels: [__name__]
+      regex: 'dr_(.+)'
+      targetLabel: __name__
+      replacement: 'bmad_disaster_recovery_${1}'
+  namespaceSelector:
+    matchNames:
+    - backup-dr
+
+---
+# PrometheusRule for Backup and DR Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-dr-alerts
+  namespace: backup-dr
+  labels:
+    app: backup-dr
+    component: alerting
+spec:
+  groups:
+  - name: backup-alerts
+    interval: 5m
+    rules:
+    - alert: BackupFailed
+      expr: bmad_backup_job_failure_total > 0
+      for: 5m
+      labels:
+        severity: critical
+        category: backup
+      annotations:
+        summary: "Backup job has failed"
+        description: "Backup job {{ $labels.job_name }} has failed {{ $value }} times"
+
+    - alert: BackupMissing
+      expr: time() - bmad_backup_last_success_timestamp > 1800  # 30 minutes
+      for: 5m
+      labels:
+        severity: warning
+        category: backup
+      annotations:
+        summary: "Backup is overdue"
+        description: "Last successful backup was {{ $value }} seconds ago"
+
+    - alert: RPOViolation
+      expr: time() - bmad_backup_last_data_timestamp > 300  # 5 minutes
+      for: 1m
+      labels:
+        severity: critical
+        category: backup
+      annotations:
+        summary: "RPO violation detected"
+        description: "Data age exceeds RPO target of 5 minutes"
+
+  - name: disaster-recovery-alerts
+    interval: 1m
+    rules:
+    - alert: RegionUnavailable
+      expr: bmad_disaster_recovery_region_health_score < 0.5
+      for: 2m
+      labels:
+        severity: critical
+        category: disaster-recovery
+      annotations:
+        summary: "Primary region is unhealthy"
+        description: "Region {{ $labels.region }} health score is {{ $value }}"
+
+    - alert: FailoverTriggered
+      expr: increase(bmad_disaster_recovery_failover_total[5m]) > 0
+      for: 0m
+      labels:
+        severity: emergency
+        category: disaster-recovery
+      annotations:
+        summary: "Disaster recovery failover triggered"
+        description: "Failover to {{ $labels.target_region }} has been initiated"
+
+    - alert: RTOViolation
+      expr: bmad_disaster_recovery_recovery_time_seconds > 3600  # 1 hour
+      for: 0m
+      labels:
+        severity: emergency
+        category: disaster-recovery
+      annotations:
+        summary: "RTO violation - Recovery taking too long"
+        description: "Recovery time is {{ $value }} seconds, exceeding 1 hour RTO"
+
+---
+# NetworkPolicy for Backup and DR Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backup-dr-network-policy
+  namespace: backup-dr
+  labels:
+    app: backup-dr
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: disaster-recovery
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow monitoring traffic
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+  # Allow internal communication
+  - from:
+    - podSelector:
+        matchLabels:
+          app: velero-backup
+    - podSelector:
+        matchLabels:
+          app: disaster-recovery
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS for cloud provider APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Kubernetes API server
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443

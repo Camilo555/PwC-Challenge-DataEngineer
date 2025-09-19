@@ -308,7 +308,7 @@ def ui_test_components() -> list[dict[str, Any]]:
 def test_environment_setup():
     """Set up test environment variables."""
     os.environ.update({
-        "ENVIRONMENT": "test",
+        "ENVIRONMENT": "testing",
         "DATABASE_URL": "postgresql://test:test@localhost:5432/test_db",
         "REDIS_URL": "redis://localhost:6379/1",
         "JWT_SECRET_KEY": "test-jwt-secret-key",
@@ -443,6 +443,26 @@ def pytest_collection_modifyitems(config, items):
         if hasattr(item.obj, "__name__") and "performance" in item.obj.__name__:
             item.add_marker(pytest.mark.performance)
             item.add_marker(pytest.mark.slow)
+
+
+# Test isolation fixture
+@pytest.fixture(autouse=True)
+def isolation_fixture():
+    """Ensure proper test isolation and cleanup."""
+    # Pre-test setup
+    original_env = os.environ.copy()
+    
+    yield
+    
+    # Post-test cleanup
+    # Restore original environment
+    os.environ.clear()
+    os.environ.update(original_env)
+    
+    # Clear any global state that might affect other tests
+    import sys
+    if hasattr(sys.modules.get('src.core.config', None), '_cached_config'):
+        delattr(sys.modules['src.core.config'], '_cached_config')
 
 
 # Cleanup fixtures

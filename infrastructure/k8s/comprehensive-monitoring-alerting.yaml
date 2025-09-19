@@ -1,0 +1,893 @@
+# Comprehensive Monitoring and Alerting for Kubernetes Auto-Scaling
+# Enterprise-grade observability with SLI/SLO monitoring and intelligent alerting
+# Integration with Prometheus, Grafana, and multi-channel notifications
+
+---
+# Monitoring Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring-enterprise
+  labels:
+    name: monitoring-enterprise
+    tier: enterprise
+    component: observability
+
+---
+# Comprehensive Monitoring Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: enterprise-monitoring-config
+  namespace: monitoring-enterprise
+  labels:
+    component: monitoring-configuration
+data:
+  monitoring-config.yaml: |
+    monitoring:
+      enabled: true
+      collection_interval: 15
+      retention_days: 30
+      high_availability: true
+
+      # SLI/SLO Configuration
+      sli_slo:
+        availability_slo: 99.99
+        latency_slo_p99: 200  # milliseconds
+        error_rate_slo: 0.1   # percentage
+        throughput_sli: true
+        saturation_sli: true
+
+      # Metrics Collection
+      metrics:
+        application_metrics:
+          enabled: true
+          path: "/metrics"
+          interval: 15
+
+        infrastructure_metrics:
+          enabled: true
+          node_exporter: true
+          cadvisor: true
+          kube_state_metrics: true
+
+        custom_metrics:
+          enabled: true
+          business_metrics: true
+          cost_metrics: true
+          security_metrics: true
+
+        external_metrics:
+          enabled: true
+          aws_cloudwatch: true
+          datadog: false
+          new_relic: false
+
+      # Alerting Configuration
+      alerting:
+        enabled: true
+        evaluation_interval: 30
+        group_wait: 30
+        group_interval: 300
+        repeat_interval: 3600
+
+        # Alert routing
+        routing:
+          default_receiver: "team-devops"
+          group_by: ["alertname", "cluster", "namespace", "severity"]
+
+        # Severity levels
+        severity_levels:
+          critical:
+            escalation_time: 300  # 5 minutes
+            pagerduty: true
+            phone_call: true
+
+          warning:
+            escalation_time: 900  # 15 minutes
+            slack: true
+            email: true
+
+          info:
+            escalation_time: 1800  # 30 minutes
+            slack: true
+
+      # Dashboard Configuration
+      dashboards:
+        enabled: true
+        auto_refresh: 30
+
+        cluster_overview:
+          enabled: true
+          panels: ["cpu", "memory", "network", "storage", "pods"]
+
+        application_performance:
+          enabled: true
+          panels: ["response_time", "throughput", "errors", "saturation"]
+
+        cost_optimization:
+          enabled: true
+          panels: ["resource_utilization", "cost_trends", "waste_identification"]
+
+        security_monitoring:
+          enabled: true
+          panels: ["failed_logins", "policy_violations", "network_anomalies"]
+
+---
+# Enhanced Prometheus Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-enterprise-config
+  namespace: monitoring-enterprise
+  labels:
+    component: prometheus-configuration
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'bmad-enterprise'
+        region: 'us-east-1'
+        environment: 'production'
+
+    rule_files:
+    - "/etc/prometheus/rules/*.yml"
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager.monitoring-enterprise.svc.cluster.local:9093
+        scheme: http
+        timeout: 10s
+        api_version: v2
+
+    remote_write:
+    - url: "https://prometheus-remote-write.monitoring.company.com/api/v1/write"
+      queue_config:
+        max_samples_per_send: 10000
+        max_shards: 200
+        capacity: 100000
+
+    scrape_configs:
+    # Kubernetes API Server
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: ['default']
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+    # Kubernetes Nodes
+    - job_name: 'kubernetes-nodes'
+      kubernetes_sd_configs:
+      - role: node
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/$1/proxy/metrics
+
+    # Node Exporter
+    - job_name: 'node-exporter'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        action: keep
+        regex: node-resource-monitor
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: node-exporter
+
+    # cAdvisor
+    - job_name: 'cadvisor'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        action: keep
+        regex: node-resource-monitor
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: cadvisor
+
+    # Kube State Metrics
+    - job_name: 'kube-state-metrics'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: ['monitoring-enterprise']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: kube-state-metrics
+
+    # Application Services
+    - job_name: 'bmad-api-enterprise'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: ['bmad-enterprise']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: bmad-api-enterprise-service
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        target_label: kubernetes_name
+      metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'go_.*'
+        action: drop
+
+    # Cluster Autoscaler
+    - job_name: 'cluster-autoscaler'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: ['kube-system']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: cluster-autoscaler-metrics
+
+    # Custom Application Metrics
+    - job_name: 'bmad-custom-metrics'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+
+    # External Metrics (AWS CloudWatch)
+    - job_name: 'aws-cloudwatch'
+      ec2_sd_configs:
+      - region: us-east-1
+        port: 9100
+      relabel_configs:
+      - source_labels: [__meta_ec2_tag_Environment]
+        target_label: environment
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: instance_name
+
+  recording-rules.yml: |
+    groups:
+    - name: bmad.enterprise.recording.rules
+      interval: 30s
+      rules:
+      # Application Performance Rules
+      - record: bmad:http_requests:rate5m
+        expr: sum(rate(http_requests_total[5m])) by (instance, method, code)
+
+      - record: bmad:http_request_duration:p99
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, instance))
+
+      - record: bmad:http_request_duration:p95
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, instance))
+
+      - record: bmad:http_request_duration:p50
+        expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, instance))
+
+      # Error Rate Rules
+      - record: bmad:http_errors:rate5m
+        expr: sum(rate(http_requests_total{code!~"2.."}[5m])) by (instance)
+
+      - record: bmad:http_error_rate
+        expr: bmad:http_errors:rate5m / bmad:http_requests:rate5m
+
+      # Resource Utilization Rules
+      - record: bmad:cpu_utilization
+        expr: |
+          (
+            (1 - (avg_over_time(node_cpu_seconds_total{mode="idle"}[5m]) / avg_over_time(node_cpu_seconds_total[5m]))) * 100
+          )
+
+      - record: bmad:memory_utilization
+        expr: |
+          (
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+          )
+
+      # Kubernetes Resource Rules
+      - record: bmad:pod_cpu_usage
+        expr: sum(rate(container_cpu_usage_seconds_total{container!="POD",container!=""}[5m])) by (namespace, pod, container)
+
+      - record: bmad:pod_memory_usage
+        expr: sum(container_memory_working_set_bytes{container!="POD",container!=""}) by (namespace, pod, container)
+
+      # SLI Rules
+      - record: bmad:availability_sli
+        expr: 1 - (bmad:http_error_rate)
+
+      - record: bmad:latency_sli
+        expr: bmad:http_request_duration:p99 < 0.2
+
+      - record: bmad:throughput_sli
+        expr: sum(bmad:http_requests:rate5m)
+
+  alerting-rules.yml: |
+    groups:
+    - name: bmad.enterprise.slo.rules
+      interval: 30s
+      rules:
+      # SLO Violation Alerts
+      - alert: SLOAvailabilityViolation
+        expr: bmad:availability_sli < 0.999  # 99.9% availability
+        for: 2m
+        labels:
+          severity: critical
+          slo_type: availability
+          team: platform
+        annotations:
+          summary: "SLO availability violation"
+          description: "Availability SLI is {{ $value | humanizePercentage }}, below 99.9% SLO"
+          runbook_url: "https://runbooks.company.com/slo-availability-violation"
+          dashboard_url: "https://grafana.company.com/d/slo-overview"
+
+      - alert: SLOLatencyViolation
+        expr: bmad:http_request_duration:p99 > 0.2  # 200ms P99 latency
+        for: 5m
+        labels:
+          severity: warning
+          slo_type: latency
+          team: platform
+        annotations:
+          summary: "SLO latency violation"
+          description: "P99 latency is {{ $value }}s, above 200ms SLO"
+          runbook_url: "https://runbooks.company.com/slo-latency-violation"
+
+      # Resource Saturation Alerts
+      - alert: HighCPUSaturation
+        expr: bmad:cpu_utilization > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: resource-monitoring
+        annotations:
+          summary: "High CPU saturation"
+          description: "CPU utilization is {{ $value }}% on {{ $labels.instance }}"
+
+      - alert: HighMemorySaturation
+        expr: bmad:memory_utilization > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: resource-monitoring
+        annotations:
+          summary: "High memory saturation"
+          description: "Memory utilization is {{ $value }}% on {{ $labels.instance }}"
+
+      # Application Health Alerts
+      - alert: ApplicationDown
+        expr: up{job="bmad-api-enterprise"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application-health
+        annotations:
+          summary: "Application instance down"
+          description: "Application instance {{ $labels.instance }} has been down for more than 1 minute"
+
+      - alert: HighErrorRate
+        expr: bmad:http_error_rate > 0.05  # 5% error rate
+        for: 3m
+        labels:
+          severity: critical
+          component: application-health
+        annotations:
+          summary: "High application error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.instance }}"
+
+      # Autoscaling Alerts
+      - alert: HPAMaxReplicasReached
+        expr: kube_horizontalpodautoscaler_status_current_replicas >= kube_horizontalpodautoscaler_spec_max_replicas
+        for: 10m
+        labels:
+          severity: warning
+          component: autoscaling
+        annotations:
+          summary: "HPA maximum replicas reached"
+          description: "HPA {{ $labels.horizontalpodautoscaler }} has reached maximum replicas ({{ $value }})"
+
+      - alert: HPATargetUtilizationHigh
+        expr: |
+          (
+            kube_horizontalpodautoscaler_status_current_metrics_average_utilization /
+            kube_horizontalpodautoscaler_spec_target_metric_average_utilization
+          ) > 1.2
+        for: 15m
+        labels:
+          severity: warning
+          component: autoscaling
+        annotations:
+          summary: "HPA target utilization consistently high"
+          description: "HPA {{ $labels.horizontalpodautoscaler }} utilization is {{ $value | humanizePercentage }} of target"
+
+      - alert: ClusterNodesPressure
+        expr: |
+          (
+            sum(kube_pod_container_resource_requests{resource="cpu"}) /
+            sum(kube_node_status_allocatable{resource="cpu"})
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: cluster-capacity
+        annotations:
+          summary: "Cluster nodes under pressure"
+          description: "Cluster CPU request utilization is {{ $value | humanizePercentage }}"
+
+    - name: bmad.enterprise.cost.rules
+      interval: 60s
+      rules:
+      # Cost Optimization Alerts
+      - alert: HighResourceWaste
+        expr: |
+          (
+            avg_over_time(bmad:cpu_utilization[1h]) < 30 and
+            avg_over_time(bmad:memory_utilization[1h]) < 30
+          )
+        for: 30m
+        labels:
+          severity: info
+          component: cost-optimization
+        annotations:
+          summary: "High resource waste detected"
+          description: "Instance {{ $labels.instance }} has low utilization: CPU {{ $value }}%, Memory {{ $value }}%"
+
+      - alert: CostSpike
+        expr: increase(infrastructure_cost_usd_total[1h]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: cost-monitoring
+        annotations:
+          summary: "Infrastructure cost spike detected"
+          description: "Infrastructure costs increased by ${{ $value }} in the last hour"
+
+---
+# Enhanced AlertManager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-enterprise-config
+  namespace: monitoring-enterprise
+  labels:
+    component: alertmanager-configuration
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.company.com:587'
+      smtp_from: 'alerts@company.com'
+      smtp_auth_username: 'alerts@company.com'
+      smtp_auth_password: 'smtp-password-secret'
+
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'default-receiver'
+
+      routes:
+      # Critical alerts
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 10s
+        repeat_interval: 30m
+
+      # SLO violations
+      - match_re:
+          slo_type: availability|latency
+        receiver: 'slo-alerts'
+        group_wait: 1m
+        repeat_interval: 2h
+
+      # Cost optimization alerts
+      - match:
+          component: cost-optimization
+        receiver: 'cost-alerts'
+        repeat_interval: 4h
+
+      # Application specific alerts
+      - match:
+          component: application-health
+        receiver: 'application-alerts'
+        repeat_interval: 1h
+
+    inhibit_rules:
+    # Inhibit warning alerts if critical alerts are firing
+    - source_match:
+        severity: critical
+      target_match:
+        severity: warning
+      equal: ['alertname', 'cluster', 'service']
+
+    # Inhibit individual instance alerts if cluster alert is firing
+    - source_match:
+        alertname: ClusterDown
+      target_match_re:
+        alertname: (InstanceDown|HighCPU|HighMemory)
+      equal: ['cluster']
+
+    receivers:
+    - name: 'default-receiver'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#alerts'
+        username: 'AlertManager'
+        icon_emoji: ':warning:'
+        title: 'Alert: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        text: |
+          {{ range .Alerts }}
+          *Environment:* {{ .Labels.environment }}
+          *Severity:* {{ .Labels.severity }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Runbook:* <{{ .Annotations.runbook_url }}|View Runbook>{{ end }}
+          {{ if .Annotations.dashboard_url }}*Dashboard:* <{{ .Annotations.dashboard_url }}|View Dashboard>{{ end }}
+          {{ end }}
+
+    - name: 'critical-alerts'
+      pagerduty_configs:
+      - routing_key: 'pagerduty-integration-key'
+        description: 'Critical Alert: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        severity: 'critical'
+        client: 'BMAD Platform AlertManager'
+        client_url: 'https://alertmanager.company.com'
+        details:
+          environment: '{{ .GroupLabels.environment }}'
+          cluster: '{{ .GroupLabels.cluster }}'
+          firing: '{{ .Alerts.Firing | len }}'
+
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#critical-alerts'
+        username: 'CRITICAL AlertManager'
+        icon_emoji: ':rotating_light:'
+        title: 'CRITICAL ALERT: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        color: 'danger'
+        text: |
+          @channel CRITICAL ALERT FIRING!
+          {{ range .Alerts }}
+          *Environment:* {{ .Labels.environment }}
+          *Cluster:* {{ .Labels.cluster }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* <{{ .Annotations.runbook_url }}|Immediate Action Required>
+          {{ end }}
+
+      email_configs:
+      - to: 'oncall@company.com, devops-leads@company.com'
+        subject: 'CRITICAL: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        html: |
+          <h2 style="color: red;">CRITICAL ALERT</h2>
+          {{ range .Alerts }}
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Environment:</strong> {{ .Labels.environment }}</p>
+          <p><strong>Time:</strong> {{ .StartsAt }}</p>
+          {{ if .Annotations.runbook_url }}<p><a href="{{ .Annotations.runbook_url }}">View Runbook</a></p>{{ end }}
+          {{ if .Annotations.dashboard_url }}<p><a href="{{ .Annotations.dashboard_url }}">View Dashboard</a></p>{{ end }}
+          {{ end }}
+
+    - name: 'slo-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#slo-alerts'
+        username: 'SLO AlertManager'
+        icon_emoji: ':chart_with_downwards_trend:'
+        title: 'SLO Violation: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        color: 'warning'
+
+      email_configs:
+      - to: 'sre-team@company.com'
+        subject: 'SLO Violation: {{ range .Alerts }}{{ .Labels.slo_type }}{{ end }}'
+
+    - name: 'cost-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#cost-optimization'
+        username: 'Cost AlertManager'
+        icon_emoji: ':money_with_wings:'
+
+    - name: 'application-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#application-alerts'
+        username: 'App AlertManager'
+        icon_emoji: ':computer:'
+
+  templates.tmpl: |
+    {{ define "slack.default.title" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}
+    {{ end }}
+
+    {{ define "slack.default.text" }}
+    {{ range .Alerts -}}
+    *Alert:* {{ .Annotations.title }}{{ if .Labels.severity }} - `{{ .Labels.severity }}`{{ end }}
+    *Description:* {{ .Annotations.description }}
+    *Details:*
+      {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+      {{ end }}
+    {{ end }}
+    {{ end }}
+
+---
+# Kube State Metrics Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring-enterprise
+  labels:
+    app: kube-state-metrics
+    component: monitoring
+spec:
+  replicas: 2  # High availability
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: kube-state-metrics
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["kube-state-metrics"]
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: kube-state-metrics
+        image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - --host=0.0.0.0
+        - --port=8080
+        - --telemetry-host=0.0.0.0
+        - --telemetry-port=8081
+        - --metric-labels-allowlist=pods=[*],nodes=[*],namespaces=[*]
+        - --metric-annotations-allowlist=pods=[*],nodes=[*]
+        - --resources=certificatesigningrequests,configmaps,cronjobs,daemonsets,deployments,endpoints,horizontalpodautoscalers,ingresses,jobs,leases,limitranges,mutatingwebhookconfigurations,namespaces,networkpolicies,nodes,persistentvolumeclaims,persistentvolumes,poddisruptionbudgets,pods,replicasets,replicationcontrollers,resourcequotas,secrets,services,statefulsets,storageclasses,validatingwebhookconfigurations,volumeattachments,verticalpodautoscalers
+        ports:
+        - name: http-metrics
+          containerPort: 8080
+          protocol: TCP
+        - name: telemetry
+          containerPort: 8081
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+
+---
+# Kube State Metrics Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring-enterprise
+
+---
+# Kube State Metrics RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+rules:
+- apiGroups: [""]
+  resources:
+  - configmaps
+  - secrets
+  - nodes
+  - pods
+  - services
+  - serviceaccounts
+  - resourcequotas
+  - replicationcontrollers
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - namespaces
+  - endpoints
+  verbs: ["list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+  - statefulsets
+  - daemonsets
+  - deployments
+  - replicasets
+  verbs: ["list", "watch"]
+- apiGroups: ["batch"]
+  resources:
+  - cronjobs
+  - jobs
+  verbs: ["list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources:
+  - horizontalpodautoscalers
+  verbs: ["list", "watch"]
+- apiGroups: ["authentication.k8s.io"]
+  resources:
+  - tokenreviews
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources:
+  - subjectaccessreviews
+  verbs: ["create"]
+- apiGroups: ["policy"]
+  resources:
+  - poddisruptionbudgets
+  verbs: ["list", "watch"]
+- apiGroups: ["certificates.k8s.io"]
+  resources:
+  - certificatesigningrequests
+  verbs: ["list", "watch"]
+- apiGroups: ["discovery.k8s.io"]
+  resources:
+  - endpointslices
+  verbs: ["list", "watch"]
+- apiGroups: ["storage.k8s.io"]
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs: ["list", "watch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs: ["list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - networkpolicies
+  - ingresses
+  verbs: ["list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources:
+  - leases
+  verbs: ["list", "watch"]
+- apiGroups: ["autoscaling.k8s.io"]
+  resources:
+  - verticalpodautoscalers
+  verbs: ["list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: kube-state-metrics
+  namespace: monitoring-enterprise
+
+---
+# Kube State Metrics Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring-enterprise
+  labels:
+    app: kube-state-metrics
+    component: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http-metrics
+    port: 8080
+    targetPort: http-metrics
+    protocol: TCP
+  - name: telemetry
+    port: 8081
+    targetPort: telemetry
+    protocol: TCP
+  selector:
+    app: kube-state-metrics
+
+---
+# ServiceMonitor for Kube State Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring-enterprise
+  labels:
+    app: kube-state-metrics
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  endpoints:
+  - port: http-metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+  - port: telemetry
+    interval: 30s
+    path: /metrics
+    honorLabels: true

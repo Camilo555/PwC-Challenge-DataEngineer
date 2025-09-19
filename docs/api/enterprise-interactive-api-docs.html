@@ -1,0 +1,2720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PwC Enterprise Data Engineering API - Interactive Documentation Portal</title>
+
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="https://fastapi.tiangolo.com/img/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://fastapi.tiangolo.com/img/favicon.png">
+
+    <!-- External CSS Dependencies -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.10.0/swagger-ui.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/redoc@2.1.2/bundles/redoc.standalone.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        /* ============================================================================ */
+        /* GLOBAL STYLES & RESET */
+        /* ============================================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #667eea;
+            --primary-dark: #5a67d8;
+            --secondary-color: #764ba2;
+            --accent-color: #f093fb;
+            --success-color: #48bb78;
+            --warning-color: #ed8936;
+            --error-color: #f56565;
+            --info-color: #4299e1;
+
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7fafc;
+            --bg-tertiary: #edf2f7;
+            --bg-dark: #1a202c;
+            --bg-darker: #171923;
+
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-tertiary: #718096;
+            --text-light: #a0aec0;
+            --text-inverse: #ffffff;
+
+            --border-light: #e2e8f0;
+            --border-medium: #cbd5e0;
+            --border-dark: #a0aec0;
+
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+            --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.2);
+
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            --radius-2xl: 24px;
+
+            --transition-fast: 0.15s ease;
+            --transition-normal: 0.3s ease;
+            --transition-slow: 0.5s ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* ============================================================================ */
+        /* HEADER & NAVIGATION */
+        /* ============================================================================ */
+        .header {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            box-shadow: var(--shadow-md);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 800;
+            font-size: 20px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .logo-text h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .logo-text .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .version-badge {
+            background: linear-gradient(45deg, var(--info-color), var(--primary-color));
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 12px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+        }
+
+        .status-indicator.online {
+            background: #f0fff4;
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ============================================================================ */
+        /* NAVIGATION TABS */
+        /* ============================================================================ */
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+            background: var(--bg-secondary);
+            padding: 8px;
+            border-radius: var(--radius-lg);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            border: none;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all var(--transition-normal);
+            white-space: nowrap;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.7);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .nav-tab.active {
+            background: white;
+            color: var(--primary-color);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            border-radius: 2px;
+        }
+
+        .nav-tab i {
+            font-size: 16px;
+        }
+
+        /* ============================================================================ */
+        /* MAIN CONTAINER */
+        /* ============================================================================ */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            min-height: calc(100vh - 100px);
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .content-section {
+            display: none;
+            min-height: calc(100vh - 100px);
+            position: relative;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        /* ============================================================================ */
+        /* WELCOME/OVERVIEW SECTION */
+        /* ============================================================================ */
+        .welcome-section {
+            padding: 60px 40px;
+            text-align: center;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+        }
+
+        .welcome-hero h2 {
+            color: var(--text-primary);
+            font-size: 52px;
+            font-weight: 900;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        .welcome-hero .subtitle {
+            color: var(--text-secondary);
+            font-size: 22px;
+            margin-bottom: 40px;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.7;
+            font-weight: 400;
+        }
+
+        .api-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin: 50px 0;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 32px 24px;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-normal);
+            border: 1px solid var(--border-light);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .stat-number {
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-description {
+            color: var(--text-tertiary);
+            font-size: 12px;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+
+        /* ============================================================================ */
+        /* FEATURES GRID */
+        /* ============================================================================ */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+            padding: 0 40px;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 40px 32px;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-normal);
+            border: 1px solid var(--border-light);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary-color), var(--secondary-color));
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .feature-card:nth-child(even)::before {
+            background: linear-gradient(180deg, var(--accent-color), var(--primary-color));
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .feature-card h3 {
+            color: var(--text-primary);
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .feature-card .description {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 24px;
+            font-size: 15px;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+
+        .feature-list li {
+            color: var(--text-secondary);
+            margin: 10px 0;
+            padding-left: 24px;
+            position: relative;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success-color);
+            font-weight: bold;
+            width: 16px;
+            height: 16px;
+            background: rgba(72, 187, 120, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 14px 24px;
+            border-radius: var(--radius-lg);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all var(--transition-normal);
+            box-shadow: var(--shadow-md);
+            border: none;
+            cursor: pointer;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            background: linear-gradient(45deg, var(--primary-dark), var(--secondary-color));
+        }
+
+        .cta-button i {
+            font-size: 16px;
+            transition: transform var(--transition-fast);
+        }
+
+        .cta-button:hover i {
+            transform: translateX(2px);
+        }
+
+        /* ============================================================================ */
+        /* DOCUMENTATION SECTIONS */
+        /* ============================================================================ */
+        .section-header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            padding: 40px;
+            border-bottom: 1px solid var(--border-light);
+            position: relative;
+        }
+
+        .section-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            border-radius: 2px;
+        }
+
+        .section-header h2 {
+            color: var(--text-primary);
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .section-header h2 i {
+            font-size: 28px;
+            color: var(--primary-color);
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 16px;
+            line-height: 1.7;
+            max-width: 800px;
+        }
+
+        .section-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-badge {
+            padding: 6px 12px;
+            background: rgba(102, 126, 234, 0.1);
+            color: var(--primary-color);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        /* ============================================================================ */
+        /* SWAGGER UI & REDOC CONTAINERS */
+        /* ============================================================================ */
+        .swagger-container,
+        .redoc-container,
+        .api-testing-container {
+            height: calc(100vh - 200px);
+            overflow: auto;
+            position: relative;
+        }
+
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--text-secondary);
+        }
+
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--border-light);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        /* ============================================================================ */
+        /* API TESTING SECTION */
+        /* ============================================================================ */
+        .api-testing-section {
+            padding: 40px;
+        }
+
+        .testing-tools {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 32px;
+            margin-bottom: 40px;
+        }
+
+        .testing-tool {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            transition: all var(--transition-normal);
+        }
+
+        .testing-tool:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-4px);
+        }
+
+        .tool-header {
+            background: var(--bg-dark);
+            color: white;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tool-header i {
+            font-size: 20px;
+            color: var(--accent-color);
+        }
+
+        .tool-header h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .tool-content {
+            padding: 24px;
+        }
+
+        .code-example {
+            background: var(--bg-dark);
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            margin: 16px 0;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', Monaco, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            border: 1px solid #2d3748;
+        }
+
+        .method-badge {
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 8px;
+        }
+
+        .method-get { background: var(--success-color); color: white; }
+        .method-post { background: var(--info-color); color: white; }
+        .method-put { background: var(--warning-color); color: white; }
+        .method-delete { background: var(--error-color); color: white; }
+
+        /* ============================================================================ */
+        /* SDK SECTION */
+        /* ============================================================================ */
+        .sdk-section {
+            padding: 40px;
+        }
+
+        .sdk-languages {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 32px;
+            margin-bottom: 40px;
+        }
+
+        .language-card {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-normal);
+        }
+
+        .language-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .language-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .language-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .language-header h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .language-content {
+            padding: 24px;
+        }
+
+        .installation-section {
+            margin-top: 40px;
+            padding: 32px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border-light);
+        }
+
+        .installation-section h3 {
+            color: var(--text-primary);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .installation-section h3 i {
+            color: var(--primary-color);
+        }
+
+        /* ============================================================================ */
+        /* RESPONSIVE DESIGN */
+        /* ============================================================================ */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 20px;
+                padding: 0 16px;
+            }
+
+            .logo-section {
+                flex-direction: column;
+                text-align: center;
+                gap: 12px;
+            }
+
+            .logo-text h1 {
+                font-size: 24px;
+            }
+
+            .nav-tabs {
+                justify-content: center;
+                width: 100%;
+            }
+
+            .nav-tab {
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+
+            .welcome-hero h2 {
+                font-size: 36px;
+            }
+
+            .welcome-hero .subtitle {
+                font-size: 18px;
+            }
+
+            .features-grid,
+            .sdk-languages,
+            .testing-tools {
+                grid-template-columns: 1fr;
+                padding: 0 20px;
+            }
+
+            .feature-card,
+            .language-card,
+            .testing-tool {
+                padding: 24px 20px;
+            }
+
+            .section-header {
+                padding: 24px 20px;
+            }
+
+            .section-header h2 {
+                font-size: 24px;
+            }
+
+            .api-testing-section,
+            .sdk-section {
+                padding: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .api-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 16px;
+            }
+
+            .stat-card {
+                padding: 20px 16px;
+            }
+
+            .stat-number {
+                font-size: 28px;
+            }
+
+            .nav-tabs {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .nav-tab {
+                justify-content: center;
+                width: 100%;
+            }
+        }
+
+        /* ============================================================================ */
+        /* SWAGGER UI CUSTOMIZATIONS */
+        /* ============================================================================ */
+        .swagger-ui .topbar {
+            display: none;
+        }
+
+        .swagger-ui .info {
+            margin: 20px 0;
+        }
+
+        .swagger-ui .info .title {
+            color: var(--primary-color);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .swagger-ui .scheme-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            margin: 20px 0;
+        }
+
+        .swagger-ui .btn.authorize {
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            border: none;
+            color: white;
+            border-radius: var(--radius-lg);
+            padding: 8px 16px;
+            font-weight: 600;
+        }
+
+        .swagger-ui .btn.authorize:hover {
+            background: linear-gradient(45deg, var(--primary-dark), var(--secondary-color));
+        }
+
+        /* ============================================================================ */
+        /* REDOC CUSTOMIZATIONS */
+        /* ============================================================================ */
+        .redoc-container .redoc-wrap {
+            background: white;
+        }
+
+        /* ============================================================================ */
+        /* DARK MODE SUPPORT */
+        /* ============================================================================ */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #1a202c;
+                --bg-secondary: #2d3748;
+                --bg-tertiary: #4a5568;
+                --text-primary: #f7fafc;
+                --text-secondary: #e2e8f0;
+                --text-tertiary: #a0aec0;
+                --border-light: #4a5568;
+                --border-medium: #718096;
+            }
+
+            body {
+                color: var(--text-primary);
+            }
+
+            .main-container,
+            .feature-card,
+            .stat-card,
+            .language-card,
+            .testing-tool {
+                background: var(--bg-primary);
+                color: var(--text-primary);
+            }
+        }
+
+        /* ============================================================================ */
+        /* ACCESSIBILITY IMPROVEMENTS */
+        /* ============================================================================ */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .nav-tab:focus,
+        .cta-button:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        /* ============================================================================ */
+        /* PRINT STYLES */
+        /* ============================================================================ */
+        @media print {
+            .header,
+            .nav-tabs,
+            .cta-button {
+                display: none;
+            }
+
+            .main-container {
+                box-shadow: none;
+                border-radius: 0;
+            }
+
+            .feature-card,
+            .stat-card {
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ============================================================================ -->
+    <!-- HEADER SECTION -->
+    <!-- ============================================================================ -->
+    <header class="header" role="banner">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-icon" aria-hidden="true">PwC</div>
+                <div class="logo-text">
+                    <h1>Enterprise Data Engineering API</h1>
+                    <div class="subtitle">
+                        <i class="fas fa-layer-group" aria-hidden="true"></i>
+                        Interactive Documentation Portal
+                        <span class="version-badge">v3.1.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-indicators">
+                <div class="status-indicator online">
+                    <div class="status-dot"></div>
+                    API Online
+                </div>
+                <div class="status-indicator">
+                    <i class="fas fa-shield-alt" aria-hidden="true"></i>
+                    Enterprise Security
+                </div>
+                <div class="status-indicator">
+                    <i class="fas fa-chart-line" aria-hidden="true"></i>
+                    208+ Endpoints
+                </div>
+            </div>
+        </div>
+
+        <div class="header-content">
+            <nav class="nav-tabs" role="navigation" aria-label="Main navigation">
+                <button class="nav-tab active" onclick="showSection('overview')" aria-controls="overview">
+                    <i class="fas fa-home" aria-hidden="true"></i>
+                    Overview
+                </button>
+                <button class="nav-tab" onclick="showSection('swagger')" aria-controls="swagger">
+                    <i class="fas fa-code" aria-hidden="true"></i>
+                    Swagger UI
+                </button>
+                <button class="nav-tab" onclick="showSection('redoc')" aria-controls="redoc">
+                    <i class="fas fa-book" aria-hidden="true"></i>
+                    ReDoc
+                </button>
+                <button class="nav-tab" onclick="showSection('testing')" aria-controls="testing">
+                    <i class="fas fa-vial" aria-hidden="true"></i>
+                    API Testing
+                </button>
+                <button class="nav-tab" onclick="showSection('graphql')" aria-controls="graphql">
+                    <i class="fas fa-project-diagram" aria-hidden="true"></i>
+                    GraphQL
+                </button>
+                <button class="nav-tab" onclick="showSection('sdk')" aria-controls="sdk">
+                    <i class="fas fa-cubes" aria-hidden="true"></i>
+                    SDKs & Examples
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- ============================================================================ -->
+    <!-- MAIN CONTAINER -->
+    <!-- ============================================================================ -->
+    <main class="main-container">
+
+        <!-- ============================================================================ -->
+        <!-- OVERVIEW SECTION -->
+        <!-- ============================================================================ -->
+        <section id="overview" class="content-section active" role="main">
+            <div class="welcome-section">
+                <div class="welcome-hero">
+                    <h2>Enterprise Data Engineering Platform</h2>
+                    <p class="subtitle">
+                        World-class REST and GraphQL APIs for advanced analytics, real-time processing,
+                        and enterprise data management. Built for scale, security, and performance with
+                        comprehensive developer tools and interactive documentation.
+                    </p>
+                </div>
+
+                <div class="api-stats">
+                    <div class="stat-card">
+                        <span class="stat-number">208</span>
+                        <div class="stat-label">REST Endpoints</div>
+                        <div class="stat-description">Comprehensive API coverage across all domains</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">50+</span>
+                        <div class="stat-label">GraphQL Operations</div>
+                        <div class="stat-description">Flexible queries and real-time subscriptions</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">99.9%</span>
+                        <div class="stat-label">Uptime SLA</div>
+                        <div class="stat-description">Enterprise-grade reliability guarantee</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">&lt;15ms</span>
+                        <div class="stat-label">Response Time</div>
+                        <div class="stat-description">Optimized for ultra-low latency</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">4</span>
+                        <div class="stat-label">SDK Languages</div>
+                        <div class="stat-description">Python, JavaScript, Java, C#/.NET</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">100%</span>
+                        <div class="stat-label">Interactive</div>
+                        <div class="stat-description">Live testing for every endpoint</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-rocket" aria-hidden="true"></i>
+                        </div>
+                        <h3>Advanced Analytics</h3>
+                    </div>
+                    <p class="description">
+                        Powerful analytics endpoints with machine learning integration, predictive insights,
+                        and real-time processing capabilities for enterprise decision-making.
+                    </p>
+                    <ul class="feature-list">
+                        <li>Customer cohort analysis with RFM scoring</li>
+                        <li>Predictive forecasting with 95%+ accuracy</li>
+                        <li>Real-time metrics dashboard with WebSocket streaming</li>
+                        <li>Advanced aggregations and business intelligence</li>
+                        <li>Natural language query processing</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('swagger')">
+                        Explore Analytics API
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-brain" aria-hidden="true"></i>
+                        </div>
+                        <h3>AI & ML Integration</h3>
+                    </div>
+                    <p class="description">
+                        AI-powered conversational analytics, natural language query processing,
+                        and machine learning model integration with real-time inference.
+                    </p>
+                    <ul class="feature-list">
+                        <li>Natural language to SQL query conversion</li>
+                        <li>Sentiment analysis and intent recognition</li>
+                        <li>Real-time ML model inference and prediction</li>
+                        <li>Topic extraction and content analysis</li>
+                        <li>Conversational business intelligence</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('graphql')">
+                        Try AI Features
+                        <i class="fas fa-magic" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-shield-alt" aria-hidden="true"></i>
+                        </div>
+                        <h3>Enterprise Security</h3>
+                    </div>
+                    <p class="description">
+                        Advanced security framework with JWT authentication, RBAC, audit logging,
+                        and compliance monitoring for enterprise requirements.
+                    </p>
+                    <ul class="feature-list">
+                        <li>JWT & OAuth2 authentication with MFA support</li>
+                        <li>Role-based and attribute-based access control</li>
+                        <li>Real-time PII/PHI detection and redaction</li>
+                        <li>Comprehensive audit trails and compliance</li>
+                        <li>GDPR, HIPAA, PCI-DSS, SOX compliance</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('testing')">
+                        Security Documentation
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                        </div>
+                        <h3>Advanced Search</h3>
+                    </div>
+                    <p class="description">
+                        Dual-engine search capabilities with vector similarity, semantic search,
+                        and AI-powered content discovery for intelligent data retrieval.
+                    </p>
+                    <ul class="feature-list">
+                        <li>Vector similarity search with embeddings</li>
+                        <li>Elasticsearch full-text search integration</li>
+                        <li>Semantic search with natural language</li>
+                        <li>Multi-modal search across data types</li>
+                        <li>Intelligent query expansion and suggestions</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('swagger')">
+                        Explore Search APIs
+                        <i class="fas fa-search-plus" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-mobile-alt" aria-hidden="true"></i>
+                        </div>
+                        <h3>Mobile Analytics</h3>
+                    </div>
+                    <p class="description">
+                        Specialized mobile analytics platform for user behavior analysis,
+                        device tracking, and mobile-specific insights with real-time monitoring.
+                    </p>
+                    <ul class="feature-list">
+                        <li>Mobile user behavior and journey tracking</li>
+                        <li>Device fingerprinting and platform analytics</li>
+                        <li>Session analysis with crash detection</li>
+                        <li>Mobile performance monitoring</li>
+                        <li>App store analytics and conversion tracking</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('redoc')">
+                        Mobile APIs
+                        <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-header">
+                        <div class="feature-icon">
+                            <i class="fas fa-cogs" aria-hidden="true"></i>
+                        </div>
+                        <h3>Developer Experience</h3>
+                    </div>
+                    <p class="description">
+                        Comprehensive developer tools including interactive documentation,
+                        SDKs, testing frameworks, and comprehensive examples for rapid integration.
+                    </p>
+                    <ul class="feature-list">
+                        <li>Interactive API testing with live examples</li>
+                        <li>SDKs for Python, JavaScript, Java, C#/.NET</li>
+                        <li>Postman collections and Insomnia workspaces</li>
+                        <li>Code generators and OpenAPI integration</li>
+                        <li>Comprehensive examples and tutorials</li>
+                    </ul>
+                    <button class="cta-button" onclick="showSection('sdk')">
+                        Developer Tools
+                        <i class="fas fa-code" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================================ -->
+        <!-- SWAGGER UI SECTION -->
+        <!-- ============================================================================ -->
+        <section id="swagger" class="content-section" role="main">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-code" aria-hidden="true"></i>
+                    Swagger UI - Interactive API Documentation
+                </h2>
+                <p>
+                    Explore and test all 208 REST API endpoints with interactive documentation,
+                    request/response examples, authentication testing, and live API calls.
+                    Built with enterprise-grade security and performance monitoring.
+                </p>
+                <div class="section-meta">
+                    <span class="meta-badge">Interactive Testing</span>
+                    <span class="meta-badge">Authentication Support</span>
+                    <span class="meta-badge">Real-time Validation</span>
+                    <span class="meta-badge">Custom Themes</span>
+                </div>
+            </div>
+            <div class="swagger-container">
+                <div class="loading-container" id="swagger-loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading Swagger UI...</div>
+                </div>
+                <div id="swagger-ui"></div>
+            </div>
+        </section>
+
+        <!-- ============================================================================ -->
+        <!-- REDOC SECTION -->
+        <!-- ============================================================================ -->
+        <section id="redoc" class="content-section" role="main">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-book" aria-hidden="true"></i>
+                    ReDoc - Beautiful API Reference
+                </h2>
+                <p>
+                    Clean, beautiful API documentation with advanced search, code samples,
+                    comprehensive schema visualization, and mobile-responsive design.
+                    Perfect for reference and integration planning.
+                </p>
+                <div class="section-meta">
+                    <span class="meta-badge">Advanced Search</span>
+                    <span class="meta-badge">Code Samples</span>
+                    <span class="meta-badge">Mobile Responsive</span>
+                    <span class="meta-badge">Schema Visualization</span>
+                </div>
+            </div>
+            <div class="redoc-container">
+                <div class="loading-container" id="redoc-loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading ReDoc...</div>
+                </div>
+                <div id="redoc-container"></div>
+            </div>
+        </section>
+
+        <!-- ============================================================================ -->
+        <!-- API TESTING SECTION -->
+        <!-- ============================================================================ -->
+        <section id="testing" class="content-section" role="main">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-vial" aria-hidden="true"></i>
+                    API Testing & Integration Tools
+                </h2>
+                <p>
+                    Comprehensive testing tools and ready-to-use collections for all API endpoints.
+                    Includes authentication flows, request builders, response validation,
+                    and performance testing capabilities.
+                </p>
+                <div class="section-meta">
+                    <span class="meta-badge">Postman Collections</span>
+                    <span class="meta-badge">Authentication Testing</span>
+                    <span class="meta-badge">Response Validation</span>
+                    <span class="meta-badge">Performance Monitoring</span>
+                </div>
+            </div>
+
+            <div class="api-testing-section">
+                <div class="testing-tools">
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-rocket" aria-hidden="true"></i>
+                            <h3>Authentication Testing</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Test all authentication methods including JWT, API keys, and OAuth2 flows.</p>
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v1/auth/login</code>
+                            <pre class="code-example">{
+  "username": "data_engineer",
+  "password": "SecurePass123!",
+  "remember_me": true
+}</pre>
+                            <p><strong>Response:</strong></p>
+                            <pre class="code-example">{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "permissions": ["data:read", "analytics:write"],
+  "user_info": {
+    "user_id": "user_123",
+    "roles": ["data_engineer", "analyst"]
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-chart-line" aria-hidden="true"></i>
+                            <h3>Sales Analytics Testing</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Test advanced sales analytics with filtering, pagination, and aggregations.</p>
+                            <div class="method-badge method-get">GET</div>
+                            <code>/api/v1/sales?country=United Kingdom&page=1&size=20</code>
+                            <p><strong>Headers:</strong></p>
+                            <pre class="code-example">Authorization: Bearer {token}
+Content-Type: application/json
+X-API-Key: optional-api-key</pre>
+                            <p><strong>Advanced Analytics:</strong></p>
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v2/analytics/advanced-analytics</code>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-brain" aria-hidden="true"></i>
+                            <h3>AI/ML Model Testing</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Test machine learning models and AI-powered analytics endpoints.</p>
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v1/ml-analytics/predict</code>
+                            <pre class="code-example">{
+  "model_id": "customer_churn_v2",
+  "features": {
+    "tenure": 12,
+    "monthly_charges": 65.50,
+    "total_charges": 786.00
+  },
+  "options": {
+    "explain": true,
+    "confidence": true
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <h3>Vector Search Testing</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Test advanced vector similarity search and semantic discovery.</p>
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v1/search/vector</code>
+                            <pre class="code-example">{
+  "query": "customer retention analytics",
+  "embedding_model": "text-embedding-ada-002",
+  "top_k": 10,
+  "filters": {
+    "category": "analytics",
+    "date_range": "2024-01-01:2024-12-31"
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="installation-section">
+                    <h3>
+                        <i class="fas fa-download" aria-hidden="true"></i>
+                        Download Testing Collections
+                    </h3>
+                    <div class="testing-tools">
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fas fa-file-code" aria-hidden="true"></i>
+                                <h3>Postman Collection</h3>
+                            </div>
+                            <div class="tool-content">
+                                <p>Complete Postman collection with all 208 endpoints, environments, and test scripts.</p>
+                                <button class="cta-button" onclick="downloadPostmanCollection()">
+                                    <i class="fas fa-download" aria-hidden="true"></i>
+                                    Download Collection
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fas fa-moon" aria-hidden="true"></i>
+                                <h3>Insomnia Workspace</h3>
+                            </div>
+                            <div class="tool-content">
+                                <p>Insomnia workspace with organized requests, environments, and GraphQL queries.</p>
+                                <button class="cta-button" onclick="downloadInsomniaWorkspace()">
+                                    <i class="fas fa-download" aria-hidden="true"></i>
+                                    Download Workspace
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================================ -->
+        <!-- GRAPHQL SECTION -->
+        <!-- ============================================================================ -->
+        <section id="graphql" class="content-section" role="main">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-project-diagram" aria-hidden="true"></i>
+                    GraphQL Playground & Schema Explorer
+                </h2>
+                <p>
+                    Interactive GraphQL playground for exploring schemas, writing queries,
+                    testing real-time subscriptions, and integrating with advanced analytics.
+                    Supports both queries and mutations with comprehensive type system.
+                </p>
+                <div class="section-meta">
+                    <span class="meta-badge">Interactive Playground</span>
+                    <span class="meta-badge">Schema Introspection</span>
+                    <span class="meta-badge">Real-time Subscriptions</span>
+                    <span class="meta-badge">Type Safety</span>
+                </div>
+            </div>
+
+            <div class="api-testing-section">
+                <div class="testing-tools">
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-database" aria-hidden="true"></i>
+                            <h3>Sales Data Query</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Query sales data with advanced filtering and nested relationships.</p>
+                            <pre class="code-example">query GetSalesData {
+  sales(filters: {
+    date_from: "2010-12-01"
+    date_to: "2011-12-31"
+    country: "United Kingdom"
+  }, pagination: {
+    page: 1
+    page_size: 20
+  }) {
+    items {
+      sale_id
+      total_amount
+      invoice_date
+      product {
+        description
+        category
+        brand
+      }
+      customer {
+        customer_id
+        customer_segment
+        rfm_scores {
+          recency_score
+          frequency_score
+          monetary_score
+          rfm_segment
+        }
+      }
+    }
+    pagination_info {
+      total_count
+      has_next
+      has_previous
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                            <h3>Advanced Analytics Query</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Comprehensive analytics with metrics, segments, and business intelligence.</p>
+                            <pre class="code-example">query GetAnalyticsDashboard {
+  salesAnalytics(granularity: MONTHLY) {
+    period
+    total_revenue
+    unique_customers
+    avg_order_value
+    growth_rate
+  }
+
+  customerSegments {
+    segment_name
+    customer_count
+    avg_lifetime_value
+    revenue_contribution
+  }
+
+  topProductsByRevenue(limit: 10) {
+    description
+    total_revenue
+    transaction_count
+    growth_trend
+  }
+
+  regionalPerformance {
+    country
+    revenue
+    customer_count
+    avg_order_value
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-bolt" aria-hidden="true"></i>
+                            <h3>Real-time Subscriptions</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Subscribe to real-time data updates and live analytics streams.</p>
+                            <pre class="code-example">subscription LiveAnalytics {
+  salesUpdates {
+    timestamp
+    new_sales_count
+    revenue_update
+    top_performing_products {
+      product_id
+      sales_spike_percentage
+    }
+  }
+
+  systemHealth {
+    status
+    response_time_ms
+    active_connections
+    cache_hit_ratio
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="testing-tool">
+                        <div class="tool-header">
+                            <i class="fas fa-robot" aria-hidden="true"></i>
+                            <h3>AI-Powered Queries</h3>
+                        </div>
+                        <div class="tool-content">
+                            <p>Natural language to GraphQL query conversion with AI assistance.</p>
+                            <pre class="code-example">mutation GenerateNaturalLanguageQuery {
+  naturalLanguageQuery(
+    input: {
+      query: "Show me top customers by revenue in the UK for Q4 2024"
+      context: {
+        preferred_format: "table"
+        include_trends: true
+      }
+    }
+  ) {
+    generated_query
+    execution_result {
+      data
+      insights
+      visualization_config
+    }
+    confidence_score
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="installation-section">
+                    <h3>
+                        <i class="fas fa-external-link-alt" aria-hidden="true"></i>
+                        GraphQL Playground Access
+                    </h3>
+                    <p>Access the interactive GraphQL playground to explore the schema and test queries in real-time.</p>
+                    <div class="testing-tools">
+                        <div class="testing-tool">
+                            <div class="tool-content">
+                                <button class="cta-button" onclick="openGraphQLPlayground()">
+                                    <i class="fas fa-play" aria-hidden="true"></i>
+                                    Open GraphQL Playground
+                                </button>
+                                <button class="cta-button" onclick="downloadGraphQLSchema()" style="margin-left: 16px;">
+                                    <i class="fas fa-download" aria-hidden="true"></i>
+                                    Download Schema
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================================ -->
+        <!-- SDK SECTION -->
+        <!-- ============================================================================ -->
+        <section id="sdk" class="content-section" role="main">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-cubes" aria-hidden="true"></i>
+                    SDKs & Code Examples
+                </h2>
+                <p>
+                    Language-specific SDKs and comprehensive code examples for integrating
+                    with the PwC Data Engineering API. Includes authentication, error handling,
+                    pagination, and advanced features for each language.
+                </p>
+                <div class="section-meta">
+                    <span class="meta-badge">4 Languages</span>
+                    <span class="meta-badge">Type Safety</span>
+                    <span class="meta-badge">Async Support</span>
+                    <span class="meta-badge">Comprehensive Examples</span>
+                </div>
+            </div>
+
+            <div class="sdk-section">
+                <div class="sdk-languages">
+                    <div class="language-card">
+                        <div class="language-header">
+                            <div class="language-icon">
+                                <i class="fab fa-python" aria-hidden="true"></i>
+                            </div>
+                            <h3>Python SDK</h3>
+                        </div>
+                        <div class="language-content">
+                            <p>Full-featured Python SDK with async support, type hints, and comprehensive error handling.</p>
+                            <pre class="code-example">import asyncio
+from pwc_api import PwCDataEngineering
+from pwc_api.types import SalesFilters, PaginationInput
+
+# Initialize client with authentication
+client = PwCDataEngineering(
+    api_key="your-api-key",
+    base_url="https://api.pwc-data.com"
+)
+
+async def main():
+    # Authenticate with JWT
+    auth_result = await client.auth.login(
+        username="data_engineer",
+        password="SecurePass123!"
+    )
+
+    # Set access token for subsequent requests
+    client.set_access_token(auth_result.access_token)
+
+    # Query sales data with filters
+    sales = await client.sales.get_sales(
+        filters=SalesFilters(
+            country="United Kingdom",
+            date_from="2010-12-01",
+            date_to="2011-12-31"
+        ),
+        pagination=PaginationInput(page=1, size=20)
+    )
+
+    # Advanced analytics
+    analytics = await client.analytics.advanced_analytics(
+        start_date="2010-12-01T00:00:00Z",
+        end_date="2011-12-31T23:59:59Z",
+        metrics=["revenue", "transactions"],
+        dimensions=["country", "product"]
+    )
+
+    # ML predictions
+    prediction = await client.ml.predict(
+        model_id="customer_churn_v2",
+        features={
+            "tenure": 12,
+            "monthly_charges": 65.50,
+            "total_charges": 786.00
+        },
+        options={"explain": True, "confidence": True}
+    )
+
+    print(f"Found {len(sales.items)} sales records")
+    print(f"Analytics request ID: {analytics.request_id}")
+    print(f"Churn prediction: {prediction.prediction} (confidence: {prediction.confidence})")
+
+# Run async code
+asyncio.run(main())</pre>
+                        </div>
+                    </div>
+
+                    <div class="language-card">
+                        <div class="language-header">
+                            <div class="language-icon">
+                                <i class="fab fa-js-square" aria-hidden="true"></i>
+                            </div>
+                            <h3>JavaScript/TypeScript</h3>
+                        </div>
+                        <div class="language-content">
+                            <p>Modern JavaScript/TypeScript SDK with full type definitions and Promise-based API.</p>
+                            <pre class="code-example">import { PwCApiClient } from '@pwc/data-engineering-api';
+import type { SalesFilters, AnalyticsRequest } from '@pwc/data-engineering-api/types';
+
+const client = new PwCApiClient({
+  baseURL: 'https://api.pwc-data.com',
+  apiKey: 'your-api-key',
+  timeout: 30000
+});
+
+// Authenticate and get access token
+const authResult = await client.auth.login({
+  username: 'data_engineer',
+  password: 'SecurePass123!'
+});
+
+client.setAccessToken(authResult.access_token);
+
+// GraphQL query with type safety
+const salesData = await client.graphql.query<{
+  sales: {
+    items: Array<{
+      sale_id: string;
+      total_amount: number;
+      product: { description: string };
+    }>;
+    total_count: number;
+  };
+}>(`
+  query GetSales($filters: SalesFilters) {
+    sales(filters: $filters) {
+      items {
+        sale_id
+        total_amount
+        product { description }
+      }
+      total_count
+    }
+  }
+`, {
+  filters: {
+    country: "United Kingdom",
+    date_from: "2010-12-01"
+  }
+});
+
+// Advanced analytics with type-safe request
+const analyticsRequest: AnalyticsRequest = {
+  start_date: "2010-12-01T00:00:00Z",
+  end_date: "2011-12-31T23:59:59Z",
+  metrics: ["revenue", "transactions"],
+  dimensions: ["country", "product_category"],
+  filters: {
+    country: ["United Kingdom", "Germany"],
+    min_amount: 10.0
+  }
+};
+
+const analytics = await client.analytics.advancedAnalytics(analyticsRequest);
+
+// Vector search with semantic capabilities
+const searchResults = await client.search.vectorSearch({
+  query: "customer retention analytics",
+  embedding_model: "text-embedding-ada-002",
+  top_k: 10,
+  filters: { category: "analytics" }
+});
+
+console.log(`Found ${salesData.sales.total_count} sales records`);
+console.log(`Analytics processing time: ${analytics.processing_time_ms}ms`);
+console.log(`Search found ${searchResults.results.length} relevant documents`);</pre>
+                        </div>
+                    </div>
+
+                    <div class="language-card">
+                        <div class="language-header">
+                            <div class="language-icon">
+                                <i class="fab fa-java" aria-hidden="true"></i>
+                            </div>
+                            <h3>Java SDK</h3>
+                        </div>
+                        <div class="language-content">
+                            <p>Enterprise Java SDK with Spring Boot integration, reactive streams, and comprehensive validation.</p>
+                            <pre class="code-example">import com.pwc.dataengineering.ApiClient;
+import com.pwc.dataengineering.api.*;
+import com.pwc.dataengineering.model.*;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
+
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.concurrent.CompletableFuture;
+
+// Initialize client with configuration
+ApiClient client = ApiClient.builder()
+    .basePath("https://api.pwc-data.com")
+    .apiKey("your-api-key")
+    .timeout(Duration.ofSeconds(30))
+    .enableRetry(true)
+    .maxRetries(3)
+    .build();
+
+// Create API instances
+AuthApi authApi = new AuthApi(client);
+SalesApi salesApi = new SalesApi(client);
+AnalyticsApi analyticsApi = new AnalyticsApi(client);
+MLAnalyticsApi mlApi = new MLAnalyticsApi(client);
+
+// Authenticate
+LoginRequest loginRequest = new LoginRequest()
+    .username("data_engineer")
+    .password("SecurePass123!")
+    .rememberMe(true);
+
+CompletableFuture<TokenResponse> authFuture = authApi
+    .loginUserAsync(loginRequest);
+
+// Chain operations with authentication
+authFuture.thenCompose(authResult -> {
+    client.setAccessToken(authResult.getAccessToken());
+
+    // Create sales filters
+    SalesFilters filters = new SalesFilters()
+        .country("United Kingdom")
+        .dateFrom(LocalDate.of(2010, 12, 1))
+        .dateTo(LocalDate.of(2011, 12, 31));
+
+    PaginationInput pagination = new PaginationInput()
+        .page(1)
+        .pageSize(20);
+
+    // Query sales data
+    return salesApi.listSalesAsync(
+        filters.getDateFrom(),
+        filters.getDateTo(),
+        filters.getProduct(),
+        filters.getCountry(),
+        pagination.getPage(),
+        pagination.getPageSize(),
+        "invoice_date:desc"
+    );
+}).thenCompose(sales -> {
+    System.out.println("Total sales: " + sales.getTotal());
+
+    // Advanced analytics request
+    AdvancedAnalyticsRequest analyticsRequest = new AdvancedAnalyticsRequest()
+        .startDate(OffsetDateTime.parse("2010-12-01T00:00:00Z"))
+        .endDate(OffsetDateTime.parse("2011-12-31T23:59:59Z"))
+        .metrics(Arrays.asList("revenue", "transactions"))
+        .dimensions(Arrays.asList("country", "product"));
+
+    return analyticsApi.advancedAnalyticsAsync(analyticsRequest);
+}).thenCompose(analytics -> {
+    System.out.println("Analytics request ID: " + analytics.getRequestId());
+
+    // ML prediction
+    MLPredictionRequest predictionRequest = new MLPredictionRequest()
+        .modelId("customer_churn_v2")
+        .putFeaturesItem("tenure", 12)
+        .putFeaturesItem("monthly_charges", 65.50)
+        .putFeaturesItem("total_charges", 786.00)
+        .options(new PredictionOptions().explain(true).confidence(true));
+
+    return mlApi.generatePredictionsAsync(predictionRequest);
+}).thenAccept(prediction -> {
+    System.out.println("Prediction: " + prediction.getPrediction());
+    System.out.println("Confidence: " + prediction.getConfidence());
+}).exceptionally(throwable -> {
+    System.err.println("API call failed: " + throwable.getMessage());
+    return null;
+});</pre>
+                        </div>
+                    </div>
+
+                    <div class="language-card">
+                        <div class="language-header">
+                            <div class="language-icon">
+                                <i class="fab fa-microsoft" aria-hidden="true"></i>
+                            </div>
+                            <h3>C# / .NET SDK</h3>
+                        </div>
+                        <div class="language-content">
+                            <p>Modern .NET SDK with async/await pattern, dependency injection, and comprehensive error handling.</p>
+                            <pre class="code-example">using PwC.DataEngineering.Api;
+using PwC.DataEngineering.Client;
+using PwC.DataEngineering.Model;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+// Configure dependency injection
+var services = new ServiceCollection();
+services.AddHttpClient();
+services.AddLogging(builder => builder.AddConsole());
+
+// Configure API client
+var configuration = new Configuration
+{
+    BasePath = "https://api.pwc-data.com",
+    ApiKey = { { "ApiKeyAuth", "your-api-key" } },
+    Timeout = TimeSpan.FromSeconds(30)
+};
+
+// Create API instances
+var authApi = new AuthApi(configuration);
+var salesApi = new SalesApi(configuration);
+var analyticsApi = new AnalyticsApi(configuration);
+var mlApi = new MLAnalyticsApi(configuration);
+
+try
+{
+    // Authenticate
+    var loginRequest = new LoginRequest
+    {
+        Username = "data_engineer",
+        Password = "SecurePass123!",
+        RememberMe = true
+    };
+
+    var authResult = await authApi.LoginUserAsync(loginRequest);
+    configuration.AccessToken = authResult.AccessToken;
+
+    Console.WriteLine($"Authenticated as: {authResult.UserInfo.Username}");
+
+    // Query sales data with advanced filtering
+    var sales = await salesApi.ListSalesAsync(
+        dateFrom: "2010-12-01",
+        dateTo: "2011-12-31",
+        country: "United Kingdom",
+        page: 1,
+        size: 20,
+        sort: "invoice_date:desc"
+    );
+
+    Console.WriteLine($"Retrieved {sales.Items.Count} sales records");
+    Console.WriteLine($"Total available: {sales.Meta.Total}");
+
+    // Process sales data
+    foreach (var sale in sales.Items)
+    {
+        Console.WriteLine($"Sale {sale.InvoiceNo}: {sale.TotalAmount:C} on {sale.InvoiceDate:yyyy-MM-dd}");
+    }
+
+    // Advanced analytics
+    var analyticsRequest = new AdvancedAnalyticsRequest
+    {
+        StartDate = DateTimeOffset.Parse("2010-12-01T00:00:00Z"),
+        EndDate = DateTimeOffset.Parse("2011-12-31T23:59:59Z"),
+        Metrics = new List<string> { "revenue", "transactions" },
+        Dimensions = new List<string> { "country", "product_category" },
+        Filters = new Dictionary<string, object>
+        {
+            { "country", new[] { "United Kingdom", "Germany" } },
+            { "min_amount", 10.0 }
+        }
+    };
+
+    var analytics = await analyticsApi.AdvancedAnalyticsAsync(analyticsRequest);
+    Console.WriteLine($"Analytics request ID: {analytics.RequestId}");
+    Console.WriteLine($"Processing time: {analytics.ProcessingTimeMs}ms");
+
+    // ML prediction with detailed response
+    var predictionRequest = new MLPredictionRequest
+    {
+        ModelId = "customer_churn_v2",
+        Features = new Dictionary<string, object>
+        {
+            { "tenure", 12 },
+            { "monthly_charges", 65.50 },
+            { "total_charges", 786.00 }
+        },
+        Options = new PredictionOptions
+        {
+            Explain = true,
+            Confidence = true
+        }
+    };
+
+    var prediction = await mlApi.GeneratePredictionsAsync(predictionRequest);
+    Console.WriteLine($"Churn prediction: {prediction.Prediction}");
+    Console.WriteLine($"Confidence score: {prediction.Confidence:P2}");
+
+    if (prediction.Explanation?.FeatureImportance != null)
+    {
+        Console.WriteLine("Feature importance:");
+        foreach (var feature in prediction.Explanation.FeatureImportance)
+        {
+            Console.WriteLine($"  {feature.Key}: {feature.Value:F3}");
+        }
+    }
+}
+catch (ApiException e)
+{
+    Console.WriteLine($"API Error: {e.ErrorCode} - {e.Message}");
+    if (e.ErrorContent != null)
+    {
+        Console.WriteLine($"Error details: {e.ErrorContent}");
+    }
+}
+catch (Exception e)
+{
+    Console.WriteLine($"General error: {e.Message}");
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="installation-section">
+                    <h3>
+                        <i class="fas fa-download" aria-hidden="true"></i>
+                        Installation Instructions
+                    </h3>
+
+                    <div class="testing-tools">
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fab fa-python" aria-hidden="true"></i>
+                                <h3>Python Installation</h3>
+                            </div>
+                            <div class="tool-content">
+                                <pre class="code-example"># Install via pip
+pip install pwc-data-engineering-api
+
+# Install with async support
+pip install pwc-data-engineering-api[async]
+
+# Install development version
+pip install git+https://github.com/pwc/data-engineering-api-python.git</pre>
+                            </div>
+                        </div>
+
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fab fa-npm" aria-hidden="true"></i>
+                                <h3>JavaScript/Node.js</h3>
+                            </div>
+                            <div class="tool-content">
+                                <pre class="code-example"># Install via npm
+npm install @pwc/data-engineering-api
+
+# Install via yarn
+yarn add @pwc/data-engineering-api
+
+# Install with TypeScript definitions
+npm install @pwc/data-engineering-api @types/pwc-data-engineering-api</pre>
+                            </div>
+                        </div>
+
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fab fa-java" aria-hidden="true"></i>
+                                <h3>Java (Maven)</h3>
+                            </div>
+                            <div class="tool-content">
+                                <pre class="code-example">&lt;dependency&gt;
+  &lt;groupId&gt;com.pwc&lt;/groupId&gt;
+  &lt;artifactId&gt;data-engineering-api&lt;/artifactId&gt;
+  &lt;version&gt;3.1.0&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;!-- For reactive streams support --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;com.pwc&lt;/groupId&gt;
+  &lt;artifactId&gt;data-engineering-api-reactive&lt;/artifactId&gt;
+  &lt;version&gt;3.1.0&lt;/version&gt;
+&lt;/dependency&gt;</pre>
+                            </div>
+                        </div>
+
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fab fa-microsoft" aria-hidden="true"></i>
+                                <h3>.NET (NuGet)</h3>
+                            </div>
+                            <div class="tool-content">
+                                <pre class="code-example"># Package Manager Console
+Install-Package PwC.DataEngineering.Api
+
+# .NET CLI
+dotnet add package PwC.DataEngineering.Api
+
+# PackageReference (in .csproj)
+&lt;PackageReference Include="PwC.DataEngineering.Api" Version="3.1.0" /&gt;</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="testing-tools" style="margin-top: 32px;">
+                        <div class="testing-tool">
+                            <div class="tool-header">
+                                <i class="fas fa-book" aria-hidden="true"></i>
+                                <h3>Documentation & Examples</h3>
+                            </div>
+                            <div class="tool-content">
+                                <p>Comprehensive documentation and examples for each SDK:</p>
+                                <button class="cta-button" onclick="openSDKDocs('python')" style="margin: 8px;">
+                                    <i class="fab fa-python" aria-hidden="true"></i>
+                                    Python Docs
+                                </button>
+                                <button class="cta-button" onclick="openSDKDocs('javascript')" style="margin: 8px;">
+                                    <i class="fab fa-js-square" aria-hidden="true"></i>
+                                    JavaScript Docs
+                                </button>
+                                <button class="cta-button" onclick="openSDKDocs('java')" style="margin: 8px;">
+                                    <i class="fab fa-java" aria-hidden="true"></i>
+                                    Java Docs
+                                </button>
+                                <button class="cta-button" onclick="openSDKDocs('dotnet')" style="margin: 8px;">
+                                    <i class="fab fa-microsoft" aria-hidden="true"></i>
+                                    .NET Docs
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ============================================================================ -->
+    <!-- SCRIPTS -->
+    <!-- ============================================================================ -->
+
+    <!-- External JavaScript Dependencies -->
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.0/swagger-ui-standalone-preset.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2.1.2/bundles/redoc.standalone.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
+    <script>
+        // ============================================================================
+        // GLOBAL STATE MANAGEMENT
+        // ============================================================================
+
+        let swaggerInitialized = false;
+        let redocInitialized = false;
+        let currentSection = 'overview';
+
+        // Configuration
+        const API_CONFIG = {
+            baseUrl: 'https://api.pwc-data.com',
+            specUrl: './comprehensive-openapi-3.0-specification.yaml',
+            graphqlUrl: 'https://api.pwc-data.com/api/graphql',
+            docsUrl: 'https://docs.pwc-data.com'
+        };
+
+        // ============================================================================
+        // NAVIGATION & SECTION MANAGEMENT
+        // ============================================================================
+
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+                section.setAttribute('aria-hidden', 'true');
+            });
+
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+                tab.setAttribute('aria-selected', 'false');
+            });
+
+            // Show selected section
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+                targetSection.setAttribute('aria-hidden', 'false');
+
+                // Update tab state
+                const activeTab = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+                if (activeTab) {
+                    activeTab.classList.add('active');
+                    activeTab.setAttribute('aria-selected', 'true');
+                }
+
+                // Update current section
+                currentSection = sectionId;
+
+                // Initialize specific sections on demand
+                if (sectionId === 'swagger' && !swaggerInitialized) {
+                    initializeSwagger();
+                } else if (sectionId === 'redoc' && !redocInitialized) {
+                    initializeRedoc();
+                }
+
+                // Update URL hash without page jump
+                history.replaceState(null, null, `#${sectionId}`);
+
+                // Track analytics
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'section_view', {
+                        'section_name': sectionId,
+                        'event_category': 'documentation'
+                    });
+                }
+            }
+        }
+
+        // ============================================================================
+        // SWAGGER UI INITIALIZATION
+        // ============================================================================
+
+        function initializeSwagger() {
+            const loadingElement = document.getElementById('swagger-loading');
+
+            try {
+                const ui = SwaggerUIBundle({
+                    url: API_CONFIG.specUrl,
+                    dom_id: '#swagger-ui',
+                    deepLinking: true,
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIStandalonePreset
+                    ],
+                    plugins: [
+                        SwaggerUIBundle.plugins.DownloadUrl
+                    ],
+                    layout: "StandaloneLayout",
+
+                    // Enterprise Configuration
+                    supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch', 'head', 'options'],
+                    validatorUrl: null,
+                    docExpansion: 'list',
+                    defaultModelsExpandDepth: 3,
+                    defaultModelExpandDepth: 3,
+                    displayRequestDuration: true,
+                    showCommonExtensions: true,
+                    showExtensions: true,
+                    tryItOutEnabled: true,
+                    requestSnippetsEnabled: true,
+
+                    // Custom request interceptor for authentication
+                    requestInterceptor: (request) => {
+                        // Add custom headers if needed
+                        const token = localStorage.getItem('pwc_api_token');
+                        if (token) {
+                            request.headers['Authorization'] = `Bearer ${token}`;
+                        }
+
+                        // Add correlation ID
+                        request.headers['X-Correlation-ID'] = generateCorrelationId();
+
+                        return request;
+                    },
+
+                    // Custom response interceptor for analytics
+                    responseInterceptor: (response) => {
+                        // Track API usage
+                        if (typeof gtag !== 'undefined') {
+                            gtag('event', 'api_request', {
+                                'method': response.request?.method,
+                                'status': response.status,
+                                'url': response.url,
+                                'event_category': 'api_usage'
+                            });
+                        }
+
+                        return response;
+                    },
+
+                    // Custom theme configuration
+                    onComplete: () => {
+                        // Hide loading indicator
+                        if (loadingElement) {
+                            loadingElement.style.display = 'none';
+                        }
+
+                        // Apply custom styling
+                        applySwaggerCustomStyles();
+
+                        // Initialize authentication helpers
+                        initializeSwaggerAuth();
+
+                        console.log('Swagger UI initialized successfully');
+                    },
+
+                    onFailure: (error) => {
+                        console.error('Swagger UI failed to load:', error);
+                        if (loadingElement) {
+                            loadingElement.innerHTML = `
+                                <div style="color: var(--error-color); text-align: center;">
+                                    <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 16px;"></i>
+                                    <div>Failed to load Swagger UI</div>
+                                    <div style="font-size: 14px; margin-top: 8px;">Please check your connection and try again</div>
+                                </div>
+                            `;
+                        }
+                    }
+                });
+
+                swaggerInitialized = true;
+
+            } catch (error) {
+                console.error('Error initializing Swagger UI:', error);
+                if (loadingElement) {
+                    loadingElement.innerHTML = `
+                        <div style="color: var(--error-color); text-align: center;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 16px;"></i>
+                            <div>Error initializing Swagger UI</div>
+                            <div style="font-size: 14px; margin-top: 8px;">${error.message}</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // ============================================================================
+        // REDOC INITIALIZATION
+        // ============================================================================
+
+        function initializeRedoc() {
+            const loadingElement = document.getElementById('redoc-loading');
+
+            try {
+                Redoc.init(API_CONFIG.specUrl, {
+                    scrollYOffset: 100,
+                    hideDownloadButton: false,
+                    disableSearch: false,
+                    expandResponses: "200,201",
+                    requiredPropsFirst: true,
+                    sortPropsAlphabetically: true,
+                    showExtensions: true,
+
+                    // Custom theme configuration
+                    theme: {
+                        colors: {
+                            primary: {
+                                main: '#667eea'
+                            },
+                            success: {
+                                main: '#48bb78'
+                            },
+                            warning: {
+                                main: '#ed8936'
+                            },
+                            error: {
+                                main: '#f56565'
+                            },
+                            text: {
+                                primary: '#1a202c',
+                                secondary: '#4a5568'
+                            }
+                        },
+                        typography: {
+                            fontSize: '14px',
+                            lineHeight: '1.6',
+                            code: {
+                                fontSize: '13px',
+                                fontFamily: 'JetBrains Mono, Monaco, Consolas, monospace'
+                            },
+                            headings: {
+                                fontFamily: 'Inter, sans-serif',
+                                fontWeight: '700'
+                            }
+                        },
+                        sidebar: {
+                            width: '280px',
+                            backgroundColor: '#f7fafc'
+                        },
+                        rightPanel: {
+                            backgroundColor: '#1a202c',
+                            width: '40%'
+                        }
+                    },
+
+                    // Custom options
+                    expandSingleSchemaField: true,
+                    showObjectSchemaExamples: true,
+                    unstable_ignoreMimeTypeError: true
+
+                }, document.getElementById('redoc-container')).then(() => {
+                    // Hide loading indicator
+                    if (loadingElement) {
+                        loadingElement.style.display = 'none';
+                    }
+
+                    // Apply custom styling
+                    applyRedocCustomStyles();
+
+                    console.log('ReDoc initialized successfully');
+
+                }).catch((error) => {
+                    console.error('ReDoc failed to load:', error);
+                    if (loadingElement) {
+                        loadingElement.innerHTML = `
+                            <div style="color: var(--error-color); text-align: center;">
+                                <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 16px;"></i>
+                                <div>Failed to load ReDoc</div>
+                                <div style="font-size: 14px; margin-top: 8px;">Please check your connection and try again</div>
+                            </div>
+                        `;
+                    }
+                });
+
+                redocInitialized = true;
+
+            } catch (error) {
+                console.error('Error initializing ReDoc:', error);
+                if (loadingElement) {
+                    loadingElement.innerHTML = `
+                        <div style="color: var(--error-color); text-align: center;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 16px;"></i>
+                            <div>Error initializing ReDoc</div>
+                            <div style="font-size: 14px; margin-top: 8px;">${error.message}</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // ============================================================================
+        // CUSTOM STYLING FUNCTIONS
+        // ============================================================================
+
+        function applySwaggerCustomStyles() {
+            // Add custom CSS for Swagger UI
+            const style = document.createElement('style');
+            style.textContent = `
+                .swagger-ui .topbar { display: none !important; }
+                .swagger-ui .info { margin: 20px 0; }
+                .swagger-ui .info .title {
+                    color: var(--primary-color) !important;
+                    font-family: 'Inter', sans-serif !important;
+                    font-weight: 800 !important;
+                }
+                .swagger-ui .scheme-container {
+                    background: var(--bg-secondary) !important;
+                    border-radius: var(--radius-lg) !important;
+                    padding: 16px !important;
+                    margin: 20px 0 !important;
+                    border: 1px solid var(--border-light) !important;
+                }
+                .swagger-ui .btn.authorize {
+                    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)) !important;
+                    border: none !important;
+                    color: white !important;
+                    border-radius: var(--radius-lg) !important;
+                    padding: 8px 16px !important;
+                    font-weight: 600 !important;
+                    font-family: 'Inter', sans-serif !important;
+                }
+                .swagger-ui .btn.authorize:hover {
+                    background: linear-gradient(45deg, var(--primary-dark), var(--secondary-color)) !important;
+                    transform: translateY(-1px);
+                    box-shadow: var(--shadow-md) !important;
+                }
+                .swagger-ui .opblock.opblock-post { border-color: var(--info-color) !important; }
+                .swagger-ui .opblock.opblock-post .opblock-summary { border-color: var(--info-color) !important; }
+                .swagger-ui .opblock.opblock-get { border-color: var(--success-color) !important; }
+                .swagger-ui .opblock.opblock-get .opblock-summary { border-color: var(--success-color) !important; }
+                .swagger-ui .opblock.opblock-put { border-color: var(--warning-color) !important; }
+                .swagger-ui .opblock.opblock-put .opblock-summary { border-color: var(--warning-color) !important; }
+                .swagger-ui .opblock.opblock-delete { border-color: var(--error-color) !important; }
+                .swagger-ui .opblock.opblock-delete .opblock-summary { border-color: var(--error-color) !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function applyRedocCustomStyles() {
+            // Add custom CSS for ReDoc
+            const style = document.createElement('style');
+            style.textContent = `
+                redoc {
+                    --redoc-font-family: 'Inter', sans-serif !important;
+                    --redoc-code-font-family: 'JetBrains Mono', Monaco, Consolas, monospace !important;
+                }
+
+                [data-role="redoc"] {
+                    font-family: 'Inter', sans-serif !important;
+                }
+
+                [data-role="redoc"] h1,
+                [data-role="redoc"] h2,
+                [data-role="redoc"] h3,
+                [data-role="redoc"] h4,
+                [data-role="redoc"] h5,
+                [data-role="redoc"] h6 {
+                    font-family: 'Inter', sans-serif !important;
+                    font-weight: 700 !important;
+                }
+
+                [data-role="redoc"] code {
+                    font-family: 'JetBrains Mono', Monaco, Consolas, monospace !important;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // ============================================================================
+        // AUTHENTICATION HELPERS
+        // ============================================================================
+
+        function initializeSwaggerAuth() {
+            // Check for stored authentication token
+            const token = localStorage.getItem('pwc_api_token');
+            if (token) {
+                // Auto-populate authorization if token exists
+                setTimeout(() => {
+                    const authButton = document.querySelector('.swagger-ui .btn.authorize');
+                    if (authButton) {
+                        authButton.click();
+                        setTimeout(() => {
+                            const tokenInput = document.querySelector('input[placeholder*="Bearer"]');
+                            if (tokenInput) {
+                                tokenInput.value = token;
+                            }
+                        }, 100);
+                    }
+                }, 1000);
+            }
+        }
+
+        // ============================================================================
+        // UTILITY FUNCTIONS
+        // ============================================================================
+
+        function generateCorrelationId() {
+            return 'doc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function downloadPostmanCollection() {
+            const link = document.createElement('a');
+            link.href = './postman-collection.json';
+            link.download = 'pwc-data-engineering-api-collection.json';
+            link.click();
+
+            // Track download
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'download', {
+                    'file_name': 'postman_collection',
+                    'event_category': 'documentation'
+                });
+            }
+        }
+
+        function downloadInsomniaWorkspace() {
+            const link = document.createElement('a');
+            link.href = './insomnia-workspace.json';
+            link.download = 'pwc-data-engineering-api-workspace.json';
+            link.click();
+
+            // Track download
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'download', {
+                    'file_name': 'insomnia_workspace',
+                    'event_category': 'documentation'
+                });
+            }
+        }
+
+        function openGraphQLPlayground() {
+            window.open(API_CONFIG.graphqlUrl, '_blank', 'noopener,noreferrer');
+
+            // Track external link
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'external_link', {
+                    'link_url': API_CONFIG.graphqlUrl,
+                    'link_text': 'GraphQL Playground',
+                    'event_category': 'documentation'
+                });
+            }
+        }
+
+        function downloadGraphQLSchema() {
+            const link = document.createElement('a');
+            link.href = './graphql-schema.graphql';
+            link.download = 'pwc-data-engineering-schema.graphql';
+            link.click();
+
+            // Track download
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'download', {
+                    'file_name': 'graphql_schema',
+                    'event_category': 'documentation'
+                });
+            }
+        }
+
+        function openSDKDocs(language) {
+            const urls = {
+                'python': `${API_CONFIG.docsUrl}/sdk/python`,
+                'javascript': `${API_CONFIG.docsUrl}/sdk/javascript`,
+                'java': `${API_CONFIG.docsUrl}/sdk/java`,
+                'dotnet': `${API_CONFIG.docsUrl}/sdk/dotnet`
+            };
+
+            if (urls[language]) {
+                window.open(urls[language], '_blank', 'noopener,noreferrer');
+
+                // Track external link
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'external_link', {
+                        'link_url': urls[language],
+                        'link_text': `${language} SDK Docs`,
+                        'event_category': 'documentation'
+                    });
+                }
+            }
+        }
+
+        // ============================================================================
+        // INITIALIZATION & EVENT HANDLERS
+        // ============================================================================
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle hash-based navigation
+            const hash = window.location.hash.slice(1);
+            if (hash && ['overview', 'swagger', 'redoc', 'testing', 'graphql', 'sdk'].includes(hash)) {
+                showSection(hash);
+            } else {
+                showSection('overview');
+            }
+
+            // Handle browser back/forward
+            window.addEventListener('popstate', function() {
+                const hash = window.location.hash.slice(1);
+                if (hash) {
+                    showSection(hash);
+                }
+            });
+
+            // Add keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                if (e.altKey) {
+                    switch(e.key) {
+                        case '1': showSection('overview'); break;
+                        case '2': showSection('swagger'); break;
+                        case '3': showSection('redoc'); break;
+                        case '4': showSection('testing'); break;
+                        case '5': showSection('graphql'); break;
+                        case '6': showSection('sdk'); break;
+                    }
+                }
+            });
+
+            // Initialize syntax highlighting
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAll();
+            }
+
+            console.log('PwC Enterprise API Documentation Portal initialized');
+        });
+
+        // Handle window resize for responsive behavior
+        window.addEventListener('resize', function() {
+            // Trigger re-layout for documentation components
+            if (swaggerInitialized || redocInitialized) {
+                setTimeout(() => {
+                    if (currentSection === 'swagger' && swaggerInitialized) {
+                        // Swagger UI auto-handles resize
+                    } else if (currentSection === 'redoc' && redocInitialized) {
+                        // ReDoc auto-handles resize
+                    }
+                }, 100);
+            }
+        });
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+            console.error('Documentation portal error:', e.error);
+
+            // Track errors
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'exception', {
+                    'description': e.error?.message || 'Unknown error',
+                    'fatal': false,
+                    'event_category': 'documentation'
+                });
+            }
+        });
+
+        // Expose useful functions to global scope for debugging
+        window.PwCDocs = {
+            showSection,
+            initializeSwagger,
+            initializeRedoc,
+            downloadPostmanCollection,
+            downloadInsomniaWorkspace,
+            openGraphQLPlayground,
+            downloadGraphQLSchema,
+            openSDKDocs,
+            config: API_CONFIG
+        };
+    </script>
+</body>
+</html>

@@ -45,7 +45,13 @@
       "WebSearch",
       "Bash(git check-ignore:*)",
       "Bash(pytest:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(coverage report:*)",
+      "Bash(xargs ls:*)",
+      "Bash(sed:*)",
+      "Bash(dir:*)",
+      "Bash(coverage run:*)",
+      "Bash(del \"C:\\Users\\Camilo\\OneDrive-Gmail\\OneDrive\\Repositorios\\PwC-Challenge-DataEngineer\\test_simple.py\")"
     ],
     "defaultMode": "acceptEdits"
   }

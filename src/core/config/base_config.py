@@ -71,6 +71,13 @@ class BaseConfig(BaseSettings):
     enable_caching: bool = Field(default=True)
     enable_vector_search: bool = Field(default=True)
 
+    # Redis Configuration
+    REDIS_URL: str = Field(default="redis://localhost:6379/0")
+    REDIS_MAX_CONNECTIONS: int = Field(default=20)
+    REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30)
+    REDIS_SOCKET_TIMEOUT: int = Field(default=5)
+    REDIS_CONNECTION_TIMEOUT: int = Field(default=10)
+
     # Elasticsearch Configuration
     ELASTICSEARCH_HOST: str = Field(default="localhost")
     ELASTICSEARCH_PORT: int = Field(default=9200)

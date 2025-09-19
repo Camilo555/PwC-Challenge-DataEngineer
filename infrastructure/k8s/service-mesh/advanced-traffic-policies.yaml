@@ -1,0 +1,744 @@
+---
+# Advanced Traffic Management Policies for PwC Enterprise Service Mesh
+# Comprehensive routing, resilience, and security configurations
+
+# Multi-region Traffic Distribution
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-global-traffic-distribution
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - api.pwc-data.com
+  gateways:
+    - pwc-api-gateway
+  http:
+    # Geo-based routing for optimal performance
+    - match:
+        - headers:
+            x-forwarded-for:
+              regex: "^(10\\.1\\.|172\\.16\\.).*"  # US East region
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: us-east
+          weight: 100
+      headers:
+        request:
+          add:
+            x-region: "us-east"
+            x-zone: "us-east-1"
+
+    - match:
+        - headers:
+            x-forwarded-for:
+              regex: "^(10\\.2\\.|172\\.17\\.).*"  # EU West region
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: eu-west
+          weight: 100
+      headers:
+        request:
+          add:
+            x-region: "eu-west"
+            x-zone: "eu-west-1"
+
+    # Default routing with intelligent failover
+    - route:
+        - destination:
+            host: pwc-api-service
+            subset: us-east
+          weight: 70
+        - destination:
+            host: pwc-api-service
+            subset: eu-west
+          weight: 30
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,reset,connect-failure,refused-stream
+        retryRemoteLocalities: true
+
+---
+# Advanced Rate Limiting Configuration
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: pwc-rate-limiting
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  configPatches:
+    # Rate limiting filter configuration
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.local_ratelimit
+          typed_config:
+            "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+            type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+            value:
+              stat_prefix: local_rate_limiter
+              token_bucket:
+                max_tokens: 1000
+                tokens_per_fill: 100
+                fill_interval: 60s
+              filter_enabled:
+                runtime_key: local_rate_limit_enabled
+                default_value:
+                  numerator: 100
+                  denominator: HUNDRED
+              filter_enforced:
+                runtime_key: local_rate_limit_enforced
+                default_value:
+                  numerator: 100
+                  denominator: HUNDRED
+              response_headers_to_add:
+                - append: false
+                  header:
+                    key: x-local-rate-limit
+                    value: 'true'
+              descriptors:
+                # Premium users - higher limits
+                - entries:
+                    - key: header_match
+                      value: premium
+                  token_bucket:
+                    max_tokens: 5000
+                    tokens_per_fill: 500
+                    fill_interval: 60s
+                # Standard users - normal limits
+                - entries:
+                    - key: header_match
+                      value: standard
+                  token_bucket:
+                    max_tokens: 1000
+                    tokens_per_fill: 100
+                    fill_interval: 60s
+                # Free users - restricted limits
+                - entries:
+                    - key: header_match
+                      value: free
+                  token_bucket:
+                    max_tokens: 100
+                    tokens_per_fill: 10
+                    fill_interval: 60s
+
+---
+# Fault Injection for Chaos Engineering
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-chaos-engineering
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - pwc-api-service
+  http:
+    # Inject faults for testing resilience (only in test environment)
+    - match:
+        - headers:
+            x-chaos-test:
+              exact: "enabled"
+      fault:
+        delay:
+          percentage:
+            value: 10
+          fixedDelay: 500ms
+        abort:
+          percentage:
+            value: 5
+          httpStatus: 503
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: v1
+
+    # Normal traffic routing
+    - route:
+        - destination:
+            host: pwc-api-service
+            subset: v1
+
+---
+# Advanced Security Policies
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: pwc-rbac-policy
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  rules:
+    # Admin access - full permissions
+    - from:
+        - source:
+            principals: ["cluster.local/ns/pwc-data-engineering/sa/admin-service"]
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+      when:
+        - key: custom.role
+          values: ["admin"]
+
+    # Data engineer access - read/write to data endpoints
+    - from:
+        - source:
+            principals: ["cluster.local/ns/pwc-data-engineering/sa/data-engineer-service"]
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT"]
+            paths: ["/api/v1/data/*", "/api/v1/analytics/*"]
+      when:
+        - key: custom.role
+          values: ["data-engineer"]
+
+    # Analytics user access - read-only
+    - from:
+        - source:
+            principals: ["cluster.local/ns/pwc-data-engineering/sa/analytics-service"]
+      to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/api/v1/analytics/*", "/api/v1/reports/*"]
+      when:
+        - key: custom.role
+          values: ["analyst"]
+
+    # External API access with API key validation
+    - from:
+        - source: {}
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+            paths: ["/api/v1/public/*"]
+      when:
+        - key: request.headers[x-api-key]
+          notValues: [""]
+
+    # Health check access (unrestricted)
+    - from:
+        - source: {}
+      to:
+        - operation:
+            paths: ["/health", "/ready", "/live"]
+
+---
+# Advanced Load Balancing with Consistent Hashing
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: pwc-advanced-load-balancing
+  namespace: pwc-data-engineering
+spec:
+  host: pwc-api-service
+  trafficPolicy:
+    # Sophisticated connection pooling
+    connectionPool:
+      tcp:
+        maxConnections: 200
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+          probes: 3
+      http:
+        http1MaxPendingRequests: 128
+        http2MaxRequests: 200
+        maxRequestsPerConnection: 50
+        maxRetries: 5
+        idleTimeout: 90s
+        h2UpgradePolicy: UPGRADE
+        useClientProtocol: true
+
+    # Advanced outlier detection
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 3
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+      splitExternalLocalOriginErrors: true
+
+    # Consistent hashing for session affinity
+    loadBalancer:
+      consistentHash:
+        httpCookie:
+          name: "session-id"
+          ttl: 3600s
+        minimumRingSize: 1024
+
+  portLevelSettings:
+    - port:
+        number: 8000
+      connectionPool:
+        tcp:
+          maxConnections: 100
+
+  subsets:
+    # Production subset with enhanced settings
+    - name: production
+      labels:
+        environment: production
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 150
+          http:
+            maxRequestsPerConnection: 100
+        outlierDetection:
+          consecutiveGatewayErrors: 2
+          baseEjectionTime: 60s
+
+    # Canary subset with conservative settings
+    - name: canary
+      labels:
+        environment: canary
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 50
+          http:
+            maxRequestsPerConnection: 25
+
+---
+# Cross-Origin Resource Sharing (CORS) Policy
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: pwc-cors-policy
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.cors
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+            allow_credentials: true
+            allow_headers: "authorization,content-type,x-api-key,x-correlation-id,x-user-id"
+            allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+            allow_origin_string_match:
+              - prefix: "https://app.pwc-data.com"
+              - prefix: "https://analytics.pwc-data.com"
+              - prefix: "https://dashboard.pwc-data.com"
+            expose_headers: "x-correlation-id,x-rate-limit-remaining"
+            max_age: "86400"
+
+---
+# Request Timeout and Retry Policies
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-timeout-retry-policy
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - pwc-api-service
+  http:
+    # Critical endpoints - aggressive timeouts
+    - match:
+        - uri:
+            prefix: "/api/v1/critical"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: production
+      timeout: 5s
+      retries:
+        attempts: 5
+        perTryTimeout: 1s
+        retryOn: 5xx,reset,connect-failure,refused-stream
+        retryRemoteLocalities: false
+
+    # Analytics endpoints - longer timeouts for complex queries
+    - match:
+        - uri:
+            prefix: "/api/v1/analytics"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: production
+      timeout: 120s
+      retries:
+        attempts: 2
+        perTryTimeout: 60s
+        retryOn: 5xx,reset,connect-failure
+
+    # Bulk operations - extended timeouts
+    - match:
+        - uri:
+            prefix: "/api/v1/bulk"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: production
+      timeout: 300s
+      retries:
+        attempts: 1
+        perTryTimeout: 300s
+
+    # Default timeouts for other endpoints
+    - route:
+        - destination:
+            host: pwc-api-service
+            subset: production
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+
+---
+# Service-to-Service mTLS Communication
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: pwc-service-mtls
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    8000:
+      mode: STRICT
+
+---
+# Workload-specific Security Policy
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: pwc-workload-security
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-database-service
+  rules:
+    # Only allow API service to access database
+    - from:
+        - source:
+            principals: ["cluster.local/ns/pwc-data-engineering/sa/api-service"]
+      to:
+        - operation:
+            ports: ["5432"]
+
+    # Allow monitoring access
+    - from:
+        - source:
+            namespaces: ["monitoring"]
+      to:
+        - operation:
+            ports: ["9187"]  # PostgreSQL exporter port
+
+---
+# Traffic Shifting for Blue-Green Deployments
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-blue-green-deployment
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - pwc-api-service
+  http:
+    # Blue-green traffic shifting based on header
+    - match:
+        - headers:
+            x-deployment-target:
+              exact: "green"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: green
+          weight: 100
+
+    # Canary testing with percentage-based routing
+    - match:
+        - headers:
+            x-canary-test:
+              exact: "enabled"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: blue
+          weight: 90
+        - destination:
+            host: pwc-api-service
+            subset: green
+          weight: 10
+
+    # Default to blue deployment
+    - route:
+        - destination:
+            host: pwc-api-service
+            subset: blue
+          weight: 100
+
+---
+# External Service Access Control
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: pwc-external-access-control
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  egress:
+    # Restrict egress to specific external services
+    - hosts:
+        - "./*"
+        - "istio-system/*"
+        - "monitoring/*"
+        - "logging/*"
+    # External APIs
+    - hosts:
+        - "api.github.com"
+        - "registry.npmjs.org"
+        - "pypi.org"
+        - "download.docker.com"
+      port:
+        number: 443
+        protocol: HTTPS
+        name: https
+
+---
+# Advanced HTTP Header Manipulation
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: pwc-header-manipulation
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+            inline_code: |
+              function envoy_on_request(request_handle)
+                -- Add security headers
+                request_handle:headers():add("x-frame-options", "DENY")
+                request_handle:headers():add("x-content-type-options", "nosniff")
+                request_handle:headers():add("x-xss-protection", "1; mode=block")
+
+                -- Add compliance headers
+                request_handle:headers():add("x-data-classification", "confidential")
+                request_handle:headers():add("x-compliance-framework", "gdpr,sox,hipaa")
+
+                -- Rate limiting based on user tier
+                local user_tier = request_handle:headers():get("x-user-tier")
+                if user_tier == "premium" then
+                  request_handle:headers():add("x-rate-limit", "5000")
+                elseif user_tier == "standard" then
+                  request_handle:headers():add("x-rate-limit", "1000")
+                else
+                  request_handle:headers():add("x-rate-limit", "100")
+                end
+
+                -- Geographic routing hints
+                local client_ip = request_handle:headers():get("x-forwarded-for")
+                if client_ip then
+                  if string.match(client_ip, "^10%.1%.") then
+                    request_handle:headers():add("x-preferred-region", "us-east")
+                  elseif string.match(client_ip, "^10%.2%.") then
+                    request_handle:headers():add("x-preferred-region", "eu-west")
+                  end
+                end
+              end
+
+              function envoy_on_response(response_handle)
+                -- Add performance monitoring headers
+                response_handle:headers():add("x-served-by", "pwc-service-mesh")
+                response_handle:headers():add("x-cache-status", "miss")
+                response_handle:headers():add("x-processing-time", "calculated-by-envoy")
+
+                -- Add security policy headers
+                response_handle:headers():add("strict-transport-security", "max-age=31536000; includeSubDomains")
+                response_handle:headers():add("content-security-policy", "default-src 'self'; script-src 'self' 'unsafe-inline'")
+                response_handle:headers():add("referrer-policy", "strict-origin-when-cross-origin")
+              end
+
+---
+# Network Resilience and Circuit Breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: pwc-network-resilience
+  namespace: pwc-data-engineering
+spec:
+  host: "*.pwc-data-engineering.svc.cluster.local"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 10s
+        keepAlive:
+          time: 600s
+          interval: 60s
+      http:
+        http1MaxPendingRequests: 64
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+      splitExternalLocalOriginErrors: true
+
+    # Regional failover configuration
+    localityLbSetting:
+      enabled: true
+      distribute:
+        - from: "region1/zone1/*"
+          to:
+            "region1/zone1/*": 80
+            "region1/zone2/*": 20
+        - from: "region1/zone2/*"
+          to:
+            "region1/zone2/*": 80
+            "region1/zone1/*": 20
+      failover:
+        - from: region1
+          to: region2
+
+---
+# Observability and Telemetry Enhancement
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-enhanced-telemetry
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  metrics:
+    - providers:
+        - name: prometheus
+    - overrides:
+        - match:
+            metric: requests_total
+          operation: UPSERT
+          tags:
+            request_protocol:
+              value: "%{REQUEST_PROTOCOL}"
+            response_code:
+              value: "%{RESPONSE_CODE}"
+            method:
+              value: "%{REQUEST_METHOD}"
+            url_path:
+              value: "%{REQUEST_URL_PATH}"
+            user_agent:
+              value: "%{REQUEST_USER_AGENT}"
+            source_app:
+              value: "%{SOURCE_APP}"
+            destination_service:
+              value: "%{DESTINATION_SERVICE_NAME}"
+
+  # Custom business metrics
+    - providers:
+        - name: prometheus
+      overrides:
+        - match:
+            metric: ALL_METRICS
+          operation: UPSERT
+          tags:
+            business_unit:
+              value: "data-engineering"
+            cost_center:
+              value: "it-ops"
+            service_tier:
+              operation: UPSERT
+              value: |
+                has(request.headers['x-service-tier']) ? request.headers['x-service-tier'] : 'standard'
+
+---
+# Service Mesh Performance Optimization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwc-mesh-config
+  namespace: istio-system
+data:
+  mesh: |
+    defaultConfig:
+      discoveryRefreshDelay: 10s
+      proxyStatsMatcher:
+        inclusionRegexps:
+          - ".*circuit_breakers.*"
+          - ".*outlier_detection.*"
+          - ".*_cx_.*"
+        exclusionRegexps:
+          - ".*osconfig.*"
+      concurrency: 4
+      proxyMetadata:
+        PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION: true
+        BOOTSTRAP_XDS_AGENT: true
+    defaultProviders:
+      metrics:
+        - prometheus
+      tracing:
+        - jaeger
+      accessLogging:
+        - envoy
+    extensionProviders:
+      - name: jaeger
+        envoyOtelAls:
+          service: jaeger-collector.istio-system.svc.cluster.local
+          port: 14250
+      - name: prometheus
+        prometheus:
+          configOverride:
+            metric_relabeling_configs:
+              - source_labels: [__name__]
+                regex: 'istio_.*'
+                target_label: __tmp_istio_metric_name
+                replacement: '${1}'

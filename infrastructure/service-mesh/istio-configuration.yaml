@@ -1,0 +1,639 @@
+# Istio Service Mesh Configuration
+# Comprehensive service mesh implementation for traffic management, security, and observability
+---
+# Istio Installation Configuration
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: enterprise-control-plane
+  namespace: istio-system
+spec:
+  # Control plane configuration
+  values:
+    global:
+      meshID: enterprise-mesh
+      multiCluster:
+        clusterName: primary-cluster
+      network: network1
+    pilot:
+      env:
+        EXTERNAL_ISTIOD: false
+        PILOT_TRACE_SAMPLING: 1.0
+        PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION: true
+        PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY: true
+        PILOT_ENABLE_STATUS: true
+        PILOT_ENABLE_TELEMETRY_V2: true
+
+  # Component configuration
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70
+
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 10
+        service:
+          type: LoadBalancer
+          ports:
+          - port: 15021
+            targetPort: 15021
+            name: status-port
+            protocol: TCP
+          - port: 80
+            targetPort: 8080
+            name: http2
+            protocol: TCP
+          - port: 443
+            targetPort: 8443
+            name: https
+            protocol: TCP
+          - port: 31400
+            targetPort: 31400
+            name: tcp
+            protocol: TCP
+          - port: 15443
+            targetPort: 15443
+            name: tls
+            protocol: TCP
+
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        hpaSpec:
+          minReplicas: 1
+          maxReplicas: 3
+
+  # Advanced mesh configuration
+  meshConfig:
+    # Traffic management
+    defaultConfig:
+      # Tracing configuration
+      tracing:
+        sampling: 1.0
+        custom_tags:
+          user_id:
+            header:
+              name: "x-user-id"
+          request_id:
+            header:
+              name: "x-request-id"
+      # Proxy configuration
+      proxyStatsMatcher:
+        inclusionRegexps:
+        - ".*outlier_detection.*"
+        - ".*circuit_breakers.*"
+        - ".*upstream_rq_retry.*"
+        - ".*upstream_rq_pending.*"
+        - ".*_cx_.*"
+      concurrency: 2
+
+    # Service discovery
+    defaultServiceExportTo:
+    - "*"
+    defaultVirtualServiceExportTo:
+    - "*"
+    defaultDestinationRuleExportTo:
+    - "*"
+
+    # Security
+    defaultProviders:
+      metrics:
+      - prometheus
+      tracing:
+      - jaeger
+      accessLogging:
+      - envoy
+
+---
+# Namespace Configuration with Istio Injection
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pwc-data-platform
+  labels:
+    istio-injection: enabled
+    name: pwc-data-platform
+    app: data-platform
+    version: v1.0.0
+
+---
+# Gateway Configuration for External Traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: data-platform-gateway
+  namespace: pwc-data-platform
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTP traffic (redirect to HTTPS)
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "api.pwc-dataplatform.com"
+    - "analytics.pwc-dataplatform.com"
+    - "monitoring.pwc-dataplatform.com"
+    tls:
+      httpsRedirect: true
+
+  # HTTPS traffic
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "api.pwc-dataplatform.com"
+    - "analytics.pwc-dataplatform.com"
+    - "monitoring.pwc-dataplatform.com"
+    tls:
+      mode: SIMPLE
+      credentialName: pwc-tls-secret
+
+  # Internal mesh traffic
+  - port:
+      number: 15443
+      name: tls-internal
+      protocol: TLS
+    hosts:
+    - "*.local"
+    tls:
+      mode: ISTIO_MUTUAL
+
+---
+# Virtual Service for API Traffic Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-virtualservice
+  namespace: pwc-data-platform
+spec:
+  hosts:
+  - "api.pwc-dataplatform.com"
+  gateways:
+  - data-platform-gateway
+  http:
+  # Health check routing
+  - match:
+    - uri:
+        prefix: "/health"
+    route:
+    - destination:
+        host: fastapi-service
+        port:
+          number: 8000
+    timeout: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+
+  # API v1 routing with load balancing
+  - match:
+    - uri:
+        prefix: "/api/v1/"
+    route:
+    - destination:
+        host: fastapi-service
+        port:
+          number: 8000
+        subset: v1
+      weight: 90
+    - destination:
+        host: fastapi-service-canary
+        port:
+          number: 8000
+        subset: v1-canary
+      weight: 10
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 100ms
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+    timeout: 30s
+    headers:
+      request:
+        add:
+          x-mesh-version: "v1.0"
+          x-routing-rule: "api-v1"
+
+  # API v2 routing (newer version)
+  - match:
+    - uri:
+        prefix: "/api/v2/"
+    route:
+    - destination:
+        host: fastapi-service
+        port:
+          number: 8000
+        subset: v2
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+    timeout: 30s
+
+  # GraphQL routing
+  - match:
+    - uri:
+        prefix: "/api/graphql"
+    route:
+    - destination:
+        host: graphql-service
+        port:
+          number: 4000
+    timeout: 60s
+    retries:
+      attempts: 2
+      perTryTimeout: 30s
+
+  # Streaming export routing (longer timeout)
+  - match:
+    - uri:
+        prefix: "/api/v1/export/stream"
+    route:
+    - destination:
+        host: fastapi-service
+        port:
+          number: 8000
+        subset: streaming
+    timeout: 3600s  # 1 hour for large exports
+    headers:
+      request:
+        add:
+          x-streaming-enabled: "true"
+
+  # Default routing
+  - route:
+    - destination:
+        host: fastapi-service
+        port:
+          number: 8000
+    timeout: 15s
+
+---
+# Destination Rules for Traffic Policies
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: fastapi-destination-rule
+  namespace: pwc-data-platform
+spec:
+  host: fastapi-service
+  trafficPolicy:
+    # Connection pool settings
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+        maxRetries: 3
+        consecutiveGatewayErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50
+        minHealthPercent: 30
+
+    # Load balancing
+    loadBalancer:
+      simple: LEAST_CONN
+
+    # Outlier detection
+    outlierDetection:
+      consecutive5xxErrors: 5
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+
+  # Service subsets for different versions
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 80
+        http:
+          http1MaxPendingRequests: 40
+
+  - name: v1-canary
+    labels:
+      version: v1-canary
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 20
+        http:
+          http1MaxPendingRequests: 10
+
+  - name: v2
+    labels:
+      version: v2
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          http2MaxRequests: 100
+
+  - name: streaming
+    labels:
+      streaming: enabled
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 50
+          keepAlive:
+            time: 14400s  # 4 hours for streaming
+        http:
+          http1MaxPendingRequests: 25
+          h2UpgradePolicy: UPGRADE
+
+---
+# Database Connection Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: database-destination-rule
+  namespace: pwc-data-platform
+spec:
+  host: postgresql-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 5s
+        keepAlive:
+          time: 3600s
+    loadBalancer:
+      consistentHash:
+        httpSessionName: "database-affinity"
+  portLevelSettings:
+  - port:
+      number: 5432
+    connectionPool:
+      tcp:
+        maxConnections: 50
+
+---
+# Service Entry for External Services
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: pwc-data-platform
+spec:
+  hosts:
+  - httpbin.org
+  - api.github.com
+  - registry-1.docker.io
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  - number: 80
+    name: http
+    protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Authorization Policy for API Access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-access-policy
+  namespace: pwc-data-platform
+spec:
+  selector:
+    matchLabels:
+      app: fastapi-service
+  rules:
+  # Allow health checks
+  - to:
+    - operation:
+        paths: ["/health", "/metrics"]
+    from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+
+  # Allow authenticated API access
+  - to:
+    - operation:
+        paths: ["/api/*"]
+    from:
+    - source:
+        requestPrincipals: ["*"]
+    when:
+    - key: request.headers[authorization]
+      values: ["Bearer *"]
+
+  # Allow internal service communication
+  - from:
+    - source:
+        namespaces: ["pwc-data-platform"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+
+---
+# Peer Authentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls
+  namespace: pwc-data-platform
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Request Authentication for JWT
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: pwc-data-platform
+spec:
+  selector:
+    matchLabels:
+      app: fastapi-service
+  jwtRules:
+  - issuer: "pwc-dataplatform-auth"
+    jwksUri: "https://auth.pwc-dataplatform.com/.well-known/jwks.json"
+    audiences:
+    - "pwc-api"
+    - "pwc-analytics"
+    forwardOriginalToken: true
+
+---
+# Telemetry Configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: metrics-config
+  namespace: pwc-data-platform
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        request_id:
+          operation: UPSERT
+          value: "%{REQUEST_HEADERS[x-request-id]:-%{REQUEST_ID}}"
+        user_id:
+          operation: UPSERT
+          value: "%{REQUEST_HEADERS[x-user-id]:-unknown}"
+        api_version:
+          operation: UPSERT
+          value: "%{REQUEST_HEADERS[x-api-version]:-v1}"
+
+---
+# Distributed Tracing Configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: tracing-config
+  namespace: pwc-data-platform
+spec:
+  tracing:
+  - providers:
+    - name: jaeger
+  - customTags:
+      user_id:
+        header:
+          name: x-user-id
+      request_id:
+        header:
+          name: x-request-id
+      api_version:
+        header:
+          name: x-api-version
+      operation_name:
+        header:
+          name: x-operation-name
+
+---
+# Envoy Filter for Advanced Traffic Management
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: rate-limiting-filter
+  namespace: pwc-data-platform
+spec:
+  workloadSelector:
+    labels:
+      app: fastapi-service
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.local_ratelimit
+        typed_config:
+          "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+          type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          value:
+            stat_prefix: rate_limiter
+            token_bucket:
+              max_tokens: 100
+              tokens_per_fill: 100
+              fill_interval: 60s
+            filter_enabled:
+              runtime_key: rate_limit_enabled
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            filter_enforced:
+              runtime_key: rate_limit_enforced
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            response_headers_to_add:
+            - append: false
+              header:
+                key: x-rate-limited
+                value: 'true'
+
+---
+# Wasm Plugin for Custom Logic
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: custom-headers
+  namespace: pwc-data-platform
+spec:
+  selector:
+    matchLabels:
+      app: fastapi-service
+  url: oci://ghcr.io/istio-ecosystem/wasm-extensions/headers:latest
+  pluginConfig:
+    headers:
+      request:
+        add:
+          x-mesh-timestamp: "%START_TIME%"
+          x-mesh-node: "%DOWNSTREAM_REMOTE_ADDRESS%"
+        remove:
+        - "x-internal-debug"
+      response:
+        add:
+          x-mesh-processed: "true"
+          x-mesh-version: "1.0.0"

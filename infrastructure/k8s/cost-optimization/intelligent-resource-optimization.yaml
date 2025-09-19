@@ -1,0 +1,810 @@
+---
+# Intelligent Resource Optimization for PwC Enterprise Data Platform
+# Advanced cost optimization, resource efficiency, and intelligent auto-scaling
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cost-optimization
+  labels:
+    purpose: resource-efficiency
+    managed-by: intelligent-optimization
+
+---
+# Cost Optimization Controller Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-optimization-config
+  namespace: cost-optimization
+  labels:
+    component: cost-controller
+data:
+  config.yaml: |
+    cost_optimization:
+      enabled: true
+      target_cost_reduction: 30  # Target 30% cost reduction
+      performance_sla_compliance: 99.9  # Maintain 99.9% SLA compliance
+
+      # Intelligent resource rightsizing
+      rightsizing:
+        enabled: true
+        analysis_window_hours: 168  # 7 days analysis
+        utilization_threshold: 0.3  # Flag resources below 30% utilization
+        recommendation_confidence: 0.85
+
+        # CPU rightsizing policies
+        cpu_optimization:
+          target_utilization: 0.75  # Target 75% CPU utilization
+          peak_buffer_percentage: 0.25  # 25% buffer for peaks
+          minimum_cpu_millicores: 100
+          maximum_reduction_percentage: 0.5  # Max 50% reduction at once
+
+        # Memory rightsizing policies
+        memory_optimization:
+          target_utilization: 0.80  # Target 80% memory utilization
+          peak_buffer_percentage: 0.20  # 20% buffer for peaks
+          minimum_memory_mi: 256
+          maximum_reduction_percentage: 0.4  # Max 40% reduction at once
+
+        # Storage optimization
+        storage_optimization:
+          target_utilization: 0.85  # Target 85% storage utilization
+          ephemeral_storage_monitoring: true
+          pv_rightsizing_enabled: true
+
+      # Intelligent scheduling optimization
+      scheduling:
+        enabled: true
+        node_efficiency_targeting: true
+        workload_consolidation: true
+        anti_affinity_optimization: true
+
+        # Node selection optimization
+        node_selection:
+          prefer_spot_instances: true
+          spot_instance_percentage: 60  # 60% spot instances for suitable workloads
+          instance_type_optimization: true
+          multi_az_distribution: true
+
+        # Pod density optimization
+        pod_density:
+          target_nodes_utilization: 0.80
+          consolidation_threshold: 0.40
+          defragmentation_enabled: true
+
+      # Workload-specific optimization
+      workload_optimization:
+        api_services:
+          cost_priority: "balanced"
+          burstable_qos: true
+          resource_requests_optimization: true
+          connection_pooling_optimization: true
+
+        analytics_workloads:
+          cost_priority: "performance"
+          spot_instance_suitable: false
+          batch_processing_optimization: true
+          resource_intensive_scheduling: true
+
+        background_jobs:
+          cost_priority: "cost"
+          spot_instance_suitable: true
+          preemptible_scheduling: true
+          batch_scheduling_preferred: true
+
+        ml_workloads:
+          cost_priority: "performance"
+          gpu_optimization: true
+          specialized_nodes_preferred: true
+          model_serving_optimization: true
+
+      # Time-based scaling optimization
+      temporal_optimization:
+        enabled: true
+        business_hours_scaling: true
+        weekend_scaling: true
+        holiday_scaling: true
+
+        # Scaling schedules
+        schedules:
+          business_hours:
+            timezone: "UTC"
+            weekdays: "Mon-Fri"
+            hours: "08:00-18:00"
+            scale_factor: 1.0
+
+          off_hours:
+            timezone: "UTC"
+            weekdays: "Mon-Fri"
+            hours: "18:00-08:00"
+            scale_factor: 0.6
+
+          weekends:
+            timezone: "UTC"
+            weekdays: "Sat-Sun"
+            scale_factor: 0.4
+
+          holidays:
+            scale_factor: 0.3
+            holiday_calendar: "US"
+
+      # Advanced cost monitoring
+      cost_monitoring:
+        enabled: true
+        real_time_tracking: true
+        budget_alerts: true
+        cost_attribution: true
+
+        # Budget configuration
+        budgets:
+          monthly_budget_usd: 50000
+          cost_per_request_target: 0.001  # $0.001 per request
+          cost_per_user_target: 0.10     # $0.10 per active user
+
+        # Alert thresholds
+        alerts:
+          cost_increase_percentage: 20  # Alert on 20% cost increase
+          budget_utilization_percentage: 80  # Alert at 80% budget usage
+          efficiency_degradation_percentage: 15  # Alert on 15% efficiency drop
+
+      # ML-driven optimization
+      machine_learning:
+        enabled: true
+        prediction_models: true
+        anomaly_detection: true
+        optimization_suggestions: true
+
+        # Cost prediction models
+        cost_prediction:
+          model_type: "time_series_ensemble"
+          prediction_horizon_days: 30
+          retraining_frequency_days: 7
+          accuracy_threshold: 0.90
+
+        # Resource utilization prediction
+        utilization_prediction:
+          model_type: "lstm_multivariate"
+          features: ["cpu_usage", "memory_usage", "network_io", "storage_io", "request_rate"]
+          prediction_horizon_hours: 24
+          confidence_interval: 0.95
+
+        # Optimization recommendation engine
+        recommendation_engine:
+          model_type: "reinforcement_learning"
+          reward_function: "cost_performance_ratio"
+          exploration_rate: 0.1
+          learning_rate: 0.01
+
+---
+# Cost Optimization Controller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cost-optimization-controller
+  namespace: cost-optimization
+  labels:
+    app: cost-optimizer
+    component: controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cost-optimizer
+  template:
+    metadata:
+      labels:
+        app: cost-optimizer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: cost-optimizer-sa
+      containers:
+      - name: cost-optimizer
+        image: pwc/cost-optimizer:v2.1.0
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 9090
+          name: webhook
+        env:
+        - name: CLUSTER_NAME
+          value: "pwc-production-cluster"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: OPTIMIZATION_INTERVAL
+          value: "300"  # 5 minutes
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: cost-optimization-config
+
+---
+# Service Account for Cost Optimizer
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cost-optimizer-sa
+  namespace: cost-optimization
+
+---
+# RBAC for Cost Optimization
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cost-optimizer-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers", "verticalpodautoscalers"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+- apiGroups: ["custom.metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cost-optimizer-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cost-optimizer-role
+subjects:
+- kind: ServiceAccount
+  name: cost-optimizer-sa
+  namespace: cost-optimization
+
+---
+# Resource Efficiency Monitor
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: resource-efficiency-monitor
+  namespace: cost-optimization
+  labels:
+    app: efficiency-monitor
+spec:
+  selector:
+    matchLabels:
+      app: efficiency-monitor
+  template:
+    metadata:
+      labels:
+        app: efficiency-monitor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      containers:
+      - name: efficiency-monitor
+        image: pwc/efficiency-monitor:v1.0.0
+        ports:
+        - containerPort: 8080
+          name: metrics
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: MONITORING_INTERVAL
+          value: "60"  # 1 minute
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+          readOnly: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+
+---
+# Intelligent Pod Disruption Budget with Cost Optimization
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cost-optimized-pdb
+  namespace: pwc-data-engineering
+  annotations:
+    cost-optimization.pwc.com/enabled: "true"
+    cost-optimization.pwc.com/disruption-cost-threshold: "100"  # USD per hour
+spec:
+  minAvailable: 60%  # Allow more disruption for cost optimization
+  selector:
+    matchLabels:
+      cost-tier: "optimized"
+  maxUnavailable: 40%
+
+---
+# Cluster Autoscaler Configuration with Cost Optimization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-autoscaler-cost-config
+  namespace: kube-system
+  labels:
+    component: cluster-autoscaler
+data:
+  autoscaling_config.yaml: |
+    cluster_autoscaler:
+      # Cost-optimized scaling policies
+      scale_down_enabled: true
+      scale_down_delay_after_add: "10m"
+      scale_down_unneeded_time: "10m"
+      scale_down_utilization_threshold: 0.5
+
+      # Cost optimization features
+      cost_optimization:
+        enabled: true
+        prefer_spot_instances: true
+        spot_instance_pools: 10
+        on_demand_base_capacity: 2
+        on_demand_percentage_above_base_capacity: 20
+
+      # Node group optimization
+      node_groups:
+        general_purpose:
+          instance_types: ["t3.medium", "t3.large", "t3.xlarge"]
+          spot_allocation_strategy: "diversified"
+          min_size: 3
+          max_size: 50
+          target_capacity: 10
+
+        compute_optimized:
+          instance_types: ["c5.large", "c5.xlarge", "c5.2xlarge"]
+          spot_allocation_strategy: "lowest-price"
+          min_size: 0
+          max_size: 20
+          target_capacity: 5
+
+        memory_optimized:
+          instance_types: ["r5.large", "r5.xlarge", "r5.2xlarge"]
+          spot_allocation_strategy: "diversified"
+          min_size: 0
+          max_size: 10
+          target_capacity: 2
+
+        gpu_enabled:
+          instance_types: ["p3.2xlarge", "p3.8xlarge"]
+          spot_allocation_strategy: "lowest-price"
+          min_size: 0
+          max_size: 5
+          target_capacity: 0
+
+      # Advanced scaling behaviors
+      scaling_policies:
+        scale_up:
+          stabilization_window_seconds: 300
+          select_policy: "Max"
+          policies:
+          - type: "Pods"
+            value: 4
+            period_seconds: 60
+          - type: "Percent"
+            value: 50
+            period_seconds: 60
+
+        scale_down:
+          stabilization_window_seconds: 600
+          select_policy: "Min"
+          policies:
+          - type: "Pods"
+            value: 2
+            period_seconds: 180
+          - type: "Percent"
+            value: 10
+            period_seconds: 180
+
+---
+# Resource Quota with Cost Controls
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cost-optimized-quota
+  namespace: pwc-data-engineering
+  annotations:
+    cost-optimization.pwc.com/budget-usd-monthly: "25000"
+    cost-optimization.pwc.com/cost-per-cpu-hour: "0.05"
+    cost-optimization.pwc.com/cost-per-gb-hour: "0.01"
+spec:
+  hard:
+    # CPU limits with cost awareness
+    requests.cpu: "200"  # 200 CPU cores
+    limits.cpu: "400"    # 400 CPU cores max
+
+    # Memory limits with cost awareness
+    requests.memory: "800Gi"  # 800GB memory
+    limits.memory: "1600Gi"   # 1600GB memory max
+
+    # Storage limits
+    requests.storage: "10Ti"
+    persistentvolumeclaims: "100"
+
+    # Pod limits for cost control
+    count/pods: "500"
+    count/deployments.apps: "50"
+    count/services: "25"
+
+    # Premium resource limits
+    requests.nvidia.com/gpu: "20"
+    limits.nvidia.com/gpu: "40"
+
+---
+# Limit Range for Cost Optimization
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cost-optimized-limits
+  namespace: pwc-data-engineering
+  annotations:
+    cost-optimization.pwc.com/enforce-burstable-qos: "true"
+spec:
+  limits:
+  # Pod limits for cost efficiency
+  - type: Pod
+    max:
+      cpu: 16
+      memory: 64Gi
+      ephemeral-storage: 20Gi
+    min:
+      cpu: 50m
+      memory: 64Mi
+      ephemeral-storage: 100Mi
+
+  # Container limits for resource efficiency
+  - type: Container
+    default:
+      cpu: 500m      # Default CPU request for cost efficiency
+      memory: 1Gi    # Default memory request
+      ephemeral-storage: 1Gi
+    defaultRequest:
+      cpu: 100m      # Minimum CPU request
+      memory: 256Mi  # Minimum memory request
+      ephemeral-storage: 256Mi
+    max:
+      cpu: 8         # Maximum CPU per container
+      memory: 32Gi   # Maximum memory per container
+      ephemeral-storage: 10Gi
+    min:
+      cpu: 50m       # Minimum CPU
+      memory: 64Mi   # Minimum memory
+      ephemeral-storage: 100Mi
+
+  # PVC limits for storage cost control
+  - type: PersistentVolumeClaim
+    max:
+      storage: 1Ti
+    min:
+      storage: 1Gi
+
+---
+# Cost Optimization Policies CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: costoptimizationpolicies.cost.pwc.com
+spec:
+  group: cost.pwc.com
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              targetCostReduction:
+                type: number
+                minimum: 0
+                maximum: 100
+              performanceSLACompliance:
+                type: number
+                minimum: 90
+                maximum: 100
+              optimizationStrategies:
+                type: array
+                items:
+                  type: string
+                  enum: ["rightsizing", "scheduling", "temporal", "workload-specific"]
+              costBudget:
+                type: object
+                properties:
+                  monthlyBudgetUSD:
+                    type: number
+                  alertThresholds:
+                    type: object
+                    properties:
+                      budgetUtilizationPercent:
+                        type: number
+                      costIncreasePercent:
+                        type: number
+          status:
+            type: object
+            properties:
+              currentCostReduction:
+                type: number
+              slaCompliance:
+                type: number
+              optimizationStatus:
+                type: string
+              lastOptimizationTime:
+                type: string
+  scope: Namespaced
+  names:
+    plural: costoptimizationpolicies
+    singular: costoptimizationpolicy
+    kind: CostOptimizationPolicy
+
+---
+# Cost Optimization Policy Instance
+apiVersion: cost.pwc.com/v1
+kind: CostOptimizationPolicy
+metadata:
+  name: pwc-production-cost-policy
+  namespace: pwc-data-engineering
+spec:
+  targetCostReduction: 30
+  performanceSLACompliance: 99.9
+  optimizationStrategies:
+  - "rightsizing"
+  - "scheduling"
+  - "temporal"
+  - "workload-specific"
+  costBudget:
+    monthlyBudgetUSD: 25000
+    alertThresholds:
+      budgetUtilizationPercent: 80
+      costIncreasePercent: 20
+
+---
+# Prometheus Rules for Cost Monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cost-optimization-alerts
+  namespace: cost-optimization
+  labels:
+    app: cost-monitoring
+spec:
+  groups:
+  - name: cost-optimization.rules
+    interval: 60s
+    rules:
+    # Cost efficiency metrics
+    - alert: HighResourceWaste
+      expr: |
+        (
+          avg_over_time(node_cpu_utilization[1h]) < 0.3
+          and
+          avg_over_time(node_memory_utilization[1h]) < 0.3
+        )
+      for: 2h
+      labels:
+        severity: warning
+        component: cost-optimization
+      annotations:
+        summary: "High resource waste detected"
+        description: "Node {{ $labels.node }} has low utilization for 2+ hours"
+
+    - alert: CostBudgetExceeded
+      expr: |
+        monthly_cost_usd > monthly_budget_usd * 0.8
+      for: 5m
+      labels:
+        severity: critical
+        component: cost-monitoring
+      annotations:
+        summary: "Monthly cost budget 80% exceeded"
+        description: "Current monthly cost ${{ $value }} exceeds 80% of budget"
+
+    - alert: CostEfficiencyDegraded
+      expr: |
+        cost_per_request > cost_per_request_baseline * 1.5
+      for: 30m
+      labels:
+        severity: warning
+        component: cost-efficiency
+      annotations:
+        summary: "Cost efficiency degraded"
+        description: "Cost per request increased by 50% above baseline"
+
+    - alert: UnderUtilizedResources
+      expr: |
+        pod_cpu_utilization < 0.2 and pod_memory_utilization < 0.3
+      for: 6h
+      labels:
+        severity: info
+        component: resource-optimization
+      annotations:
+        summary: "Underutilized pod detected"
+        description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is underutilized"
+
+---
+# Cost Attribution Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cost-attribution-service
+  namespace: cost-optimization
+  labels:
+    app: cost-attribution
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cost-attribution
+  template:
+    metadata:
+      labels:
+        app: cost-attribution
+    spec:
+      containers:
+      - name: cost-attribution
+        image: pwc/cost-attribution:v1.0.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLOUD_PROVIDER
+          value: "aws"  # or "gcp", "azure"
+        - name: BILLING_API_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: cloud-billing-secret
+              key: api-endpoint
+        - name: ATTRIBUTION_GRANULARITY
+          value: "namespace"  # namespace, workload, or pod level
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+---
+# Service for Cost Attribution
+apiVersion: v1
+kind: Service
+metadata:
+  name: cost-attribution-service
+  namespace: cost-optimization
+spec:
+  selector:
+    app: cost-attribution
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
+---
+# Cost Optimization Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-optimization-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  cost-optimization-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "PwC Cost Optimization Dashboard",
+        "tags": ["cost", "optimization", "efficiency"],
+        "panels": [
+          {
+            "title": "Monthly Cost Trend",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "monthly_cost_usd",
+                "legendFormat": "Monthly Cost"
+              },
+              {
+                "expr": "monthly_budget_usd",
+                "legendFormat": "Budget"
+              }
+            ]
+          },
+          {
+            "title": "Cost per Request",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "cost_per_request",
+                "legendFormat": "Cost per Request"
+              }
+            ]
+          },
+          {
+            "title": "Resource Utilization",
+            "type": "heatmap",
+            "targets": [
+              {
+                "expr": "avg(pod_cpu_utilization) by (namespace)",
+                "legendFormat": "CPU Utilization"
+              },
+              {
+                "expr": "avg(pod_memory_utilization) by (namespace)",
+                "legendFormat": "Memory Utilization"
+              }
+            ]
+          },
+          {
+            "title": "Cost Savings from Optimization",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "cost_savings_usd",
+                "legendFormat": "Cumulative Savings"
+              }
+            ]
+          }
+        ]
+      }
+    }

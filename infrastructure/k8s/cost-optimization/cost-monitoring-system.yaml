@@ -1,0 +1,465 @@
+# Advanced Cost Monitoring and Optimization System
+# Real-time cost tracking with automated optimization recommendations
+
+---
+# Cost Monitoring Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: monitoring
+    managed-by: bmad-platform
+
+---
+# Cost Monitoring ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-monitoring-config
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: configuration
+data:
+  monitoring-config.yaml: |
+    cost_monitoring:
+      enabled: true
+      collection_interval_seconds: 60
+      reporting_interval_hours: 1
+      cost_alert_thresholds:
+        daily_budget_usd: 500
+        weekly_budget_usd: 3000
+        monthly_budget_usd: 12000
+        cost_spike_percentage: 25  # Alert if costs increase by 25%
+        resource_waste_threshold: 30  # Alert if utilization < 30%
+
+      # Cloud provider cost APIs
+      cloud_providers:
+        aws:
+          enabled: true
+          cost_explorer_api: true
+          billing_alerts: true
+          rightsizing_recommendations: true
+          spot_instance_advisor: true
+
+        azure:
+          enabled: false
+          cost_management_api: true
+          billing_alerts: true
+
+        gcp:
+          enabled: false
+          cloud_billing_api: true
+          recommender_api: true
+
+      # Resource cost tracking
+      resource_tracking:
+        compute:
+          cpu_cost_per_core_hour: 0.048
+          memory_cost_per_gb_hour: 0.012
+          storage_cost_per_gb_month: 0.10
+          network_cost_per_gb: 0.09
+
+        kubernetes:
+          track_node_costs: true
+          track_pod_costs: true
+          track_service_costs: true
+          track_storage_costs: true
+          allocation_method: "proportional"
+
+        applications:
+          bmad-api:
+            cost_center: "data-engineering"
+            business_unit: "platform"
+            priority: "high"
+            sla_cost_weight: 0.3
+
+          bmad-mobile:
+            cost_center: "mobile-development"
+            business_unit: "client-apps"
+            priority: "high"
+
+          bmad-analytics:
+            cost_center: "data-science"
+            business_unit: "analytics"
+            priority: "medium"
+
+      # Optimization strategies
+      optimization:
+        rightsizing:
+          enabled: true
+          analysis_period_days: 7
+          min_utilization_threshold: 20
+          max_utilization_threshold: 85
+          recommendation_confidence_threshold: 0.8
+
+        spot_instances:
+          enabled: true
+          suitable_workloads: ["analytics", "batch-processing"]
+          interruption_tolerance: 0.95
+          cost_savings_target: 60
+
+        scheduled_scaling:
+          enabled: true
+          business_hours: "09:00-18:00"
+          timezone: "UTC"
+          weekend_scaling_factor: 0.6
+          night_scaling_factor: 0.4
+
+        reserved_instances:
+          enabled: true
+          commitment_period_months: 12
+          payment_option: "partial_upfront"
+          instance_families: ["c5", "m5", "r5"]
+
+        storage_optimization:
+          enabled: true
+          lifecycle_policies: true
+          compression_analysis: true
+          archival_after_days: 90
+          deletion_after_days: 2555  # 7 years
+
+      # Alerts and notifications
+      alerting:
+        slack:
+          enabled: true
+          webhook_url_secret: "slack-webhook-secret"
+          channels:
+            - "#cost-alerts"
+            - "#devops-notifications"
+
+        email:
+          enabled: true
+          smtp_server: "smtp.company.com"
+          recipients:
+            - "devops@company.com"
+            - "finance@company.com"
+
+        pagerduty:
+          enabled: false
+          integration_key_secret: "pagerduty-key-secret"
+
+      # Reporting and dashboards
+      reporting:
+        daily_reports: true
+        weekly_reports: true
+        monthly_reports: true
+        cost_attribution_reports: true
+        optimization_recommendations: true
+
+        dashboard_metrics:
+          - total_infrastructure_cost
+          - cost_per_application
+          - cost_per_business_unit
+          - resource_utilization_trends
+          - optimization_savings
+          - waste_identification
+          - budget_vs_actual
+
+---
+# Cost Monitoring Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cost-monitor
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: monitor
+spec:
+  replicas: 2  # High availability for cost monitoring
+  selector:
+    matchLabels:
+      app: cost-optimization
+      component: monitor
+  template:
+    metadata:
+      labels:
+        app: cost-optimization
+        component: monitor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cost-monitor-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+      - name: cost-monitor
+        image: bmad/cost-monitor:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: CONFIG_PATH
+          value: "/config/monitoring-config.yaml"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: COST_TRACKING_ENABLED
+          value: "true"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        - name: cache-volume
+          mountPath: /cache
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: config-volume
+        configMap:
+          name: cost-monitoring-config
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+# Cost Monitor Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cost-monitor-service
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: monitor
+spec:
+  selector:
+    app: cost-optimization
+    component: monitor
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP
+
+---
+# Service Account for Cost Monitor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cost-monitor-service-account
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+automountServiceAccountToken: true
+
+---
+# RBAC for Cost Monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cost-monitor-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods", "services", "persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers", "verticalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cost-monitor-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: cost-monitor-service-account
+  namespace: cost-monitoring
+roleRef:
+  kind: ClusterRole
+  name: cost-monitor-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Cost Optimization CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cost-optimization-analyzer
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: analyzer
+spec:
+  schedule: "0 */6 * * *"  # Run every 6 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: cost-optimization
+            component: analyzer-job
+        spec:
+          serviceAccountName: cost-monitor-service-account
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          containers:
+          - name: cost-analyzer
+            image: bmad/cost-analyzer:v1.0.0
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: ANALYSIS_MODE
+              value: "optimization"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: KUBERNETES_NAMESPACE
+              value: "bmad-production"
+            - name: OUTPUT_FORMAT
+              value: "json"
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting cost optimization analysis..."
+              /app/cost-analyzer \
+                --mode=optimization \
+                --lookback=168h \
+                --output-format=json \
+                --recommendations-file=/tmp/recommendations.json
+              echo "Analysis completed. Recommendations generated."
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+            volumeMounts:
+            - name: recommendations-volume
+              mountPath: /tmp
+          volumes:
+          - name: recommendations-volume
+            emptyDir:
+              sizeLimit: 100Mi
+
+---
+# PrometheusRule for Cost Alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cost-optimization-alerts
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: alerting
+spec:
+  groups:
+  - name: cost-optimization.rules
+    interval: 60s
+    rules:
+    # High cost alert
+    - alert: HighInfrastructureCost
+      expr: increase(infrastructure_cost_usd_total[1h]) > 50
+      for: 5m
+      labels:
+        severity: warning
+        component: cost-monitoring
+      annotations:
+        summary: "Infrastructure costs are increasing rapidly"
+        description: "Infrastructure costs have increased by more than $50 in the last hour. Current rate: ${{ $value }}/hour"
+
+    # Resource waste alert
+    - alert: ResourceWaste
+      expr: avg_over_time(node_cpu_usage_percentage[1h]) < 30 and avg_over_time(node_memory_usage_percentage[1h]) < 30
+      for: 30m
+      labels:
+        severity: info
+        component: cost-optimization
+      annotations:
+        summary: "Low resource utilization detected"
+        description: "Node {{ $labels.node }} has been underutilized for 30 minutes. CPU: {{ $value }}%, Memory: {{ $value }}%"
+
+    # Budget threshold alert
+    - alert: BudgetThresholdExceeded
+      expr: daily_budget_usage_percentage > 80
+      for: 5m
+      labels:
+        severity: critical
+        component: cost-monitoring
+      annotations:
+        summary: "Daily budget threshold exceeded"
+        description: "Daily budget usage is at {{ $value }}% of the allocated $500/day budget"
+
+    # Spot instance interruption risk
+    - alert: SpotInstanceHighInterruptionRisk
+      expr: spot_instance_interruption_risk > 50
+      for: 10m
+      labels:
+        severity: warning
+        component: cost-optimization
+      annotations:
+        summary: "High spot instance interruption risk"
+        description: "Spot instance interruption risk is {{ $value }}% for instance type {{ $labels.instance_type }}"
+
+---
+# Service Monitor for Cost Monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cost-monitor
+  namespace: cost-monitoring
+  labels:
+    app: cost-optimization
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: cost-optimization
+      component: monitor
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+  namespaceSelector:
+    matchNames:
+    - cost-monitoring

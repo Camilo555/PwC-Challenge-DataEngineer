@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PwC Data Engineering Challenge - Enterprise API Documentation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css">
+    <link rel="icon" type="image/x-icon" href="https://fastapi.tiangolo.com/img/favicon.png">
+    <link href="https://cdn.jsdelivr.net/npm/redoc@2.0.0/bundles/redoc.standalone.css" rel="stylesheet">
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .logo h1 {
+            color: #1a202c;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .logo .subtitle {
+            color: #718096;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .version-badge {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 12px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+            background: #f7fafc;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: #4a5568;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .nav-tab:hover {
+            color: #2d3748;
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        .nav-tab.active {
+            background: white;
+            color: #2b6cb0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            min-height: calc(100vh - 80px);
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .content-section {
+            display: none;
+            min-height: calc(100vh - 80px);
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .welcome-section {
+            padding: 60px 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
+        }
+
+        .welcome-hero h2 {
+            color: #1a202c;
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .welcome-hero .subtitle {
+            color: #4a5568;
+            font-size: 20px;
+            margin-bottom: 40px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin: 40px 0;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: 800;
+            color: #2b6cb0;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: #4a5568;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-top: 60px;
+            padding: 0 40px;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-card h3 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+
+        .feature-card p {
+            color: #4a5568;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            margin: 16px 0;
+        }
+
+        .feature-card li {
+            color: #4a5568;
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .feature-card li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        .swagger-container, .redoc-container, .graphql-container, .postman-container, .sdk-container {
+            height: calc(100vh - 80px);
+            overflow: auto;
+        }
+
+        .iframe-container {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .section-header {
+            background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
+            padding: 32px 40px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .section-header h2 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .section-header p {
+            color: #4a5568;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .content-body {
+            padding: 40px;
+        }
+
+        .code-example {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 24px;
+            border-radius: 12px;
+            margin: 20px 0;
+            overflow-x: auto;
+            font-family: 'Fira Code', Monaco, Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .example-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin: 32px 0;
+        }
+
+        .example-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .example-header {
+            background: #2d3748;
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .example-content {
+            padding: 20px;
+        }
+
+        .method-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .method-get { background: #48bb78; color: white; }
+        .method-post { background: #4299e1; color: white; }
+        .method-put { background: #ed8936; color: white; }
+        .method-delete { background: #f56565; color: white; }
+
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            font-size: 18px;
+            color: #4a5568;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 16px;
+                padding: 0 16px;
+            }
+
+            .nav-tabs {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .nav-tab {
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+
+            .welcome-hero h2 {
+                font-size: 36px;
+            }
+
+            .features-grid {
+                padding: 0 20px;
+            }
+
+            .feature-card {
+                padding: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">PwC</div>
+                <div>
+                    <h1>Enterprise Data Engineering API</h1>
+                    <div class="subtitle">Comprehensive REST & GraphQL Documentation</div>
+                </div>
+                <span class="version-badge">v3.0.0</span>
+            </div>
+            <nav class="nav-tabs">
+                <button class="nav-tab active" onclick="showSection('welcome')">Overview</button>
+                <button class="nav-tab" onclick="showSection('swagger')">Swagger UI</button>
+                <button class="nav-tab" onclick="showSection('redoc')">ReDoc</button>
+                <button class="nav-tab" onclick="showSection('graphql')">GraphQL</button>
+                <button class="nav-tab" onclick="showSection('postman')">Postman</button>
+                <button class="nav-tab" onclick="showSection('sdk')">SDKs & Examples</button>
+            </nav>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Welcome Section -->
+        <div id="welcome" class="content-section active">
+            <div class="welcome-section">
+                <div class="welcome-hero">
+                    <h2>Enterprise Data Engineering Platform</h2>
+                    <p class="subtitle">
+                        Comprehensive REST and GraphQL APIs for advanced analytics, real-time processing, 
+                        and enterprise data management with 208+ endpoints covering all aspects of your data platform.
+                    </p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">208</div>
+                        <div class="stat-label">REST Endpoints</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">50+</div>
+                        <div class="stat-label">GraphQL Queries</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">99.9%</div>
+                        <div class="stat-label">Uptime SLA</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">&lt;15ms</div>
+                        <div class="stat-label">Response Time</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3><span class="feature-icon">🚀</span>Advanced Analytics</h3>
+                    <p>Powerful analytics endpoints with machine learning integration, predictive insights, and real-time processing capabilities.</p>
+                    <ul>
+                        <li>Customer cohort analysis</li>
+                        <li>Predictive forecasting</li>
+                        <li>Real-time metrics dashboard</li>
+                        <li>Advanced aggregations</li>
+                    </ul>
+                    <a href="#" onclick="showSection('swagger')" class="cta-button">
+                        Explore Analytics API →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <h3><span class="feature-icon">🏗️</span>Enterprise Architecture</h3>
+                    <p>Microservices patterns including SAGA orchestration, CQRS framework, and service discovery for scalable enterprise solutions.</p>
+                    <ul>
+                        <li>SAGA distributed transactions</li>
+                        <li>CQRS command/query separation</li>
+                        <li>Service registry & discovery</li>
+                        <li>Event sourcing patterns</li>
+                    </ul>
+                    <a href="#" onclick="showSection('swagger')" class="cta-button">
+                        View Architecture APIs →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <h3><span class="feature-icon">🤖</span>AI & ML Integration</h3>
+                    <p>AI-powered conversational analytics, natural language query processing, and machine learning model integration.</p>
+                    <ul>
+                        <li>Natural language queries</li>
+                        <li>Sentiment analysis</li>
+                        <li>Intent recognition</li>
+                        <li>Topic extraction</li>
+                    </ul>
+                    <a href="#" onclick="showSection('graphql')" class="cta-button">
+                        Try AI Features →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <h3><span class="feature-icon">📊</span>Real-time Monitoring</h3>
+                    <p>Comprehensive monitoring suite with system metrics, application performance, and infrastructure health tracking.</p>
+                    <ul>
+                        <li>System resource monitoring</li>
+                        <li>Application performance metrics</li>
+                        <li>Database health tracking</li>
+                        <li>Security audit logging</li>
+                    </ul>
+                    <a href="#" onclick="showSection('redoc')" class="cta-button">
+                        View Monitoring APIs →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <h3><span class="feature-icon">🔐</span>Enterprise Security</h3>
+                    <p>Advanced security framework with JWT authentication, RBAC, audit logging, and compliance monitoring for enterprise requirements.</p>
+                    <ul>
+                        <li>JWT & OAuth2 authentication</li>
+                        <li>Role-based access control</li>
+                        <li>Comprehensive audit trails</li>
+                        <li>Vulnerability scanning</li>
+                    </ul>
+                    <a href="#" onclick="showSection('swagger')" class="cta-button">
+                        Security Documentation →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <h3><span class="feature-icon">📱</span>Mobile Analytics</h3>
+                    <p>Specialized mobile analytics platform for user behavior analysis, device tracking, and mobile-specific insights.</p>
+                    <ul>
+                        <li>Mobile user behavior tracking</li>
+                        <li>Device & platform analytics</li>
+                        <li>Session analysis</li>
+                        <li>Mobile conversion optimization</li>
+                    </ul>
+                    <a href="#" onclick="showSection('redoc')" class="cta-button">
+                        Mobile APIs →
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Swagger UI Section -->
+        <div id="swagger" class="content-section">
+            <div class="section-header">
+                <h2>Swagger UI - Interactive API Documentation</h2>
+                <p>Explore and test all 208 REST API endpoints with interactive documentation, request/response examples, and live testing capabilities.</p>
+            </div>
+            <div id="swagger-ui" class="swagger-container"></div>
+        </div>
+
+        <!-- ReDoc Section -->
+        <div id="redoc" class="content-section">
+            <div class="section-header">
+                <h2>ReDoc - Beautiful API Reference</h2>
+                <p>Clean, beautiful API documentation with advanced search, code samples, and comprehensive schema visualization.</p>
+            </div>
+            <div id="redoc-container" class="redoc-container"></div>
+        </div>
+
+        <!-- GraphQL Section -->
+        <div id="graphql" class="content-section">
+            <div class="section-header">
+                <h2>GraphQL Playground</h2>
+                <p>Interactive GraphQL playground for exploring schemas, writing queries, and testing real-time subscriptions.</p>
+            </div>
+            <div class="content-body">
+                <div class="example-grid">
+                    <div class="example-card">
+                        <div class="example-header">Sample Sales Query</div>
+                        <div class="example-content">
+                            <pre class="code-example">query GetSalesData {
+  sales(filters: {
+    date_from: "2010-12-01"
+    date_to: "2011-12-31"
+    country: "United Kingdom"
+  }, pagination: {
+    page: 1
+    page_size: 20
+  }) {
+    items {
+      sale_id
+      total_amount
+      product {
+        description
+        category
+      }
+      customer {
+        customer_segment
+        rfm_segment
+      }
+    }
+    total_count
+    has_next
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">Advanced Analytics Query</div>
+                        <div class="example-content">
+                            <pre class="code-example">query GetAnalytics {
+  salesAnalytics(granularity: MONTHLY) {
+    period
+    total_revenue
+    unique_customers
+    avg_order_value
+  }
+  
+  customerSegments {
+    segment_name
+    customer_count
+    avg_lifetime_value
+  }
+  
+  topProductsByRevenue(limit: 10) {
+    description
+    total_revenue
+    transaction_count
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="http://localhost:8000/api/graphql" target="_blank" class="cta-button">
+                    Open GraphQL Playground →
+                </a>
+            </div>
+        </div>
+
+        <!-- Postman Collection Section -->
+        <div id="postman" class="content-section">
+            <div class="section-header">
+                <h2>Postman Collection</h2>
+                <p>Ready-to-use Postman collections with pre-configured requests, environments, and test scripts for all API endpoints.</p>
+            </div>
+            <div class="content-body">
+                <div class="example-grid">
+                    <div class="example-card">
+                        <div class="example-header">Authentication Example</div>
+                        <div class="example-content">
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v1/auth/login</code>
+                            <pre class="code-example">{
+  "username": "admin",
+  "password": "SecurePass123!"
+}</pre>
+                            <p><strong>Response:</strong></p>
+                            <pre class="code-example">{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "permissions": ["read", "write", "admin"]
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">Sales Data Query</div>
+                        <div class="example-content">
+                            <div class="method-badge method-get">GET</div>
+                            <code>/api/v1/sales?country=United Kingdom&page=1&size=20</code>
+                            <p><strong>Headers:</strong></p>
+                            <pre class="code-example">Authorization: Bearer {token}
+Content-Type: application/json</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">Advanced Analytics</div>
+                        <div class="example-content">
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v2/analytics/advanced-analytics</code>
+                            <pre class="code-example">{
+  "start_date": "2010-12-01T00:00:00Z",
+  "end_date": "2011-12-31T23:59:59Z",
+  "metrics": ["revenue", "transactions"],
+  "dimensions": ["country", "product_category"],
+  "filters": {
+    "country": ["United Kingdom", "Germany"],
+    "min_amount": 10.0
+  }
+}</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">CQRS Command Execution</div>
+                        <div class="example-content">
+                            <div class="method-badge method-post">POST</div>
+                            <code>/api/v1/enterprise/cqrs/command</code>
+                            <pre class="code-example">{
+  "command_type": "create_sale",
+  "command_data": {
+    "customer_id": "12345",
+    "product_id": "ABC123",
+    "quantity": 5,
+    "unit_price": 29.99
+  },
+  "correlation_id": "req_789"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 32px;">
+                    <a href="./postman-collection.json" download class="cta-button">
+                        Download Postman Collection →
+                    </a>
+                    <p style="margin-top: 16px; color: #4a5568; font-size: 14px;">
+                        Import the collection into Postman and use the included environment variables for quick testing.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SDK & Examples Section -->
+        <div id="sdk" class="content-section">
+            <div class="section-header">
+                <h2>SDKs & Code Examples</h2>
+                <p>Language-specific SDKs and comprehensive code examples for integrating with the PwC Data Engineering API.</p>
+            </div>
+            <div class="content-body">
+                <div class="example-grid">
+                    <div class="example-card">
+                        <div class="example-header">Python SDK Example</div>
+                        <div class="example-content">
+                            <pre class="code-example">import pwc_api
+from pwc_api import PwCDataEngineering
+
+# Initialize client
+client = PwCDataEngineering(
+    api_key="your-api-key",
+    base_url="https://api.pwc-data.com"
+)
+
+# Authenticate
+token = client.auth.login("admin", "password")
+
+# Query sales data
+sales = client.sales.get_sales(
+    filters={
+        "country": "United Kingdom",
+        "date_from": "2010-12-01",
+        "date_to": "2011-12-31"
+    },
+    pagination={"page": 1, "size": 20}
+)
+
+# Advanced analytics
+analytics = client.analytics.advanced_analytics(
+    start_date="2010-12-01T00:00:00Z",
+    end_date="2011-12-31T23:59:59Z",
+    metrics=["revenue", "transactions"],
+    dimensions=["country", "product"]
+)
+
+print(f"Found {len(sales.items)} sales records")
+print(f"Analytics request ID: {analytics.request_id}")</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">JavaScript/TypeScript SDK</div>
+                        <div class="example-content">
+                            <pre class="code-example">import { PwCApiClient } from '@pwc/data-engineering-api';
+
+const client = new PwCApiClient({
+  baseURL: 'https://api.pwc-data.com',
+  apiKey: 'your-api-key'
+});
+
+// Authenticate
+const authResult = await client.auth.login({
+  username: 'admin',
+  password: 'password'
+});
+
+client.setAccessToken(authResult.access_token);
+
+// GraphQL query
+const salesData = await client.graphql.query(`
+  query GetSales($filters: SalesFilters) {
+    sales(filters: $filters) {
+      items {
+        sale_id
+        total_amount
+        product { description }
+      }
+      total_count
+    }
+  }
+`, {
+  filters: {
+    country: "United Kingdom",
+    date_from: "2010-12-01"
+  }
+});
+
+console.log(`Found ${salesData.sales.total_count} records`);</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">Java SDK Example</div>
+                        <div class="example-content">
+                            <pre class="code-example">import com.pwc.dataengineering.ApiClient;
+import com.pwc.dataengineering.api.SalesApi;
+import com.pwc.dataengineering.model.*;
+
+// Initialize client
+ApiClient client = new ApiClient()
+    .setBasePath("https://api.pwc-data.com")
+    .setApiKey("your-api-key");
+
+SalesApi salesApi = new SalesApi(client);
+
+// Query sales with filters
+SalesFilters filters = new SalesFilters()
+    .country("United Kingdom")
+    .dateFrom(LocalDate.of(2010, 12, 1))
+    .dateTo(LocalDate.of(2011, 12, 31));
+
+PaginationInput pagination = new PaginationInput()
+    .page(1)
+    .pageSize(20);
+
+PaginatedSales sales = salesApi.listSales(
+    filters.getDateFrom(),
+    filters.getDateTo(),
+    filters.getProduct(),
+    filters.getCountry(),
+    pagination.getPage(),
+    pagination.getPageSize(),
+    "invoice_date:desc"
+);
+
+System.out.println("Total sales: " + sales.getTotal());</pre>
+                        </div>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-header">C# .NET SDK</div>
+                        <div class="example-content">
+                            <pre class="code-example">using PwC.DataEngineering.Api;
+using PwC.DataEngineering.Client;
+using PwC.DataEngineering.Model;
+
+var configuration = new Configuration
+{
+    BasePath = "https://api.pwc-data.com",
+    ApiKey = { { "ApiKeyAuth", "your-api-key" } }
+};
+
+var apiInstance = new SalesApi(configuration);
+
+try
+{
+    var sales = await apiInstance.ListSalesAsync(
+        dateFrom: "2010-12-01",
+        dateTo: "2011-12-31",
+        country: "United Kingdom",
+        page: 1,
+        size: 20
+    );
+    
+    Console.WriteLine($"Retrieved {sales.Items.Count} sales records");
+    Console.WriteLine($"Total available: {sales.Total}");
+    
+    foreach (var sale in sales.Items)
+    {
+        Console.WriteLine($"Sale {sale.InvoiceNo}: ${sale.TotalAmount}");
+    }
+}
+catch (ApiException e)
+{
+    Console.WriteLine($"API Error: {e.ErrorCode} - {e.Message}");
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 32px;">
+                    <h3 style="color: #1a202c; margin-bottom: 16px;">Installation Instructions</h3>
+                    
+                    <div class="example-card">
+                        <div class="example-header">Package Installation</div>
+                        <div class="example-content">
+                            <p><strong>Python:</strong></p>
+                            <pre class="code-example">pip install pwc-data-engineering-api</pre>
+                            
+                            <p><strong>JavaScript/Node.js:</strong></p>
+                            <pre class="code-example">npm install @pwc/data-engineering-api</pre>
+                            
+                            <p><strong>Java (Maven):</strong></p>
+                            <pre class="code-example">&lt;dependency&gt;
+  &lt;groupId&gt;com.pwc&lt;/groupId&gt;
+  &lt;artifactId&gt;data-engineering-api&lt;/artifactId&gt;
+  &lt;version&gt;3.0.0&lt;/version&gt;
+&lt;/dependency&gt;</pre>
+                            
+                            <p><strong>.NET (NuGet):</strong></p>
+                            <pre class="code-example">Install-Package PwC.DataEngineering.Api</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-standalone-preset.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2.0.0/bundles/redoc.standalone.js"></script>
+
+    <script>
+        // Global state
+        let swaggerInitialized = false;
+        let redocInitialized = false;
+
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Initialize specific sections on demand
+            if (sectionId === 'swagger' && !swaggerInitialized) {
+                initializeSwagger();
+            } else if (sectionId === 'redoc' && !redocInitialized) {
+                initializeRedoc();
+            }
+        }
+
+        function initializeSwagger() {
+            SwaggerUIBundle({
+                url: './openapi-3.0-specification.yaml',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+                validatorUrl: null,
+                docExpansion: 'list',
+                defaultModelsExpandDepth: 2,
+                displayRequestDuration: true,
+                showCommonExtensions: true,
+                tryItOutEnabled: true
+            });
+            swaggerInitialized = true;
+        }
+
+        function initializeRedoc() {
+            Redoc.init('./openapi-3.0-specification.yaml', {
+                scrollYOffset: 80,
+                hideDownloadButton: false,
+                theme: {
+                    colors: {
+                        primary: {
+                            main: '#667eea'
+                        }
+                    },
+                    typography: {
+                        fontSize: '14px',
+                        headings: {
+                            fontFamily: 'Inter, sans-serif'
+                        }
+                    }
+                }
+            }, document.getElementById('redoc-container'));
+            redocInitialized = true;
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up initial state
+            showSection('welcome');
+        });
+    </script>
+</body>
+</html>

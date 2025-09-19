@@ -1,0 +1,517 @@
+---
+# Comprehensive Alerting Rules with Severity-Based Escalation
+# =========================================================
+# Enterprise-grade alerting for PwC Challenge DataEngineer platform
+# Covers infrastructure, application, business metrics, and security alerts
+
+groups:
+  # ========================================
+  # CRITICAL ALERTS - Immediate Response Required
+  # ========================================
+  - name: critical_infrastructure_alerts
+    interval: 15s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: infrastructure
+          runbook: "https://runbooks.company.com/service-down"
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} has been down for more than 30 seconds. Immediate intervention required."
+          impact: "High - Core service unavailable"
+          action: "Check service status, logs, and restart if necessary"
+
+      - alert: DatabaseConnectionFailure
+        expr: database_connections_active / database_connections_max > 0.95
+        for: 1m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: database
+          runbook: "https://runbooks.company.com/database-connection-failure"
+        annotations:
+          summary: "Database connection pool exhausted"
+          description: "Database connection utilization is {{ $value }}% - above 95% threshold"
+          impact: "Critical - Application performance severely degraded"
+          action: "Scale database connections or investigate connection leaks"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: application
+          runbook: "https://runbooks.company.com/high-error-rate"
+        annotations:
+          summary: "High error rate detected: {{ $value }}%"
+          description: "Error rate is {{ $value }}% over the last 5 minutes, exceeding 10% threshold"
+          impact: "Critical - User experience severely impacted"
+          action: "Check application logs, recent deployments, and infrastructure"
+
+      - alert: APIResponseTimeCritical
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2.0
+        for: 3m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: performance
+          runbook: "https://runbooks.company.com/api-performance"
+        annotations:
+          summary: "API response time critically high: {{ $value }}s"
+          description: "95th percentile response time is {{ $value }}s, exceeding 2s SLA"
+          impact: "Critical - SLA breach, user experience severely degraded"
+          action: "Investigate performance bottlenecks, check database queries, scale resources"
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 5
+        for: 1m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: infrastructure
+          runbook: "https://runbooks.company.com/disk-space"
+        annotations:
+          summary: "Critical disk space: {{ $value }}% available"
+          description: "Disk space on {{ $labels.instance }} is critically low at {{ $value }}%"
+          impact: "Critical - System failure imminent"
+          action: "Free disk space immediately, archive logs, clean temporary files"
+
+      - alert: MemoryUsageCritical
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: infrastructure
+          runbook: "https://runbooks.company.com/memory-usage"
+        annotations:
+          summary: "Critical memory usage: {{ $value }}%"
+          description: "Memory usage on {{ $labels.instance }} is {{ $value }}%, above 95% threshold"
+          impact: "Critical - OOM kill risk, system instability"
+          action: "Investigate memory leaks, restart services, scale resources"
+
+  # ========================================
+  # HIGH SEVERITY ALERTS - Urgent Response Required
+  # ========================================
+  - name: high_severity_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: infrastructure
+          runbook: "https://runbooks.company.com/high-cpu"
+        annotations:
+          summary: "High CPU usage: {{ $value }}%"
+          description: "CPU usage on {{ $labels.instance }} is {{ $value }}% for more than 5 minutes"
+          impact: "High - Performance degradation"
+          action: "Investigate CPU-intensive processes, consider scaling"
+
+      - alert: DatabaseSlowQueries
+        expr: rate(database_slow_queries_total[5m]) > 10
+        for: 3m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: database
+          runbook: "https://runbooks.company.com/slow-queries"
+        annotations:
+          summary: "High rate of slow database queries: {{ $value }}/sec"
+          description: "Slow query rate is {{ $value }} queries/second, above 10/sec threshold"
+          impact: "High - Application performance degraded"
+          action: "Review query execution plans, optimize indexes, check database load"
+
+      - alert: ETLPipelineFailure
+        expr: etl_pipeline_failed_runs_total > 0
+        for: 1m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: data_engineering
+          runbook: "https://runbooks.company.com/etl-failure"
+        annotations:
+          summary: "ETL pipeline failure detected"
+          description: "{{ $value }} ETL pipeline runs have failed in the last minute"
+          impact: "High - Data processing disrupted, analytics affected"
+          action: "Check pipeline logs, validate data sources, restart pipeline"
+
+      - alert: RedisConnectionIssues
+        expr: redis_connected_clients / redis_maxclients > 0.8
+        for: 2m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: cache
+          runbook: "https://runbooks.company.com/redis-connections"
+        annotations:
+          summary: "Redis connection utilization high: {{ $value }}%"
+          description: "Redis client connections at {{ $value }}% of maximum capacity"
+          impact: "High - Cache performance degraded, application slowdown"
+          action: "Check for connection leaks, scale Redis cluster, optimize client usage"
+
+      - alert: SecurityAlertHigh
+        expr: security_events_high_severity_total > 5
+        for: 1m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: security
+          runbook: "https://runbooks.company.com/security-high"
+        annotations:
+          summary: "High-severity security events detected: {{ $value }}"
+          description: "{{ $value }} high-severity security events in the last minute"
+          impact: "High - Potential security breach"
+          action: "Review security logs, check for intrusion attempts, notify security team"
+
+  # ========================================
+  # MEDIUM SEVERITY ALERTS - Standard Response
+  # ========================================
+  - name: medium_severity_alerts
+    interval: 1m
+    rules:
+      - alert: ModerateAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: performance
+          runbook: "https://runbooks.company.com/moderate-latency"
+        annotations:
+          summary: "Moderate API latency: {{ $value }}s"
+          description: "95th percentile response time is {{ $value }}s, above 500ms target"
+          impact: "Medium - User experience slightly degraded"
+          action: "Monitor performance trends, investigate if pattern continues"
+
+      - alert: IncreasingErrorRate
+        expr: rate(http_requests_total{status=~"4.."}[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: application
+          runbook: "https://runbooks.company.com/client-errors"
+        annotations:
+          summary: "Increasing client error rate: {{ $value }}%"
+          description: "4xx error rate is {{ $value }}% over 10 minutes, above 5% threshold"
+          impact: "Medium - Client integration issues"
+          action: "Review API usage patterns, check for configuration changes"
+
+      - alert: BusinessMetricsAnomaly
+        expr: abs(business_health_score - avg_over_time(business_health_score[1d])) > 10
+        for: 15m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: business_intelligence
+          runbook: "https://runbooks.company.com/business-metrics"
+        annotations:
+          summary: "Business health score anomaly detected"
+          description: "Business health score {{ $value }} deviates significantly from daily average"
+          impact: "Medium - Business KPI anomaly"
+          action: "Investigate business metric components, validate data sources"
+
+      - alert: DataQualityIssue
+        expr: data_quality_score < 85
+        for: 10m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: data_quality
+          runbook: "https://runbooks.company.com/data-quality"
+        annotations:
+          summary: "Data quality score below threshold: {{ $value }}%"
+          description: "Data quality score is {{ $value }}%, below 85% threshold"
+          impact: "Medium - Analytics reliability affected"
+          action: "Run data validation checks, investigate recent data changes"
+
+  # ========================================
+  # LOW SEVERITY ALERTS - Informational
+  # ========================================
+  - name: low_severity_alerts
+    interval: 2m
+    rules:
+      - alert: HighDiskIOWait
+        expr: rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 20m
+        labels:
+          severity: low
+          escalation_level: informational
+          team: infrastructure
+          runbook: "https://runbooks.company.com/disk-io"
+        annotations:
+          summary: "High disk I/O wait time: {{ $value }}"
+          description: "Disk I/O wait time on {{ $labels.instance }} is {{ $value }}"
+          impact: "Low - Potential performance impact"
+          action: "Monitor disk performance, consider I/O optimization"
+
+      - alert: UnusualTrafficPattern
+        expr: abs(rate(http_requests_total[5m]) - avg_over_time(rate(http_requests_total[5m])[1d])) > stddev_over_time(rate(http_requests_total[5m])[1d]) * 2
+        for: 30m
+        labels:
+          severity: low
+          escalation_level: informational
+          team: monitoring
+          runbook: "https://runbooks.company.com/traffic-patterns"
+        annotations:
+          summary: "Unusual traffic pattern detected"
+          description: "Request rate deviates significantly from daily pattern"
+          impact: "Low - Monitoring informational"
+          action: "Investigate traffic sources, check for marketing campaigns"
+
+  # ========================================
+  # BUSINESS INTELLIGENCE ALERTS
+  # ========================================
+  - name: business_intelligence_alerts
+    interval: 5m
+    rules:
+      - alert: RevenueDropSignificant
+        expr: sum(revenue_total) / sum(avg_over_time(revenue_total[7d])) < 0.8
+        for: 30m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: business
+          runbook: "https://runbooks.company.com/revenue-drop"
+        annotations:
+          summary: "Significant revenue drop detected: {{ $value }}%"
+          description: "Current revenue is {{ $value }}% of weekly average"
+          impact: "High - Business impact"
+          action: "Analyze sales data, check payment systems, review customer behavior"
+
+      - alert: CustomerChurnRateHigh
+        expr: churn_prediction_confidence > 0.8 and rate(customer_churn_events_total[1h]) > 0.05
+        for: 1h
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: customer_success
+          runbook: "https://runbooks.company.com/customer-churn"
+        annotations:
+          summary: "High customer churn rate detected"
+          description: "Churn rate is {{ $value }}% with high confidence prediction"
+          impact: "Medium - Customer retention affected"
+          action: "Review customer satisfaction metrics, initiate retention campaigns"
+
+      - alert: SalesConversionDrop
+        expr: rate(sales_conversion_events_total[1h]) / rate(sales_lead_events_total[1h]) < 0.02
+        for: 2h
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: sales
+          runbook: "https://runbooks.company.com/conversion-drop"
+        annotations:
+          summary: "Sales conversion rate below threshold: {{ $value }}%"
+          description: "Conversion rate is {{ $value }}%, below 2% target"
+          impact: "Medium - Sales performance affected"
+          action: "Review sales funnel, analyze lead quality, check sales processes"
+
+  # ========================================
+  # SECURITY ALERTS
+  # ========================================
+  - name: security_alerts
+    interval: 30s
+    rules:
+      - alert: SuspiciousLoginAttempts
+        expr: rate(failed_login_attempts_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: security
+          runbook: "https://runbooks.company.com/suspicious-logins"
+        annotations:
+          summary: "Suspicious login attempts detected: {{ $value }}/min"
+          description: "Failed login rate is {{ $value }} attempts/minute, above 10/min threshold"
+          impact: "High - Potential brute force attack"
+          action: "Block suspicious IPs, notify security team, review access logs"
+
+      - alert: UnauthorizedAPIAccess
+        expr: rate(http_requests_total{status="401"}[5m]) > 20
+        for: 3m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: security
+          runbook: "https://runbooks.company.com/unauthorized-access"
+        annotations:
+          summary: "High rate of unauthorized API access: {{ $value }}/min"
+          description: "401 responses at {{ $value }} requests/minute, above 20/min threshold"
+          impact: "Medium - Potential API abuse"
+          action: "Review API keys, check authentication system, analyze request patterns"
+
+      - alert: DataExfiltrationSuspected
+        expr: rate(bytes_transmitted_total[5m]) > 100 * 1024 * 1024  # 100MB/min
+        for: 10m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: security
+          runbook: "https://runbooks.company.com/data-exfiltration"
+        annotations:
+          summary: "Suspected data exfiltration: {{ $value }} bytes/min"
+          description: "Unusually high data transmission rate detected"
+          impact: "Critical - Potential data breach"
+          action: "Block suspicious connections, investigate network traffic, notify security team immediately"
+
+  # ========================================
+  # DATA PIPELINE ALERTS
+  # ========================================
+  - name: data_pipeline_alerts
+    interval: 2m
+    rules:
+      - alert: ETLLatencyHigh
+        expr: etl_processing_duration_seconds > 3600  # 1 hour
+        for: 5m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: data_engineering
+          runbook: "https://runbooks.company.com/etl-latency"
+        annotations:
+          summary: "ETL processing latency high: {{ $value }}s"
+          description: "ETL pipeline taking {{ $value }} seconds, above 1 hour threshold"
+          impact: "Medium - Data freshness affected"
+          action: "Check data source volumes, optimize processing, review resource allocation"
+
+      - alert: DataIngestionFailure
+        expr: rate(data_ingestion_errors_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: high
+          escalation_level: urgent
+          team: data_engineering
+          runbook: "https://runbooks.company.com/ingestion-failure"
+        annotations:
+          summary: "Data ingestion failure rate: {{ $value }}%"
+          description: "Data ingestion error rate is {{ $value }}%, above 10% threshold"
+          impact: "High - Data pipeline disrupted"
+          action: "Check data sources, validate schemas, restart ingestion jobs"
+
+      - alert: StreamingLagHigh
+        expr: kafka_consumer_lag > 10000
+        for: 5m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: streaming
+          runbook: "https://runbooks.company.com/streaming-lag"
+        annotations:
+          summary: "High streaming consumer lag: {{ $value }} messages"
+          description: "Kafka consumer lag is {{ $value }} messages, above 10k threshold"
+          impact: "Medium - Real-time processing delayed"
+          action: "Scale consumers, check processing bottlenecks, optimize consumer performance"
+
+  # ========================================
+  # INFRASTRUCTURE MONITORING
+  # ========================================
+  - name: infrastructure_monitoring
+    interval: 1m
+    rules:
+      - alert: ContainerRestartFrequent
+        expr: rate(container_restarts_total[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: infrastructure
+          runbook: "https://runbooks.company.com/container-restarts"
+        annotations:
+          summary: "Frequent container restarts: {{ $value }}/min"
+          description: "Container {{ $labels.container }} restarting {{ $value }} times/minute"
+          impact: "Medium - Service instability"
+          action: "Check container logs, review resource limits, investigate crash causes"
+
+      - alert: NetworkLatencyHigh
+        expr: network_latency_seconds > 0.1
+        for: 10m
+        labels:
+          severity: low
+          escalation_level: informational
+          team: infrastructure
+          runbook: "https://runbooks.company.com/network-latency"
+        annotations:
+          summary: "High network latency: {{ $value }}s"
+          description: "Network latency is {{ $value }}s, above 100ms threshold"
+          impact: "Low - Potential performance impact"
+          action: "Check network connectivity, review routing, monitor ISP status"
+
+      - alert: LoadBalancerHealthCheck
+        expr: up{job="load_balancer"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          escalation_level: immediate
+          team: infrastructure
+          runbook: "https://runbooks.company.com/load-balancer"
+        annotations:
+          summary: "Load balancer health check failed"
+          description: "Load balancer {{ $labels.instance }} is not responding to health checks"
+          impact: "Critical - Traffic routing affected"
+          action: "Check load balancer status, verify backend health, failover if necessary"
+
+  # ========================================
+  # CUSTOM BUSINESS METRICS ALERTS
+  # ========================================
+  - name: custom_business_metrics
+    interval: 5m
+    rules:
+      - alert: BMAdStoryCompletionStalled
+        expr: rate(bmad_story_completion_percentage[1h]) == 0 and bmad_story_completion_percentage < 90
+        for: 2h
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: project_management
+          runbook: "https://runbooks.company.com/story-completion"
+        annotations:
+          summary: "BMAD story completion stalled at {{ $value }}%"
+          description: "Story {{ $labels.story_id }} completion hasn't progressed in 2 hours"
+          impact: "Medium - Project timeline at risk"
+          action: "Review story blockers, check team capacity, escalate to project manager"
+
+      - alert: CustomerLifetimeValueDrop
+        expr: avg(customer_lifetime_value) < avg(avg_over_time(customer_lifetime_value[7d])) * 0.9
+        for: 4h
+        labels:
+          severity: medium
+          escalation_level: standard
+          team: customer_analytics
+          runbook: "https://runbooks.company.com/clv-drop"
+        annotations:
+          summary: "Customer lifetime value declining: {{ $value }}"
+          description: "Average CLV dropped to {{ $value }}, 10% below weekly average"
+          impact: "Medium - Customer value optimization needed"
+          action: "Analyze customer behavior, review pricing strategy, implement retention programs"
+
+      - alert: RFMScoreAnomaly
+        expr: abs(rfm_segment_distribution{segment="high_value"} - avg_over_time(rfm_segment_distribution{segment="high_value"}[7d])) > 0.05
+        for: 6h
+        labels:
+          severity: low
+          escalation_level: informational
+          team: customer_analytics
+          runbook: "https://runbooks.company.com/rfm-anomaly"
+        annotations:
+          summary: "RFM segment distribution anomaly detected"
+          description: "High-value customer segment changed by {{ $value }}% from weekly average"
+          impact: "Low - Customer segmentation shift"
+          action: "Review customer behavior patterns, validate RFM calculations"
+
+# ========================================
+# ESCALATION CONFIGURATION
+# ========================================
+# This section defines escalation paths based on severity levels
+# immediate: Page on-call engineer, escalate to manager after 15 minutes
+# urgent: Notify team lead, escalate to on-call after 30 minutes
+# standard: Create ticket, notify team during business hours
+# informational: Log to monitoring dashboard, weekly review

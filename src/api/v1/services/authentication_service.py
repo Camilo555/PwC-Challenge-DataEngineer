@@ -20,13 +20,21 @@ class AuthenticationService:
         self.security_config = SecurityConfig()
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return self.pwd_context.verify(plain_password, hashed_password)
+    async def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        # Use async context for potentially blocking password verification
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self.pwd_context.verify, plain_password, hashed_password
+        )
 
-    def get_password_hash(self, password: str) -> str:
-        return self.pwd_context.hash(password)
+    async def get_password_hash(self, password: str) -> str:
+        # Use async context for potentially blocking password hashing
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self.pwd_context.hash, password
+        )
 
-    def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+    async def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         to_encode = data.copy()
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
@@ -41,7 +49,7 @@ class AuthenticationService:
         )
         return encoded_jwt
 
-    def verify_token(self, token: str) -> TokenData | None:
+    async def verify_token(self, token: str) -> TokenData | None:
         try:
             payload = jwt.decode(
                 token,
@@ -60,12 +68,12 @@ class AuthenticationService:
         except JWTError:
             return None
 
-    def authenticate_user(self, username: str, password: str) -> bool:
+    async def authenticate_user(self, username: str, password: str) -> bool:
         if username != self.security_config.admin_username:
             return False
-        return self.verify_password(password, self.security_config.hashed_password)
+        return await self.verify_password(password, self.security_config.hashed_password)
 
-    def create_user_token(self, username: str, permissions: list[str] = None) -> str:
+    async def create_user_token(self, username: str, permissions: list[str] = None) -> str:
         if permissions is None:
             permissions = ["read", "write"]
 
@@ -74,4 +82,4 @@ class AuthenticationService:
             "permissions": permissions,
             "iat": datetime.utcnow()
         }
-        return self.create_access_token(token_data)
+        return await self.create_access_token(token_data)

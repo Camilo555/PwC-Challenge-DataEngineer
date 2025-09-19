@@ -1,0 +1,542 @@
+# Resource Efficiency Optimizer
+# Automated resource rightsizing and efficiency improvements
+
+---
+# Resource Efficiency Namespace (if not exists)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: optimization
+    managed-by: bmad-platform
+
+---
+# Resource Efficiency Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resource-efficiency-config
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: configuration
+data:
+  efficiency-config.yaml: |
+    resource_efficiency:
+      enabled: true
+      analysis_interval_minutes: 15
+      optimization_interval_hours: 6
+
+      # Resource utilization targets
+      utilization_targets:
+        cpu:
+          target_percentage: 70
+          min_threshold: 20
+          max_threshold: 85
+          burst_allowance: 90
+
+        memory:
+          target_percentage: 75
+          min_threshold: 30
+          max_threshold: 90
+          oom_protection_buffer: 0.1  # 10% buffer
+
+        storage:
+          target_percentage: 80
+          cleanup_threshold: 85
+          archival_threshold: 70
+
+      # Rightsizing policies
+      rightsizing:
+        enabled: true
+        confidence_threshold: 0.85
+        minimum_observation_hours: 24
+        maximum_observation_days: 14
+
+        cpu_rightsizing:
+          enabled: true
+          scaling_factor: 1.2  # 20% headroom
+          minimum_cpu_millicores: 100
+          maximum_cpu_cores: 16
+
+        memory_rightsizing:
+          enabled: true
+          scaling_factor: 1.15  # 15% headroom
+          minimum_memory_mb: 256
+          maximum_memory_gb: 64
+
+        storage_rightsizing:
+          enabled: true
+          scaling_factor: 1.3  # 30% headroom
+          minimum_storage_gb: 1
+          maximum_storage_gb: 1000
+
+      # Workload optimization
+      workload_optimization:
+        idle_detection:
+          enabled: true
+          idle_threshold_minutes: 30
+          idle_cpu_percentage: 5
+          idle_memory_percentage: 10
+
+        burst_optimization:
+          enabled: true
+          burst_duration_minutes: 10
+          burst_cpu_multiplier: 2.0
+          burst_memory_multiplier: 1.5
+
+        batch_workload_optimization:
+          enabled: true
+          preferred_instance_types: ["c5.large", "c5.xlarge", "m5.large"]
+          spot_instance_preference: 0.8
+
+        interactive_workload_optimization:
+          enabled: true
+          preferred_instance_types: ["m5.large", "m5.xlarge", "r5.large"]
+          performance_priority: 0.7
+
+      # Cost optimization strategies
+      cost_strategies:
+        spot_instances:
+          enabled: true
+          suitable_workloads: ["analytics", "batch-processing", "dev-environments"]
+          interruption_handling: "graceful_drain"
+          fallback_to_ondemand: true
+
+        reserved_instances:
+          enabled: true
+          commitment_analysis: true
+          recommendation_confidence: 0.9
+
+        scheduled_scaling:
+          enabled: true
+          business_hours:
+            start: "09:00"
+            end: "18:00"
+            timezone: "UTC"
+            scale_factor: 1.0
+          off_hours:
+            scale_factor: 0.6
+          weekends:
+            scale_factor: 0.4
+
+      # Quality gates for optimization
+      quality_gates:
+        sla_compliance:
+          enabled: true
+          min_availability: 99.9
+          max_response_time_ms: 500
+          error_rate_threshold: 0.1
+
+        performance_regression:
+          enabled: true
+          max_performance_degradation: 0.05  # 5%
+          monitoring_window_hours: 2
+
+        stability_requirements:
+          enabled: true
+          min_mtbf_hours: 168  # 1 week
+          max_restart_rate_per_day: 2
+
+      # Advanced optimization features
+      advanced_features:
+        machine_learning_predictions:
+          enabled: true
+          model_type: "lstm"
+          prediction_window_hours: 24
+          training_data_days: 30
+
+        workload_pattern_recognition:
+          enabled: true
+          pattern_analysis_days: 14
+          seasonal_adjustment: true
+
+        intelligent_preemption:
+          enabled: true
+          preemption_threshold: 0.8
+          graceful_termination_seconds: 300
+
+---
+# Resource Efficiency Controller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-efficiency-controller
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: controller
+spec:
+  replicas: 1  # Single instance for coordination
+  selector:
+    matchLabels:
+      app: resource-efficiency
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: resource-efficiency
+        component: controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: resource-efficiency-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+      - name: efficiency-controller
+        image: bmad/resource-efficiency:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: CONFIG_PATH
+          value: "/config/efficiency-config.yaml"
+        - name: KUBERNETES_NAMESPACE
+          value: "bmad-production"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: DRY_RUN_MODE
+          value: "false"  # Set to true for testing
+        - name: LOG_LEVEL
+          value: "INFO"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        - name: recommendations-volume
+          mountPath: /recommendations
+        resources:
+          requests:
+            cpu: 300m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: config-volume
+        configMap:
+          name: resource-efficiency-config
+      - name: recommendations-volume
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+# Resource Efficiency Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: resource-efficiency-service
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: controller
+spec:
+  selector:
+    app: resource-efficiency
+    component: controller
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP
+
+---
+# Service Account for Resource Efficiency
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: resource-efficiency-service-account
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+automountServiceAccountToken: true
+
+---
+# RBAC for Resource Efficiency Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: resource-efficiency-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers", "verticalpodautoscalers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+- apiGroups: ["custom.metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: resource-efficiency-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: resource-efficiency-service-account
+  namespace: resource-optimization
+roleRef:
+  kind: ClusterRole
+  name: resource-efficiency-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Resource Analysis CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: resource-analysis-job
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: analyzer
+spec:
+  schedule: "*/30 * * * *"  # Run every 30 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: resource-efficiency
+            component: analyzer-job
+        spec:
+          serviceAccountName: resource-efficiency-service-account
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          containers:
+          - name: resource-analyzer
+            image: bmad/resource-analyzer:v1.0.0
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: ANALYSIS_TYPE
+              value: "comprehensive"
+            - name: LOOKBACK_HOURS
+              value: "24"
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.85"
+            - name: OUTPUT_PATH
+              value: "/tmp/analysis-results.json"
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting resource efficiency analysis..."
+              /app/resource-analyzer \
+                --type=comprehensive \
+                --lookback=${LOOKBACK_HOURS}h \
+                --confidence-threshold=${CONFIDENCE_THRESHOLD} \
+                --output=${OUTPUT_PATH}
+              echo "Analysis completed. Results saved to ${OUTPUT_PATH}"
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+            volumeMounts:
+            - name: analysis-results
+              mountPath: /tmp
+          volumes:
+          - name: analysis-results
+            emptyDir:
+              sizeLimit: 500Mi
+
+---
+# Rightsizing Recommendations CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rightsizing-recommendations
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: rightsizing
+spec:
+  schedule: "0 */4 * * *"  # Run every 4 hours
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: resource-efficiency
+            component: rightsizing-job
+        spec:
+          serviceAccountName: resource-efficiency-service-account
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          containers:
+          - name: rightsizing-engine
+            image: bmad/rightsizing-engine:v1.0.0
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: RECOMMENDATION_MODE
+              value: "conservative"
+            - name: ANALYSIS_WINDOW_HOURS
+              value: "168"  # 1 week
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.9"
+            - name: DRY_RUN
+              value: "false"
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting rightsizing analysis..."
+              /app/rightsizing-engine \
+                --mode=${RECOMMENDATION_MODE} \
+                --window=${ANALYSIS_WINDOW_HOURS}h \
+                --confidence=${CONFIDENCE_THRESHOLD} \
+                --dry-run=${DRY_RUN} \
+                --apply-recommendations=true
+              echo "Rightsizing analysis and recommendations completed."
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2Gi
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+            volumeMounts:
+            - name: recommendations-storage
+              mountPath: /recommendations
+          volumes:
+          - name: recommendations-storage
+            emptyDir:
+              sizeLimit: 1Gi
+
+---
+# PrometheusRule for Resource Efficiency Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: resource-efficiency-alerts
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: alerting
+spec:
+  groups:
+  - name: resource-efficiency.rules
+    interval: 30s
+    rules:
+    # Resource underutilization alert
+    - alert: ResourceUnderutilization
+      expr: |
+        (
+          avg_over_time(container_cpu_usage_seconds_total[1h]) /
+          avg_over_time(container_spec_cpu_quota[1h]) * 100
+        ) < 20
+      for: 30m
+      labels:
+        severity: info
+        component: resource-efficiency
+      annotations:
+        summary: "Container resource underutilization detected"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has been underutilizing CPU (<20%) for 30 minutes"
+
+    # Resource overutilization alert
+    - alert: ResourceOverutilization
+      expr: |
+        (
+          avg_over_time(container_cpu_usage_seconds_total[5m]) /
+          avg_over_time(container_spec_cpu_quota[5m]) * 100
+        ) > 90
+      for: 10m
+      labels:
+        severity: warning
+        component: resource-efficiency
+      annotations:
+        summary: "Container resource overutilization detected"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has been overutilizing CPU (>90%) for 10 minutes"
+
+    # Memory pressure alert
+    - alert: MemoryPressure
+      expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.90
+      for: 5m
+      labels:
+        severity: warning
+        component: resource-efficiency
+      annotations:
+        summary: "Container memory pressure detected"
+        description: "Container {{ $labels.container }} is using {{ $value | humanizePercentage }} of its memory limit"
+
+    # Rightsizing opportunity alert
+    - alert: RightsizingOpportunity
+      expr: increase(resource_rightsizing_opportunities_total[1h]) > 5
+      for: 0m
+      labels:
+        severity: info
+        component: resource-efficiency
+      annotations:
+        summary: "Multiple rightsizing opportunities detected"
+        description: "{{ $value }} new rightsizing opportunities have been identified in the last hour"
+
+---
+# Service Monitor for Resource Efficiency
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: resource-efficiency-monitor
+  namespace: resource-optimization
+  labels:
+    app: resource-efficiency
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: resource-efficiency
+      component: controller
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+  namespaceSelector:
+    matchNames:
+    - resource-optimization

@@ -1,55 +1,171 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: 'pwc-data-platform'
+    environment: 'production'
+    platform_value: '27.8M'
 
 rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+  - "alert-rules.yml"
+  - "business-metrics-rules.yml"
+  - "slo-rules.yml"
+  - "intelligent-alerting-rules.yml"
 
 scrape_configs:
-  # API service monitoring
-  - job_name: 'pwc-api'
+  # High-frequency API monitoring for <15ms SLA
+  - job_name: 'pwc-api-high-freq'
     static_configs:
       - targets: ['api:8000']
     metrics_path: /metrics
-    scrape_interval: 30s
+    scrape_interval: 5s
+    scrape_timeout: 3s
+    params:
+      format: ['prometheus']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'http_request_duration_seconds.*'
+        target_label: sla_critical
+        replacement: 'true'
+      - source_labels: [__name__]
+        regex: 'api_response_time_ms.*'
+        target_label: business_impact
+        replacement: '2.1M'
     
-  # Dagster monitoring
-  - job_name: 'dagster'
+  # Business KPI monitoring
+  - job_name: 'business-kpis'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /business-metrics
+    scrape_interval: 60s
+    honor_labels: true
+    
+  # Enhanced Dagster monitoring
+  - job_name: 'dagster-etl'
     static_configs:
       - targets: ['dagster:3000']
     metrics_path: /metrics
-    scrape_interval: 60s
+    scrape_interval: 30s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'dagster_.*'
+        target_label: component
+        replacement: 'etl-pipeline'
     
-  # RabbitMQ monitoring  
-  - job_name: 'rabbitmq'
+  # RabbitMQ enhanced monitoring
+  - job_name: 'rabbitmq-detailed'
     static_configs:
       - targets: ['rabbitmq:15692']
     metrics_path: /metrics
-    scrape_interval: 30s
+    scrape_interval: 15s
     
-  # Kafka monitoring (JMX)
-  - job_name: 'kafka'
+  # Kafka JMX with business context
+  - job_name: 'kafka-streaming'
     static_configs:
       - targets: ['kafka:9101']
-    scrape_interval: 30s
+    scrape_interval: 15s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'kafka_.*'
+        target_label: streaming_value
+        replacement: '3.4M'
     
-  # PostgreSQL monitoring
-  - job_name: 'postgres'
+  # PostgreSQL performance monitoring
+  - job_name: 'postgres-performance'
     static_configs:
       - targets: ['postgres:5432']
-    scrape_interval: 60s
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
     
-  # Spark monitoring
-  - job_name: 'spark-master'
+  # Spark monitoring enhanced
+  - job_name: 'spark-analytics'
     static_configs:
       - targets: ['spark-master:8080']
-    metrics_path: /metrics/master/json/
-    scrape_interval: 60s
+      - targets: ['spark-worker:8081']
+    metrics_path: /metrics
+    scrape_interval: 30s
     
-  # Typesense monitoring
-  - job_name: 'typesense'
+  # Typesense search monitoring
+  - job_name: 'typesense-search'
     static_configs:
       - targets: ['typesense:8108']
     metrics_path: /metrics
+    scrape_interval: 30s
+    
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    
+  # cAdvisor for container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    
+  # Redis monitoring
+  - job_name: 'redis-cache'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+    
+  # Elasticsearch monitoring
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    metrics_path: /_prometheus/metrics
+    scrape_interval: 30s
+    
+  # Custom application metrics
+  - job_name: 'custom-app-metrics'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /custom-metrics
+    scrape_interval: 15s
+    
+  # ML model monitoring
+  - job_name: 'ml-models'
+    static_configs:
+      - targets: ['ml-service:8080']
+    metrics_path: /ml-metrics
     scrape_interval: 60s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'ml_.*'
+        target_label: ai_value
+        replacement: '3.5M'
+        
+  # Security monitoring
+  - job_name: 'security-metrics'
+    static_configs:
+      - targets: ['security-service:8080']
+    metrics_path: /security-metrics
+    scrape_interval: 10s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'security_.*'
+        target_label: security_value
+        replacement: '4.2M'
+        
+  # BMAD Story monitoring
+  - job_name: 'bmad-stories'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /bmad-metrics
+    scrape_interval: 30s
+    honor_labels: true
+    
+  # Synthetic monitoring results
+  - job_name: 'synthetic-monitoring'
+    static_configs:
+      - targets: ['synthetic-monitor:8080']
+    metrics_path: /metrics
+    scrape_interval: 60s
+    
+  # Cost optimization metrics
+  - job_name: 'cost-optimization'
+    static_configs:
+      - targets: ['cost-monitor:8080']
+    metrics_path: /cost-metrics
+    scrape_interval: 300s  # 5 minutes

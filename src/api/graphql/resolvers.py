@@ -30,6 +30,12 @@ from api.graphql.schemas import (
 )
 from api.v1.services.async_tasks import AsyncTaskService
 from api.v1.services.datamart_service import DataMartService
+from api.graphql.dataloader import (
+    DataLoaderRegistry, 
+    DataLoaderContext,
+    get_dataloaders,
+    dataloader_monitor
+)
 from core.logging import get_logger
 from data_access.db import get_session
 from data_access.models.star_schema import (
@@ -47,6 +53,21 @@ def get_session_from_info(info: Info) -> Session:
     """Get database session from GraphQL info context."""
     return next(get_session())
 
+def get_dataloaders_from_info(info: Info) -> dict:
+    """Get DataLoaders from GraphQL info context."""
+    if hasattr(info.context, 'dataloaders'):
+        return info.context.dataloaders
+    
+    # Create new DataLoaders for this request
+    session = get_session_from_info(info)
+    dataloaders = get_dataloaders(session)
+    
+    # Store in context for request duration
+    if not hasattr(info.context, 'dataloaders'):
+        info.context.dataloaders = dataloaders
+    
+    return dataloaders
+
 
 @strawberry.type
 class Query:
@@ -59,13 +80,17 @@ class Query:
         filters: SalesFilters | None = None,
         pagination: PaginationInput | None = None
     ) -> PaginatedSales:
-        """Get paginated sales data with optional filters."""
+        """Get paginated sales data with optional filters using optimized DataLoader pattern."""
         session = get_session_from_info(info)
+        dataloaders = get_dataloaders_from_info(info)
 
         try:
-            # Build base query
+            # Build optimized query - only fetch FactSale data and foreign keys
             query = select(
                 FactSale.sale_id,
+                FactSale.product_key,
+                FactSale.customer_key,
+                FactSale.country_key,
                 FactSale.quantity,
                 FactSale.unit_price,
                 FactSale.total_amount,
@@ -73,24 +98,8 @@ class Query:
                 FactSale.tax_amount,
                 FactSale.profit_amount,
                 FactSale.margin_percentage,
-                FactSale.created_at,
-                # Product fields
-                DimProduct.stock_code,
-                DimProduct.description,
-                DimProduct.category,
-                DimProduct.brand,
-                # Customer fields
-                DimCustomer.customer_id,
-                DimCustomer.customer_segment,
-                DimCustomer.lifetime_value,
-                # Country fields
-                DimCountry.country_name,
-                DimCountry.country_code,
-                DimCountry.region
-            ).select_from(FactSale)\
-             .join(DimProduct, FactSale.product_key == DimProduct.product_key)\
-             .join(DimCountry, FactSale.country_key == DimCountry.country_key)\
-             .outerjoin(DimCustomer, FactSale.customer_key == DimCustomer.customer_key)
+                FactSale.created_at
+            ).select_from(FactSale)
 
             # Apply filters
             query_filters = []
@@ -143,49 +152,82 @@ class Query:
             # Execute query
             results = session.exec(query).all()
 
-            # Convert to GraphQL types
+            # Convert to GraphQL types using DataLoaders
             sales = []
+            
+            # Collect all foreign keys for batch loading
+            product_keys = [row.product_key for row in results if row.product_key]
+            customer_keys = [row.customer_key for row in results if row.customer_key]
+            country_keys = [row.country_key for row in results if row.country_key]
+            
+            # Batch load all related data
+            products_map = {}
+            customers_map = {}
+            countries_map = {}
+            
+            if product_keys:
+                products = await dataloaders['products'].load_many(product_keys)
+                products_map = {p.product_key: p for p in products if p}
+            
+            if customer_keys:
+                customers = await dataloaders['customers'].load_many(customer_keys)
+                customers_map = {c.customer_key: c for c in customers if c}
+            
+            if country_keys:
+                countries = await dataloaders['countries'].load_many(country_keys)
+                countries_map = {c.country_key: c for c in countries if c}
+            
+            # Build sale objects with loaded data
             for row in results:
+                # Get related objects from loaded data
+                product_data = products_map.get(row.product_key)
+                customer_data = customers_map.get(row.customer_key)
+                country_data = countries_map.get(row.country_key)
+                
                 # Create customer object if exists
                 customer = None
-                if row.customer_id:
+                if customer_data:
                     customer = Customer(
-                        customer_key=0,  # Would need to get from join
-                        customer_id=row.customer_id,
-                        customer_segment=row.customer_segment,
-                        lifetime_value=float(row.lifetime_value) if row.lifetime_value else None,
-                        total_orders=None,
-                        total_spent=None,
-                        avg_order_value=None,
-                        recency_score=None,
-                        frequency_score=None,
-                        monetary_score=None,
-                        rfm_segment=None
+                        customer_key=customer_data.customer_key,
+                        customer_id=customer_data.customer_id,
+                        customer_segment=customer_data.customer_segment,
+                        lifetime_value=float(customer_data.lifetime_value) if customer_data.lifetime_value else None,
+                        total_orders=customer_data.total_orders,
+                        total_spent=float(customer_data.total_spent) if customer_data.total_spent else None,
+                        avg_order_value=float(customer_data.avg_order_value) if customer_data.avg_order_value else None,
+                        recency_score=customer_data.recency_score,
+                        frequency_score=customer_data.frequency_score,
+                        monetary_score=customer_data.monetary_score,
+                        rfm_segment=customer_data.rfm_segment
                     )
 
                 # Create product object
-                product = Product(
-                    product_key=0,  # Would need to get from join
-                    stock_code=row.stock_code,
-                    description=row.description,
-                    category=row.category,
-                    subcategory=None,
-                    brand=row.brand,
-                    unit_cost=None,
-                    recommended_price=None
-                )
+                product = None
+                if product_data:
+                    product = Product(
+                        product_key=product_data.product_key,
+                        stock_code=product_data.stock_code,
+                        description=product_data.description,
+                        category=product_data.category,
+                        subcategory=product_data.subcategory,
+                        brand=product_data.brand,
+                        unit_cost=float(product_data.unit_cost) if product_data.unit_cost else None,
+                        recommended_price=float(product_data.recommended_price) if product_data.recommended_price else None
+                    )
 
                 # Create country object
-                country = Country(
-                    country_key=0,  # Would need to get from join
-                    country_code=row.country_code,
-                    country_name=row.country_name,
-                    region=row.region,
-                    continent=None,
-                    currency_code=None,
-                    gdp_per_capita=None,
-                    population=None
-                )
+                country = None
+                if country_data:
+                    country = Country(
+                        country_key=country_data.country_key,
+                        country_code=country_data.country_code,
+                        country_name=country_data.country_name,
+                        region=country_data.region,
+                        continent=country_data.continent,
+                        currency_code=country_data.currency_code,
+                        gdp_per_capita=float(country_data.gdp_per_capita) if country_data.gdp_per_capita else None,
+                        population=country_data.population
+                    )
 
                 # Create sale object
                 sale = Sale(
@@ -222,6 +264,16 @@ class Query:
             raise
         finally:
             session.close()
+            
+            # Log DataLoader performance stats for monitoring
+            if hasattr(info.context, 'dataloaders'):
+                stats = {}
+                for name, loader in info.context.dataloaders.items():
+                    stats[name] = loader.get_cache_stats()
+                
+                # Record stats with dataloader monitor
+                dataloader_monitor.record_request(stats)
+                logger.debug(f"DataLoader stats: {stats}")
 
     @strawberry.field
     async def sales_analytics(

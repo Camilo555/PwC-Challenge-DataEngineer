@@ -1,0 +1,657 @@
+---
+# PwC Enterprise Service Mesh Implementation with Istio
+# Advanced traffic management, security, and observability for microservices
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: pwc-service-mesh
+  namespace: istio-system
+spec:
+  # Control plane configuration for enterprise-grade service mesh
+  values:
+    global:
+      meshID: pwc-mesh
+      network: pwc-network
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      # mTLS configuration for zero-trust security
+      defaultConfigVisibilitySettings:
+        - "istio-system/*"
+        - "pwc-data-engineering/*"
+        - "monitoring/*"
+
+      # Enterprise logging and tracing
+      logging:
+        level: "default:info"
+      tracer:
+        lightstep:
+          address: ""
+        zipkin:
+          address: jaeger-collector.istio-system:9411
+        stackdriver:
+          debug: false
+        datadog:
+          address: ""
+
+  # Components configuration
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2048Mi
+          limits:
+            cpu: 1000m
+            memory: 4096Mi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 80
+
+    # Ingress gateway for external traffic
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            type: LoadBalancer
+            ports:
+              - port: 15021
+                targetPort: 15021
+                name: status-port
+              - port: 80
+                targetPort: 8080
+                name: http2
+              - port: 443
+                targetPort: 8443
+                name: https
+              - port: 15443
+                targetPort: 15443
+                name: tls
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 2000m
+              memory: 1024Mi
+          hpaSpec:
+            minReplicas: 2
+            maxReplicas: 10
+            metrics:
+              - type: Resource
+                resource:
+                  name: cpu
+                  target:
+                    type: Utilization
+                    averageUtilization: 70
+
+    # Egress gateway for external services
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+    # Enhanced telemetry and observability
+    telemetry:
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 100Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+---
+# Service Mesh Network Policy for Enterprise Security
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: pwc-mesh-mtls
+  namespace: pwc-data-engineering
+spec:
+  # Enforce mTLS for all services in the namespace
+  mtls:
+    mode: STRICT
+
+---
+# Authorization Policy for Fine-grained Access Control
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: pwc-api-access-control
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  rules:
+    # Allow authenticated users
+    - from:
+        - source:
+            principals: ["cluster.local/ns/pwc-data-engineering/sa/api-service"]
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE"]
+      when:
+        - key: source.mtls
+          values: ["true"]
+
+    # Allow monitoring and health checks
+    - from:
+        - source:
+            namespaces: ["monitoring", "istio-system"]
+      to:
+        - operation:
+            paths: ["/health", "/metrics", "/ready"]
+
+---
+# Virtual Service for Advanced Traffic Management
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-api-traffic-management
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - api.pwc-data.com
+    - pwc-api-service
+  gateways:
+    - pwc-api-gateway
+    - mesh
+  http:
+    # Canary deployment routing (10% to v2, 90% to v1)
+    - match:
+        - headers:
+            canary:
+              exact: "true"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: v2
+
+    # A/B testing routing based on user segments
+    - match:
+        - headers:
+            user-segment:
+              exact: "premium"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: premium
+
+    # Rate limiting for different user tiers
+    - match:
+        - headers:
+            user-tier:
+              exact: "free"
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: v1
+      fault:
+        delay:
+          percentage:
+            value: 5
+          fixedDelay: 100ms
+
+    # Default routing with intelligent load balancing
+    - route:
+        - destination:
+            host: pwc-api-service
+            subset: v1
+          weight: 90
+        - destination:
+            host: pwc-api-service
+            subset: v2
+          weight: 10
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,reset,connect-failure,refused-stream
+
+---
+# Destination Rule for Load Balancing and Circuit Breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: pwc-api-destination-rule
+  namespace: pwc-data-engineering
+spec:
+  host: pwc-api-service
+  trafficPolicy:
+    # Connection pooling for performance
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 64
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        idleTimeout: 90s
+        h2UpgradePolicy: UPGRADE
+
+    # Circuit breaker configuration
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+
+    # Load balancer configuration
+    loadBalancer:
+      simple: LEAST_CONN
+      consistentHash:
+        httpHeaderName: "x-user-id"
+
+  # Service subsets for version-based routing
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 50
+
+    - name: v2
+      labels:
+        version: v2
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 30
+
+    - name: premium
+      labels:
+        tier: premium
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 100
+          http:
+            maxRequestsPerConnection: 20
+
+---
+# Gateway Configuration for External Traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: pwc-api-gateway
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTPS configuration with TLS termination
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: pwc-api-tls-secret
+      hosts:
+        - api.pwc-data.com
+        - "*.pwc-data.com"
+
+    # HTTP redirect to HTTPS
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - api.pwc-data.com
+        - "*.pwc-data.com"
+      tls:
+        httpsRedirect: true
+
+---
+# Service Entry for External Dependencies
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - api.external-service.com
+    - analytics.googleapis.com
+    - monitoring.datadog.com
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+    - number: 80
+      name: http
+      protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Egress Gateway for Controlled External Access
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: pwc-egress-gateway
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    istio: egressgateway
+  servers:
+    - port:
+        number: 443
+        name: tls
+        protocol: TLS
+      tls:
+        mode: PASSTHROUGH
+      hosts:
+        - api.external-service.com
+        - analytics.googleapis.com
+
+---
+# Telemetry Configuration for Enhanced Observability
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-metrics-collection
+  namespace: pwc-data-engineering
+spec:
+  # Custom metrics for business intelligence
+  metrics:
+    - providers:
+        - name: prometheus
+    - overrides:
+        - match:
+            metric: ALL_METRICS
+          operation: UPSERT
+          tags:
+            business_unit:
+              value: "data-engineering"
+            environment:
+              value: "production"
+            cost_center:
+              value: "it-infrastructure"
+
+  # Distributed tracing configuration
+  tracing:
+    - providers:
+        - name: jaeger
+    - customTags:
+        request_id:
+          header:
+            name: x-request-id
+        user_id:
+          header:
+            name: x-user-id
+        api_version:
+          header:
+            name: x-api-version
+
+---
+# Enhanced Access Logging
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-access-logging
+  namespace: pwc-data-engineering
+spec:
+  accessLogging:
+    - providers:
+        - name: otel
+    - format: |
+        {
+          "timestamp": "%START_TIME%",
+          "method": "%REQ(:METHOD)%",
+          "path": "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+          "protocol": "%PROTOCOL%",
+          "response_code": "%RESPONSE_CODE%",
+          "response_flags": "%RESPONSE_FLAGS%",
+          "bytes_received": "%BYTES_RECEIVED%",
+          "bytes_sent": "%BYTES_SENT%",
+          "duration": "%DURATION%",
+          "upstream_service_time": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+          "x_forwarded_for": "%REQ(X-FORWARDED-FOR)%",
+          "user_agent": "%REQ(USER-AGENT)%",
+          "request_id": "%REQ(X-REQUEST-ID)%",
+          "authority": "%REQ(:AUTHORITY)%",
+          "upstream_host": "%UPSTREAM_HOST%",
+          "upstream_cluster": "%UPSTREAM_CLUSTER%",
+          "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+          "user_id": "%REQ(X-USER-ID)%",
+          "api_key": "%REQ(X-API-KEY)%"
+        }
+
+---
+# Request Authentication for JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: pwc-jwt-auth
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  jwtRules:
+    - issuer: "https://auth.pwc-data.com"
+      jwksUri: "https://auth.pwc-data.com/.well-known/jwks.json"
+      audiences:
+        - "pwc-data-api"
+        - "pwc-analytics-platform"
+      forwardOriginalToken: true
+
+---
+# Workload Entry for VM-based Services
+apiVersion: networking.istio.io/v1beta1
+kind: WorkloadEntry
+metadata:
+  name: legacy-database-service
+  namespace: pwc-data-engineering
+spec:
+  address: 10.0.1.100
+  ports:
+    postgresql: 5432
+  labels:
+    app: postgresql
+    version: "13"
+    tier: database
+
+---
+# Service for Legacy Integration
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-database
+  namespace: pwc-data-engineering
+  labels:
+    app: postgresql
+spec:
+  ports:
+    - port: 5432
+      name: postgresql
+      protocol: TCP
+  selector:
+    app: postgresql
+
+---
+# Sidecar Configuration for Optimized Resource Usage
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: pwc-api-sidecar
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  ingress:
+    - port:
+        number: 8000
+        protocol: HTTP
+        name: http
+      defaultEndpoint: 127.0.0.1:8000
+      captureMode: IPTABLES
+  egress:
+    # Allow egress to specific services only
+    - hosts:
+        - "./*"
+        - "istio-system/*"
+        - "monitoring/*"
+        - "api.external-service.com"
+        - "analytics.googleapis.com"
+
+---
+# Envoy Filter for Custom Request Processing
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: pwc-request-enhancement
+  namespace: pwc-data-engineering
+spec:
+  workloadSelector:
+    labels:
+      app: pwc-api
+  configPatches:
+    # Add custom headers for request tracking
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+            inline_code: |
+              function envoy_on_request(request_handle)
+                -- Add correlation ID if not present
+                if not request_handle:headers():get("x-correlation-id") then
+                  request_handle:headers():add("x-correlation-id", "istio-" .. math.random(100000, 999999))
+                end
+
+                -- Add timestamp for request tracking
+                request_handle:headers():add("x-request-timestamp", os.time())
+
+                -- Add mesh identifier
+                request_handle:headers():add("x-mesh-id", "pwc-service-mesh")
+              end
+
+              function envoy_on_response(response_handle)
+                -- Add response time calculation
+                local start_time = response_handle:headers():get("x-request-timestamp")
+                if start_time then
+                  local duration = os.time() - tonumber(start_time)
+                  response_handle:headers():add("x-response-time-seconds", tostring(duration))
+                end
+
+                -- Add security headers
+                response_handle:headers():add("x-content-type-options", "nosniff")
+                response_handle:headers():add("x-frame-options", "DENY")
+                response_handle:headers():add("x-xss-protection", "1; mode=block")
+              end
+
+---
+# WasmPlugin for Advanced Request Processing
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: pwc-request-processor
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    matchLabels:
+      app: pwc-api
+  url: oci://registry.pwc-data.com/wasm/request-processor:latest
+  phase: AUTHN
+  pluginConfig:
+    enable_metrics: true
+    enable_tracing: true
+    rate_limit:
+      requests_per_minute: 1000
+    custom_headers:
+      - name: "x-powered-by"
+        value: "PwC-Enterprise-Mesh"
+      - name: "x-data-classification"
+        value: "confidential"
+
+---
+# Multi-cluster Service Discovery
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: cross-cluster-api
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - api.dr-cluster.pwc-data.com
+  location: MESH_EXTERNAL
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  endpoints:
+    - address: api.dr-cluster.pwc-data.com
+      ports:
+        https: 443
+
+---
+# Traffic mirroring for testing and analytics
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pwc-api-traffic-mirroring
+  namespace: pwc-data-engineering
+spec:
+  hosts:
+    - pwc-api-service
+  http:
+    - match:
+        - headers:
+            environment:
+              exact: production
+      route:
+        - destination:
+            host: pwc-api-service
+            subset: v1
+      mirror:
+        host: pwc-api-analytics-service
+      mirrorPercentage:
+        value: 10.0

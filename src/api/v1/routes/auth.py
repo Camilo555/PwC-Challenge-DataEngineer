@@ -30,7 +30,7 @@ security = HTTPBasic()
 
 @router.post("/auth/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(login_request: LoginRequest) -> TokenResponse:
-    if not auth_service.authenticate_user(login_request.username, login_request.password):
+    if not await auth_service.authenticate_user(login_request.username, login_request.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -38,7 +38,7 @@ async def login(login_request: LoginRequest) -> TokenResponse:
         )
 
     permissions = ["read", "write", "admin"] if login_request.username == "admin" else ["read"]
-    access_token = auth_service.create_user_token(login_request.username, permissions)
+    access_token = await auth_service.create_user_token(login_request.username, permissions)
 
     return TokenResponse(
         access_token=access_token,
@@ -52,7 +52,7 @@ async def login(login_request: LoginRequest) -> TokenResponse:
 async def create_token_basic_auth(
     credentials: Annotated[HTTPBasicCredentials, Depends(security)]
 ) -> TokenResponse:
-    if not auth_service.authenticate_user(credentials.username, credentials.password):
+    if not await auth_service.authenticate_user(credentials.username, credentials.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -60,7 +60,7 @@ async def create_token_basic_auth(
         )
 
     permissions = ["read", "write", "admin"] if credentials.username == "admin" else ["read"]
-    access_token = auth_service.create_user_token(credentials.username, permissions)
+    access_token = await auth_service.create_user_token(credentials.username, permissions)
 
     return TokenResponse(
         access_token=access_token,
@@ -72,7 +72,7 @@ async def create_token_basic_auth(
 
 @router.post("/auth/refresh", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def refresh_token(refresh_request: RefreshTokenRequest) -> TokenResponse:
-    token_data = auth_service.verify_token(refresh_request.token)
+    token_data = await auth_service.verify_token(refresh_request.token)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -80,7 +80,7 @@ async def refresh_token(refresh_request: RefreshTokenRequest) -> TokenResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    new_token = auth_service.create_user_token(token_data.username, token_data.permissions)
+    new_token = await auth_service.create_user_token(token_data.username, token_data.permissions)
 
     return TokenResponse(
         access_token=new_token,
@@ -92,7 +92,7 @@ async def refresh_token(refresh_request: RefreshTokenRequest) -> TokenResponse:
 
 @router.post("/auth/validate", status_code=status.HTTP_200_OK)
 async def validate_token(token: str) -> dict:
-    token_data = auth_service.verify_token(token)
+    token_data = await auth_service.verify_token(token)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

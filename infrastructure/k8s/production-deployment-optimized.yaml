@@ -1,0 +1,662 @@
+# Optimized Production Kubernetes Deployment
+# 99.99% Availability with Intelligent Auto-Scaling and Resource Efficiency
+
+---
+# Namespace with resource quotas and security policies
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bmad-production
+  labels:
+    app: bmad-platform
+    environment: production
+    managed-by: terraform
+    cost-center: data-engineering
+spec: {}
+
+---
+# Resource Quota for Cost Control
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bmad-production-quota
+  namespace: bmad-production
+spec:
+  hard:
+    requests.cpu: "50"      # 50 CPU cores total
+    requests.memory: 200Gi   # 200GB memory total
+    limits.cpu: "100"        # 100 CPU cores limit
+    limits.memory: 400Gi     # 400GB memory limit
+    persistentvolumeclaims: "20"
+    services: "10"
+    secrets: "50"
+    configmaps: "50"
+    count/deployments.apps: "20"
+    count/replicasets.apps: "50"
+    count/pods: "100"
+
+---
+# Network Policy for Zero-Trust Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-production-network-policy
+  namespace: bmad-production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow monitoring traffic
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS outbound
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow database connections
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Production API Deployment with Advanced Optimization
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bmad-api-production
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+    component: backend
+    environment: production
+    version: v1.0.0
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "Initial optimized production deployment"
+spec:
+  replicas: 3  # Optimized initial replica count for cost efficiency
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 50%           # Allow 50% more pods during updates
+      maxUnavailable: 25%     # Maximum 25% unavailable during updates
+  selector:
+    matchLabels:
+      app: bmad-api
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: bmad-api
+        component: backend
+        environment: production
+        version: v1.0.0
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # Performance optimization annotations
+        kubernetes.io/os: "linux"
+        kubernetes.io/arch: "amd64"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        # Resource management annotations
+        resources.kubernetes.io/compute-class: "performance"
+        scheduling.alpha.kubernetes.io/critical-pod: ""
+        # Cost optimization annotations
+        cost-optimization.bmad.com/enabled: "true"
+        cost-optimization.bmad.com/target-utilization: "75"
+        cost-optimization.bmad.com/spot-instance-eligible: "true"
+        cost-optimization.bmad.com/cost-center: "data-engineering"
+        # Resource efficiency annotations
+        efficiency.bmad.com/burst-mode: "enabled"
+        efficiency.bmad.com/idle-detection: "true"
+        efficiency.bmad.com/rightsizing: "auto"
+    spec:
+      # Security context for enhanced security
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Service account with minimal permissions
+      serviceAccountName: bmad-api-service-account
+      automountServiceAccountToken: false
+      
+      # Tolerations for dedicated nodes
+      tolerations:
+      - key: "bmad.com/dedicated"
+        operator: "Equal"
+        value: "api"
+        effect: "NoSchedule"
+      - key: "node.kubernetes.io/instance-type"
+        operator: "In"
+        values: ["c5.xlarge", "c5.2xlarge", "c5.4xlarge"]
+        effect: "NoSchedule"
+      
+      # Node selection for performance optimization
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: "compute-optimized"
+        instance-category: "performance"
+        
+      # Affinity rules for high availability
+      affinity:
+        # Pod anti-affinity to spread across nodes
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["bmad-api"]
+              topologyKey: kubernetes.io/hostname
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["bmad-api"]
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+        # Node affinity for performance nodes
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values: ["compute-optimized"]
+          - weight: 60
+            preference:
+              matchExpressions:
+              - key: instance-family
+                operator: In
+                values: ["c5", "c6i", "c7i"]
+      
+      # DNS configuration for faster resolution
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+        
+      # Termination grace period
+      terminationGracePeriodSeconds: 45
+      
+      # Init container for database readiness
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.35-glibc
+        command: ['sh', '-c']
+        args:
+        - |
+          until nc -z postgresql-service 5432; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+          requests:
+            cpu: 50m
+            memory: 32Mi
+      
+      containers:
+      - name: bmad-api
+        image: bmad/api:v1.0.0-optimized
+        imagePullPolicy: IfNotPresent
+        
+        # Security context for container
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+        
+        # Port configuration
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        
+        # Enhanced environment configuration
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: WORKERS
+          value: "4"
+        - name: WORKER_CLASS
+          value: "uvicorn.workers.UvicornWorker"
+        - name: MAX_REQUESTS
+          value: "1000"
+        - name: MAX_REQUESTS_JITTER
+          value: "100"
+        - name: PRELOAD_APP
+          value: "true"
+        - name: KEEPALIVE
+          value: "5"
+        # Database connection with pooling
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: bmad-database-secret
+              key: database-url
+        - name: DATABASE_POOL_SIZE
+          value: "20"
+        - name: DATABASE_MAX_OVERFLOW
+          value: "30"
+        - name: DATABASE_POOL_TIMEOUT
+          value: "30"
+        - name: DATABASE_POOL_RECYCLE
+          value: "3600"
+        # Redis configuration
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: bmad-redis-secret
+              key: redis-url
+        - name: REDIS_POOL_SIZE
+          value: "20"
+        # Application secrets
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bmad-app-secret
+              key: secret-key
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: bmad-app-secret
+              key: jwt-secret
+        # Performance optimizations
+        - name: UVLOOP_ENABLED
+          value: "true"
+        - name: HTTPTOOLS_ENABLED
+          value: "true"
+        - name: BACKLOG
+          value: "2048"
+        
+        # Volume mounts for logs and temporary data
+        volumeMounts:
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: cache-volume
+          mountPath: /app/cache
+        
+        # Resource specifications optimized for performance and cost efficiency
+        resources:
+          limits:
+            cpu: 2000m        # 2 CPU cores maximum
+            memory: 4Gi       # 4GB memory maximum
+            ephemeral-storage: 2Gi
+            nvidia.com/gpu: "0"  # Prevent GPU allocation unless explicitly needed
+          requests:
+            cpu: 300m         # Reduced baseline for better resource efficiency
+            memory: 768Mi     # Optimized memory baseline
+            ephemeral-storage: 512Mi
+            # Enable CPU throttling awareness
+            kubernetes.io/compute-class: "burstable"
+        
+        # Comprehensive health checks
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+            httpHeaders:
+            - name: Host
+              value: localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ready
+            port: 8000
+            httpHeaders:
+            - name: Host
+              value: localhost
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 2
+        
+        startupProbe:
+          httpGet:
+            path: /api/v1/startup
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 2
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 15
+        
+        # Lifecycle hooks for graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      
+      # Volumes for persistent and temporary data
+      volumes:
+      - name: logs-volume
+        emptyDir:
+          medium: "Memory"
+          sizeLimit: 1Gi
+      - name: tmp-volume
+        emptyDir:
+          medium: "Memory"
+          sizeLimit: 512Mi
+      - name: cache-volume
+        emptyDir:
+          medium: ""
+          sizeLimit: 2Gi
+
+---
+# Service with optimized load balancing
+apiVersion: v1
+kind: Service
+metadata:
+  name: bmad-api-service
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+    component: backend
+  annotations:
+    # AWS Load Balancer optimizations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+    # Session affinity for performance
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "60"
+    # Health check optimization
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "6"
+    service.beta.kubernetes.io/aws-load-balancer-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-unhealthy-threshold: "3"
+spec:
+  type: LoadBalancer
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: bmad-api
+    component: backend
+
+---
+# Service Account with minimal permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bmad-api-service-account
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+automountServiceAccountToken: false
+
+---
+# RBAC Configuration
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: bmad-production
+  name: bmad-api-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bmad-api-rolebinding
+  namespace: bmad-production
+subjects:
+- kind: ServiceAccount
+  name: bmad-api-service-account
+  namespace: bmad-production
+roleRef:
+  kind: Role
+  name: bmad-api-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Pod Disruption Budget for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-api-pdb
+  namespace: bmad-production
+spec:
+  minAvailable: 75%  # Ensure 75% of pods are always available
+  selector:
+    matchLabels:
+      app: bmad-api
+      component: backend
+
+---
+# Horizontal Pod Autoscaler with Custom Metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bmad-api-hpa-optimized
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-api-production
+  minReplicas: 3  # Reduced for cost efficiency during low traffic
+  maxReplicas: 50
+  targetCPUUtilizationPercentage: 70  # Higher target for better resource utilization
+  metrics:
+  # CPU-based scaling - optimized for resource efficiency
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Increased for better cost efficiency
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Increased for better memory utilization
+  # Custom metrics for business logic scaling
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  - type: Pods
+    pods:
+      metric:
+        name: response_time_p95
+      target:
+        type: AverageValue
+        averageValue: "200"
+  # External metrics for predictive scaling
+  - type: External
+    external:
+      metric:
+        name: predicted_load
+        selector:
+          matchLabels:
+            service: bmad-api
+      target:
+        type: Value
+        value: "80"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 minutes stabilization
+      policies:
+      - type: Percent
+        value: 10        # Scale down by 10% max
+        periodSeconds: 60
+      - type: Pods
+        value: 2         # Scale down by 2 pods max
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60   # 1 minute stabilization
+      policies:
+      - type: Percent
+        value: 100       # Scale up by 100% max
+        periodSeconds: 30
+      - type: Pods
+        value: 10        # Scale up by 10 pods max
+        periodSeconds: 30
+      selectPolicy: Max
+
+---
+# Vertical Pod Autoscaler for Resource Optimization
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-api-vpa-optimized
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-api-production
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3  # Aligned with HPA minimum
+    evictionRequirements:
+    - resources: ["cpu", "memory"]
+      changeRequirement: 0.15  # Only evict if 15% change needed for efficiency
+  resourcePolicy:
+    containerPolicies:
+    - containerName: bmad-api
+      maxAllowed:
+        cpu: 2000m      # Aligned with deployment limits
+        memory: 4Gi     # Aligned with deployment limits
+        ephemeral-storage: 2Gi
+      minAllowed:
+        cpu: 100m       # Lower minimum for cost efficiency
+        memory: 256Mi   # Lower minimum for cost efficiency
+        ephemeral-storage: 256Mi
+      controlledResources:
+      - cpu
+      - memory
+      - ephemeral-storage
+      controlledValues: RequestsAndLimits
+      # Resource scaling mode for cost optimization
+      mode: Auto
+      scalingMode: "Conservative"  # Gradual scaling for cost control
+
+---
+# Service Monitor for Prometheus Integration
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bmad-api-monitor
+  namespace: bmad-production
+  labels:
+    app: bmad-api
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: bmad-api
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    honorLabels: true
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - bmad-production

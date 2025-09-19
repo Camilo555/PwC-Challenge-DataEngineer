@@ -1,0 +1,406 @@
+groups:
+  # =================== CRITICAL BUSINESS ALERTS ===================
+
+  - name: critical_business_alerts
+    interval: 30s
+    rules:
+      # Revenue Loss Detection
+      - alert: CriticalRevenueDrop
+        expr: |
+          (
+            rate(sales_revenue_total[1h]) /
+            rate(sales_revenue_total[1h] offset 1d)
+          ) < 0.7
+        for: 5m
+        labels:
+          severity: critical
+          priority: P1
+          business_impact: "2.1M"
+          escalation: "immediate"
+          channel: "pagerduty"
+        annotations:
+          summary: "CRITICAL: Revenue drop detected - 30% below daily average"
+          description: "Current hourly revenue rate {{ $value | humanizePercentage }} is significantly below normal levels. Immediate investigation required."
+          runbook_url: "https://docs.company.com/runbooks/revenue-drop"
+          dashboard_url: "https://grafana.company.com/d/business-overview"
+          estimated_loss: "{{ $value | humanize }}K USD/hour"
+
+      # API Availability SLA Breach
+      - alert: APIAvailabilitySLABreach
+        expr: slo_availability_percentage{service="api"} < 99.9
+        for: 2m
+        labels:
+          severity: critical
+          priority: P1
+          sla_breach: "true"
+          escalation: "immediate"
+          channel: "pagerduty"
+        annotations:
+          summary: "CRITICAL: API availability below 99.9% SLA"
+          description: "API availability is {{ $value | humanizePercentage }}. SLA breach imminent."
+          customer_impact: "High - all customer transactions affected"
+          estimated_customers_affected: "~{{ with query \"active_connections_current{service='api'}\" }}{{ . | first | value | humanize }}{{ end }}"
+
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: db_connections_active / 100 > 0.95
+        for: 1m
+        labels:
+          severity: critical
+          priority: P1
+          escalation: "immediate"
+          channel: "pagerduty"
+        annotations:
+          summary: "CRITICAL: Database connection pool 95% exhausted"
+          description: "Database connection pool utilization at {{ $value | humanizePercentage }}. Risk of connection failures."
+          immediate_action: "Scale connection pool or investigate connection leaks"
+
+      # ETL Pipeline Complete Failure
+      - alert: ETLPipelineCompleteFailure
+        expr: |
+          sum(etl_pipeline_status{environment="production"}) == 0
+        for: 10m
+        labels:
+          severity: critical
+          priority: P1
+          data_impact: "high"
+          escalation: "immediate"
+          channel: "pagerduty"
+        annotations:
+          summary: "CRITICAL: All production ETL pipelines down"
+          description: "No ETL pipelines are running in production. Data processing completely stopped."
+          business_impact: "Data freshness will degrade, affecting analytics and reporting"
+
+  # =================== HIGH PRIORITY ALERTS ===================
+
+  - name: high_priority_alerts
+    interval: 60s
+    rules:
+      # High Error Rate
+      - alert: HighAPIErrorRate
+        expr: |
+          (
+            rate(api_requests_total{status_code=~"5.."}[5m]) /
+            rate(api_requests_total[5m])
+          ) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "HIGH: API error rate {{ $value | humanizePercentage }} above threshold"
+          description: "5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+          affected_endpoints: "{{ range query \"api_error_rate > 5\" }}{{ .Labels.endpoint }} {{ end }}"
+
+      # Customer Acquisition Drop
+      - alert: CustomerAcquisitionDrop
+        expr: |
+          (
+            rate(customer_acquisition_total[1h]) /
+            rate(customer_acquisition_total[1h] offset 1w)
+          ) < 0.5
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          business_metric: "customer_growth"
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "Customer acquisition 50% below weekly average"
+          description: "New customer acquisition rate is {{ $value | humanizePercentage }} of normal levels"
+          marketing_impact: "Review current campaigns and conversion funnels"
+
+      # Slow Database Queries Spike
+      - alert: SlowQueriesSpike
+        expr: |
+          rate(db_slow_queries_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          performance_impact: "medium"
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "Database slow queries spike detected"
+          description: "Slow queries (>25ms) rate: {{ $value }} queries/second"
+          performance_impact: "User experience degradation likely"
+
+      # Cost Budget Alert
+      - alert: DailyCostBudgetExceeded
+        expr: |
+          sum(infrastructure_cost_usd_daily) > 500
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          cost_impact: "high"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "Daily infrastructure cost budget exceeded"
+          description: "Current daily cost: ${{ $value | humanize }}. Budget: $500"
+          cost_optimization: "Review resource utilization and scaling policies"
+
+  # =================== PERFORMANCE MONITORING ===================
+
+  - name: performance_monitoring
+    interval: 60s
+    rules:
+      # Response Time SLA Warning
+      - alert: ResponseTimeSLAWarning
+        expr: |
+          histogram_quantile(0.99, rate(api_request_duration_seconds_bucket[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          priority: P3
+          sla_warning: "true"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "API P99 latency {{ $value }}s approaching SLA limit"
+          description: "P99 response time is {{ $value | humanizeDuration }}, approaching 200ms SLA"
+          optimization_needed: "Consider scaling or performance optimization"
+
+      # Memory Utilization High
+      - alert: HighMemoryUtilization
+        expr: |
+          resource_utilization_percentage{resource_type="memory"} > 85
+        for: 15m
+        labels:
+          severity: warning
+          priority: P3
+          resource: "memory"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "High memory utilization on {{ $labels.service }}"
+          description: "Memory utilization: {{ $value }}% on {{ $labels.node }}"
+          action_required: "Consider scaling up or optimizing memory usage"
+
+      # ETL Processing Delay
+      - alert: ETLProcessingDelay
+        expr: |
+          etl_processing_duration_seconds > 3600
+        for: 5m
+        labels:
+          severity: warning
+          priority: P3
+          data_freshness: "degraded"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "ETL pipeline {{ $labels.pipeline }} processing delay"
+          description: "Pipeline running for {{ $value | humanizeDuration }}, exceeding 1 hour threshold"
+          data_impact: "Analytics data freshness may be affected"
+
+  # =================== BUSINESS INTELLIGENCE ALERTS ===================
+
+  - name: business_intelligence_alerts
+    interval: 300s
+    rules:
+      # Low Conversion Rate
+      - alert: LowConversionRate
+        expr: |
+          sales_conversion_rate < 2.0
+        for: 30m
+        labels:
+          severity: info
+          priority: P4
+          business_metric: "conversion"
+          escalation: "1hour"
+          channel: "slack"
+        annotations:
+          summary: "Conversion rate below 2% threshold"
+          description: "{{ $labels.channel }} conversion rate: {{ $value }}%"
+          marketing_action: "Review marketing campaigns and user experience"
+
+      # High Customer Churn Risk
+      - alert: HighCustomerChurnRisk
+        expr: |
+          customer_churn_rate{segment="high_value"} > 5.0
+        for: 1h
+        labels:
+          severity: warning
+          priority: P3
+          customer_impact: "high_value"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "High-value customer churn rate elevated"
+          description: "Churn rate for high-value customers: {{ $value }}%"
+          retention_action: "Activate customer success and retention programs"
+
+      # Inventory Turnover Low
+      - alert: LowInventoryTurnover
+        expr: |
+          inventory_turnover_ratio < 2.0
+        for: 6h
+        labels:
+          severity: info
+          priority: P4
+          business_metric: "inventory"
+          escalation: "4hours"
+          channel: "slack"
+        annotations:
+          summary: "Low inventory turnover in {{ $labels.product_category }}"
+          description: "Turnover ratio: {{ $value }} (target: >2.0)"
+          business_action: "Review pricing strategy and demand forecasting"
+
+  # =================== SLO MONITORING ===================
+
+  - name: slo_monitoring
+    interval: 60s
+    rules:
+      # Error Budget Burn Rate
+      - alert: HighErrorBudgetBurnRate
+        expr: |
+          (
+            (1 - slo_availability_percentage / 100) /
+            (1 - 99.9 / 100)
+          ) > 10
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          slo_impact: "high"
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "High error budget burn rate for {{ $labels.service }}"
+          description: "Error budget burning {{ $value }}x faster than sustainable rate"
+          risk_assessment: "SLO breach risk within hours if trend continues"
+
+      # SLO Error Budget Low
+      - alert: SLOErrorBudgetLow
+        expr: |
+          slo_error_budget_remaining_percentage < 25
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          slo_warning: "true"
+          escalation: "30min"
+          channel: "slack"
+        annotations:
+          summary: "SLO error budget below 25% for {{ $labels.service }}"
+          description: "Remaining error budget: {{ $value }}%"
+          action_required: "Implement reliability measures to preserve remaining budget"
+
+  # =================== INFRASTRUCTURE MONITORING ===================
+
+  - name: infrastructure_monitoring
+    interval: 60s
+    rules:
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"} /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          resource: "disk"
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Available disk space: {{ $value }}%"
+          immediate_action: "Clean up logs or extend disk capacity"
+
+      # Container Restart Loop
+      - alert: ContainerRestartLoop
+        expr: |
+          rate(container_start_time_seconds[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          stability_issue: "true"
+          escalation: "15min"
+          channel: "slack"
+        annotations:
+          summary: "Container restart loop detected"
+          description: "Container {{ $labels.name }} restarting {{ $value }} times per second"
+          investigation_needed: "Check container health and resource constraints"
+
+  # =================== SECURITY MONITORING ===================
+
+  - name: security_monitoring
+    interval: 30s
+    rules:
+      # Unusual API Access Pattern
+      - alert: UnusualAPIAccessPattern
+        expr: |
+          rate(api_requests_total[1m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          security_concern: "true"
+          escalation: "15min"
+          channel: "security"
+        annotations:
+          summary: "Unusual API access pattern detected"
+          description: "Request rate: {{ $value }} requests/second from {{ $labels.instance }}"
+          security_action: "Investigate for potential DDoS or abuse"
+
+      # Failed Authentication Spike
+      - alert: FailedAuthenticationSpike
+        expr: |
+          rate(api_requests_total{status_code="401"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          priority: P2
+          security_concern: "true"
+          escalation: "10min"
+          channel: "security"
+        annotations:
+          summary: "High rate of authentication failures"
+          description: "Failed auth rate: {{ $value }} attempts/second"
+          security_action: "Potential brute force attack - investigate source IPs"
+
+  # =================== DATA QUALITY MONITORING ===================
+
+  - name: data_quality_monitoring
+    interval: 300s
+    rules:
+      # Data Quality Score Low
+      - alert: DataQualityScoreLow
+        expr: |
+          etl_data_quality_score < 95
+        for: 15m
+        labels:
+          severity: warning
+          priority: P3
+          data_quality: "degraded"
+          escalation: "30min"
+          channel: "data-team"
+        annotations:
+          summary: "Data quality score below threshold"
+          description: "{{ $labels.pipeline }} quality score: {{ $value }}% (target: >95%)"
+          data_impact: "Analytics and reporting accuracy may be affected"
+
+      # Missing Data Detection
+      - alert: MissingDataDetection
+        expr: |
+          increase(etl_records_processed_total[1h]) == 0
+        for: 2h
+        labels:
+          severity: warning
+          priority: P2
+          data_freshness: "stale"
+          escalation: "1hour"
+          channel: "data-team"
+        annotations:
+          summary: "No new data processed in {{ $labels.pipeline }}"
+          description: "Zero records processed in the last hour"
+          business_impact: "Data freshness compromised, investigate data sources"

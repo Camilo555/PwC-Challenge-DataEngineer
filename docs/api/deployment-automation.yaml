@@ -1,0 +1,477 @@
+# PwC Enterprise API Documentation Deployment Automation
+# Comprehensive deployment pipeline for interactive API documentation with CDN integration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-docs-deployment-config
+  namespace: pwc-data-engineering
+  labels:
+    app: api-documentation
+    version: v3.1.0
+    environment: production
+data:
+  # Documentation Build Configuration
+  build_config.yaml: |
+    documentation:
+      version: "3.1.0"
+      build_system: "multi-stage"
+
+      # Source Configuration
+      sources:
+        openapi_spec: "./docs/api/comprehensive-openapi-3.0-specification.yaml"
+        interactive_html: "./docs/api/enterprise-interactive-api-docs.html"
+        postman_collections: "./docs/api/api-testing-collections.json"
+        code_examples: "./docs/api/code-examples/"
+        graphql_schema: "./src/api/graphql/schema.graphql"
+
+      # Build Targets
+      targets:
+        - name: "swagger-ui"
+          type: "interactive"
+          output: "./dist/swagger/"
+          cdn_path: "/docs/swagger/"
+        - name: "redoc"
+          type: "static"
+          output: "./dist/redoc/"
+          cdn_path: "/docs/redoc/"
+        - name: "interactive-portal"
+          type: "spa"
+          output: "./dist/portal/"
+          cdn_path: "/docs/interactive/"
+        - name: "graphql-playground"
+          type: "graphql"
+          output: "./dist/graphql/"
+          cdn_path: "/docs/graphql/"
+
+      # CDN Configuration
+      cdn:
+        provider: "cloudflare"
+        distribution_id: "E1234567890ABC"
+        custom_domain: "docs.pwc-data.com"
+        cache_behaviors:
+          - path_pattern: "/docs/static/*"
+            ttl: 86400  # 24 hours
+            compression: true
+          - path_pattern: "/docs/api/*"
+            ttl: 3600   # 1 hour
+            compression: true
+          - path_pattern: "/docs/interactive/*"
+            ttl: 300    # 5 minutes
+            compression: true
+
+      # Performance Optimization
+      optimization:
+        minification:
+          html: true
+          css: true
+          javascript: true
+        compression:
+          gzip: true
+          brotli: true
+        image_optimization:
+          enabled: true
+          formats: ["webp", "avif"]
+        resource_bundling:
+          enabled: true
+          strategy: "code-splitting"
+
+      # SEO Configuration
+      seo:
+        sitemap_generation: true
+        meta_tags:
+          title: "PwC Enterprise API Documentation"
+          description: "Comprehensive API documentation for PwC Data Engineering Platform"
+          keywords: "API, Documentation, Data Engineering, PwC, Enterprise"
+        open_graph:
+          enabled: true
+          image: "/assets/api-docs-preview.png"
+        analytics:
+          google_analytics: "GA-XXXX-XXXX"
+          custom_events: true
+
+  # Deployment Pipeline Configuration
+  pipeline_config.yaml: |
+    pipeline:
+      name: "api-docs-deployment"
+      triggers:
+        - push_to_main
+        - api_schema_changes
+        - scheduled_daily
+
+      stages:
+        # Stage 1: Build and Validation
+        - name: "build-validation"
+          parallel: true
+          jobs:
+            - name: "openapi-validation"
+              image: "redocly/openapi-cli:latest"
+              commands:
+                - "openapi lint docs/api/comprehensive-openapi-3.0-specification.yaml"
+                - "openapi bundle docs/api/comprehensive-openapi-3.0-specification.yaml --output dist/openapi.json"
+
+            - name: "html-validation"
+              image: "validator/validator:latest"
+              commands:
+                - "vnu --format json docs/api/enterprise-interactive-api-docs.html"
+
+            - name: "accessibility-check"
+              image: "pa11y/pa11y:latest"
+              commands:
+                - "pa11y docs/api/enterprise-interactive-api-docs.html --standard WCAG2AA"
+
+            - name: "performance-audit"
+              image: "lighthouse-ci:latest"
+              commands:
+                - "lhci autorun --upload.target=temporary-public-storage"
+
+        # Stage 2: Build Documentation
+        - name: "build-documentation"
+          depends_on: ["build-validation"]
+          jobs:
+            - name: "build-swagger-ui"
+              image: "node:18-alpine"
+              commands:
+                - "npm install -g swagger-ui-dist"
+                - "swagger-ui-bundle --config swagger-config.js"
+
+            - name: "build-redoc"
+              image: "node:18-alpine"
+              commands:
+                - "npm install -g redoc-cli"
+                - "redoc build docs/api/comprehensive-openapi-3.0-specification.yaml --output dist/redoc/index.html"
+
+            - name: "build-interactive-portal"
+              image: "node:18-alpine"
+              commands:
+                - "npm install"
+                - "npm run build:docs"
+                - "npm run optimize:assets"
+
+        # Stage 3: Security Scanning
+        - name: "security-scanning"
+          depends_on: ["build-documentation"]
+          jobs:
+            - name: "security-headers-check"
+              image: "security-headers-checker:latest"
+              commands:
+                - "check-security-headers dist/portal/index.html"
+
+            - name: "vulnerability-scan"
+              image: "owasp/zap2docker-stable:latest"
+              commands:
+                - "zap-baseline.py -t http://localhost:3000"
+
+        # Stage 4: Testing
+        - name: "testing"
+          depends_on: ["security-scanning"]
+          jobs:
+            - name: "integration-tests"
+              image: "node:18-alpine"
+              commands:
+                - "npm test:integration"
+                - "npm run test:e2e"
+
+            - name: "visual-regression-tests"
+              image: "backstopjs/backstopjs:latest"
+              commands:
+                - "backstop test"
+
+            - name: "api-documentation-tests"
+              image: "postman/newman:latest"
+              commands:
+                - "newman run docs/api/api-testing-collections.json -e production.postman_environment.json"
+
+        # Stage 5: Deployment
+        - name: "deployment"
+          depends_on: ["testing"]
+          strategy: "blue-green"
+          jobs:
+            - name: "deploy-to-staging"
+              image: "aws-cli:latest"
+              commands:
+                - "aws s3 sync dist/ s3://pwc-api-docs-staging --delete"
+                - "aws cloudfront create-invalidation --distribution-id E1234567890ABC --paths '/*'"
+
+            - name: "smoke-tests-staging"
+              image: "curl:latest"
+              commands:
+                - "curl -f https://docs-staging.pwc-data.com/health"
+                - "curl -f https://docs-staging.pwc-data.com/docs/"
+
+            - name: "deploy-to-production"
+              image: "aws-cli:latest"
+              condition: "staging-tests-pass"
+              commands:
+                - "aws s3 sync dist/ s3://pwc-api-docs-production --delete"
+                - "aws cloudfront create-invalidation --distribution-id E0987654321XYZ --paths '/*'"
+
+        # Stage 6: Post-deployment
+        - name: "post-deployment"
+          depends_on: ["deployment"]
+          jobs:
+            - name: "search-indexing"
+              image: "elasticsearch-indexer:latest"
+              commands:
+                - "index-documentation --source https://docs.pwc-data.com --index api-docs"
+
+            - name: "monitoring-setup"
+              image: "monitoring-agent:latest"
+              commands:
+                - "setup-uptime-monitoring https://docs.pwc-data.com"
+                - "setup-performance-monitoring https://docs.pwc-data.com"
+
+            - name: "notification"
+              image: "notification-service:latest"
+              commands:
+                - "notify-slack --channel '#data-engineering' --message 'API Documentation deployed successfully'"
+
+  # CDN and Performance Configuration
+  cdn_config.yaml: |
+    cdn_configuration:
+      provider: "cloudflare"
+
+      # Cache Rules
+      cache_rules:
+        - pattern: "*.html"
+          ttl: 3600  # 1 hour
+          edge_cache_ttl: 7200  # 2 hours
+          browser_cache_ttl: 1800  # 30 minutes
+
+        - pattern: "*.css"
+          ttl: 86400  # 24 hours
+          edge_cache_ttl: 604800  # 7 days
+          browser_cache_ttl: 86400  # 24 hours
+
+        - pattern: "*.js"
+          ttl: 86400  # 24 hours
+          edge_cache_ttl: 604800  # 7 days
+          browser_cache_ttl: 86400  # 24 hours
+
+        - pattern: "*.json"
+          ttl: 1800  # 30 minutes
+          edge_cache_ttl: 3600  # 1 hour
+          browser_cache_ttl: 900  # 15 minutes
+
+        - pattern: "/api/docs/interactive/*"
+          ttl: 300  # 5 minutes
+          edge_cache_ttl: 600  # 10 minutes
+          browser_cache_ttl: 60  # 1 minute
+
+      # Compression Settings
+      compression:
+        gzip:
+          enabled: true
+          level: 6
+          types: ["text/html", "text/css", "application/javascript", "application/json"]
+
+        brotli:
+          enabled: true
+          quality: 4
+          types: ["text/html", "text/css", "application/javascript", "application/json"]
+
+      # Security Headers
+      security_headers:
+        content_security_policy: |
+          default-src 'self';
+          script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.jsdelivr.net unpkg.com;
+          style-src 'self' 'unsafe-inline' fonts.googleapis.com cdn.jsdelivr.net;
+          font-src 'self' fonts.gstatic.com;
+          img-src 'self' data: https:;
+          connect-src 'self' api.pwc-data.com;
+
+        x_content_type_options: "nosniff"
+        x_frame_options: "DENY"
+        x_xss_protection: "1; mode=block"
+        referrer_policy: "strict-origin-when-cross-origin"
+        strict_transport_security: "max-age=31536000; includeSubDomains"
+
+      # Performance Features
+      performance:
+        http2_push:
+          enabled: true
+          resources:
+            - "/assets/css/main.css"
+            - "/assets/js/main.js"
+
+        image_optimization:
+          enabled: true
+          webp_conversion: true
+          progressive_jpeg: true
+
+        minification:
+          html: true
+          css: true
+          javascript: true
+          remove_comments: true
+          remove_whitespace: true
+
+  # Monitoring and Analytics Configuration
+  monitoring_config.yaml: |
+    monitoring:
+      # Uptime Monitoring
+      uptime:
+        provider: "pingdom"
+        endpoints:
+          - url: "https://docs.pwc-data.com"
+            interval: 60  # seconds
+            timeout: 10
+            regions: ["us-east", "eu-west", "asia-pacific"]
+
+          - url: "https://docs.pwc-data.com/docs/"
+            interval: 300  # 5 minutes
+            timeout: 15
+            regions: ["us-east", "eu-west"]
+
+          - url: "https://docs.pwc-data.com/redoc/"
+            interval: 300
+            timeout: 15
+            regions: ["us-east", "eu-west"]
+
+      # Performance Monitoring
+      performance:
+        provider: "datadog"
+        metrics:
+          - name: "docs.page_load_time"
+            type: "histogram"
+            tags: ["environment:production", "service:api-docs"]
+
+          - name: "docs.time_to_interactive"
+            type: "histogram"
+            tags: ["environment:production", "service:api-docs"]
+
+          - name: "docs.lighthouse_score"
+            type: "gauge"
+            tags: ["environment:production", "service:api-docs"]
+
+        alerts:
+          - name: "High Page Load Time"
+            condition: "avg(docs.page_load_time) > 3000"
+            notification: "#data-engineering"
+
+          - name: "Low Lighthouse Score"
+            condition: "avg(docs.lighthouse_score) < 90"
+            notification: "#data-engineering"
+
+      # Analytics
+      analytics:
+        google_analytics:
+          tracking_id: "GA-XXXX-XXXX"
+          events:
+            - name: "doc_section_view"
+              category: "documentation"
+            - name: "api_endpoint_test"
+              category: "interaction"
+            - name: "code_example_copy"
+              category: "engagement"
+
+        custom_analytics:
+          provider: "mixpanel"
+          events:
+            - "swagger_ui_loaded"
+            - "redoc_loaded"
+            - "interactive_test_run"
+            - "postman_collection_download"
+            - "code_example_viewed"
+
+      # Error Tracking
+      error_tracking:
+        provider: "sentry"
+        dsn: "https://xxx@sentry.io/xxx"
+        environment: "production"
+        release: "api-docs@3.1.0"
+        sample_rate: 0.1
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-docs-build-agent
+  namespace: pwc-data-engineering
+  labels:
+    app: api-docs-build
+    version: v3.1.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-docs-build
+  template:
+    metadata:
+      labels:
+        app: api-docs-build
+    spec:
+      containers:
+      - name: build-agent
+        image: pwc/api-docs-builder:3.1.0
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: BUILD_TARGET
+          value: "all"
+        - name: CDN_DISTRIBUTION_ID
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: distribution-id
+        volumeMounts:
+        - name: build-config
+          mountPath: /app/config
+        - name: build-cache
+          mountPath: /app/.cache
+      volumes:
+      - name: build-config
+        configMap:
+          name: api-docs-deployment-config
+      - name: build-cache
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-docs-build-service
+  namespace: pwc-data-engineering
+spec:
+  selector:
+    app: api-docs-build
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: api-docs-build-schedule
+  namespace: pwc-data-engineering
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: build-job
+            image: pwc/api-docs-builder:3.1.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting scheduled documentation build..."
+              npm run build:all
+              npm run deploy:production
+              echo "Documentation build and deployment completed"
+            env:
+            - name: DEPLOYMENT_TYPE
+              value: "scheduled"
+          restartPolicy: OnFailure

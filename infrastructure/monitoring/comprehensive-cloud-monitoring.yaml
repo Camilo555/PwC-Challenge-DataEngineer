@@ -1,0 +1,1201 @@
+# Comprehensive Cloud-Native Infrastructure Monitoring
+# Enterprise-grade observability with 99.99% availability monitoring
+
+---
+# Monitoring Namespace with Enhanced Security
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bmad-monitoring
+  labels:
+    app: bmad-monitoring
+    environment: production
+    security.policy: restricted
+    network.policy: monitoring
+  annotations:
+    scheduler.alpha.kubernetes.io/node-selector: "monitoring=true"
+spec: {}
+
+---
+# Resource Quota for Monitoring Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-resource-quota
+  namespace: bmad-monitoring
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 100Gi
+    limits.cpu: "40"
+    limits.memory: 200Gi
+    persistentvolumeclaims: "20"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
+
+---
+# Prometheus Operator Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'bmad-production'
+        region: 'multi-region'
+        
+    # Rule files
+    rule_files:
+    - "/etc/prometheus/rules/*.yml"
+    
+    # Scrape configurations
+    scrape_configs:
+    # Kubernetes API Server
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - default
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+        
+    # Kubernetes Nodes
+    - job_name: 'kubernetes-nodes'
+      kubernetes_sd_configs:
+      - role: node
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+        
+    # Kubernetes Pods
+    - job_name: 'kubernetes-pods'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+        
+    # BMAD Application Services
+    - job_name: 'bmad-api'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names:
+          - bmad-production
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_app]
+        action: keep
+        regex: bmad-api
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+        
+    # Database Monitoring
+    - job_name: 'postgresql-exporter'
+      static_configs:
+      - targets: ['postgresql-exporter.bmad-production.svc.cluster.local:9187']
+      scrape_interval: 30s
+      metrics_path: /metrics
+      
+    # Redis Monitoring
+    - job_name: 'redis-exporter'
+      static_configs:
+      - targets: ['redis-exporter.bmad-production.svc.cluster.local:9121']
+      scrape_interval: 15s
+      
+    # Kafka Monitoring
+    - job_name: 'kafka-exporter'
+      static_configs:
+      - targets: ['kafka-exporter.bmad-production.svc.cluster.local:9308']
+      scrape_interval: 30s
+      
+    # Node Exporter
+    - job_name: 'node-exporter'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - bmad-monitoring
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: node-exporter
+        
+    # BlackBox Exporter for External Monitoring
+    - job_name: 'blackbox-http'
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+      static_configs:
+      - targets:
+        - https://api.bmad.pwc-challenge.com/health
+        - https://bmad.pwc-challenge.com/health
+      relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter.bmad-monitoring.svc.cluster.local:9115
+        
+    # Cloud Provider Metrics
+    - job_name: 'aws-cloudwatch'
+      ec2_sd_configs:
+      - region: us-east-1
+        port: 9100
+      relabel_configs:
+      - source_labels: [__meta_ec2_tag_Environment]
+        action: keep
+        regex: production
+        
+    # Cost and Performance Metrics
+    - job_name: 'cost-metrics'
+      static_configs:
+      - targets: ['cost-analytics.bmad-production.svc.cluster.local:9090']
+      scrape_interval: 60s
+      
+    # Custom Business Metrics
+    - job_name: 'business-metrics'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names:
+          - bmad-production
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_metrics_type]
+        action: keep
+        regex: business
+        
+    # Alerting configuration
+    alerting:
+      alertmanagers:
+      - kubernetes_sd_configs:
+        - role: service
+          namespaces:
+            names:
+            - bmad-monitoring
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: alertmanager
+
+---
+# Advanced Prometheus Rules for SLA Monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus
+    component: rules
+data:
+  sla-rules.yml: |
+    groups:
+    - name: sla.availability
+      interval: 30s
+      rules:
+      # API Availability SLA (99.99% uptime)
+      - record: sla:api_availability_rate5m
+        expr: |
+          avg_over_time(up{job="bmad-api"}[5m])
+      - record: sla:api_availability_rate1h
+        expr: |
+          avg_over_time(sla:api_availability_rate5m[1h])
+      - record: sla:api_availability_rate24h
+        expr: |
+          avg_over_time(sla:api_availability_rate5m[24h])
+      - record: sla:api_availability_rate7d
+        expr: |
+          avg_over_time(sla:api_availability_rate5m[7d])
+      - record: sla:api_availability_rate30d
+        expr: |
+          avg_over_time(sla:api_availability_rate5m[30d])
+          
+      # Response Time SLA (<200ms p95)
+      - record: sla:api_response_time_p95_5m
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="bmad-api"}[5m]))
+      - record: sla:api_response_time_p99_5m
+        expr: |
+          histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job="bmad-api"}[5m]))
+          
+      # Error Rate SLA (<0.1%)
+      - record: sla:api_error_rate_5m
+        expr: |
+          (
+            rate(http_requests_total{job="bmad-api",code=~"5.."}[5m]) /
+            rate(http_requests_total{job="bmad-api"}[5m])
+          ) * 100
+          
+      # Throughput Capacity
+      - record: sla:api_throughput_rps_5m
+        expr: |
+          rate(http_requests_total{job="bmad-api"}[5m])
+          
+      # Database Connection Health
+      - record: sla:database_connection_rate5m
+        expr: |
+          avg_over_time(up{job="postgresql-exporter"}[5m])
+          
+      # Storage Health
+      - record: sla:storage_availability_rate5m
+        expr: |
+          (1 - rate(storage_operation_errors_total[5m]) / rate(storage_operations_total[5m])) * 100
+
+  performance-rules.yml: |
+    groups:
+    - name: performance.optimization
+      interval: 15s
+      rules:
+      # Resource Utilization Efficiency
+      - record: performance:cpu_utilization_efficiency
+        expr: |
+          (
+            rate(cpu_usage_seconds_total[5m]) /
+            (cpu_limit_cores * 1000)
+          ) * 100
+          
+      - record: performance:memory_utilization_efficiency
+        expr: |
+          (
+            memory_usage_bytes /
+            memory_limit_bytes
+          ) * 100
+          
+      # Auto-scaling Metrics
+      - record: performance:scaling_recommendation_cpu
+        expr: |
+          max_over_time(performance:cpu_utilization_efficiency[15m]) > 60
+          
+      - record: performance:scaling_recommendation_memory
+        expr: |
+          max_over_time(performance:memory_utilization_efficiency[15m]) > 75
+          
+      # Network Performance
+      - record: performance:network_latency_p95
+        expr: |
+          histogram_quantile(0.95, rate(network_latency_seconds_bucket[5m]))
+          
+      # Cache Performance
+      - record: performance:cache_hit_ratio
+        expr: |
+          (
+            rate(cache_hits_total[5m]) /
+            (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m]))
+          ) * 100
+          
+      # Database Performance
+      - record: performance:db_query_duration_p95
+        expr: |
+          histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))
+
+  cost-optimization-rules.yml: |
+    groups:
+    - name: cost.optimization
+      interval: 60s
+      rules:
+      # Resource Cost Efficiency
+      - record: cost:compute_cost_per_request
+        expr: |
+          (
+            compute_cost_per_hour /
+            rate(http_requests_total{job="bmad-api"}[1h])
+          )
+          
+      - record: cost:storage_utilization_percentage
+        expr: |
+          (
+            storage_used_bytes /
+            storage_provisioned_bytes
+          ) * 100
+          
+      - record: cost:monthly_spend_projection
+        expr: |
+          increase(infrastructure_cost_total[24h]) * 30
+          
+      # Rightsizing Recommendations
+      - record: cost:cpu_underutilization_7d
+        expr: |
+          avg_over_time(performance:cpu_utilization_efficiency[7d]) < 20
+          
+      - record: cost:memory_underutilization_7d
+        expr: |
+          avg_over_time(performance:memory_utilization_efficiency[7d]) < 30
+          
+      # Spot Instance Opportunities
+      - record: cost:spot_instance_suitability
+        expr: |
+          (
+            count(application_stateless_workloads) /
+            count(application_total_workloads)
+          ) * 100
+
+  alert-rules.yml: |
+    groups:
+    - name: critical.alerts
+      rules:
+      # SLA Violation Alerts
+      - alert: APIAvailabilityBreach
+        expr: sla:api_availability_rate5m < 0.9999
+        for: 1m
+        labels:
+          severity: critical
+          sla: availability
+          team: infrastructure
+        annotations:
+          summary: "API availability below 99.99% SLA"
+          description: "API availability ({{ $value | humanizePercentage }}) is below 99.99% SLA target"
+          runbook_url: "https://wiki.company.com/sla-breach-runbook"
+          
+      - alert: ResponseTimeViolation
+        expr: sla:api_response_time_p95_5m > 0.2
+        for: 2m
+        labels:
+          severity: warning
+          sla: response_time
+          team: performance
+        annotations:
+          summary: "API response time exceeds SLA"
+          description: "API p95 response time ({{ $value }}s) exceeds 200ms SLA"
+          
+      - alert: ErrorRateHigh
+        expr: sla:api_error_rate_5m > 0.1
+        for: 1m
+        labels:
+          severity: critical
+          sla: error_rate
+          team: development
+        annotations:
+          summary: "High error rate detected"
+          description: "API error rate ({{ $value }}%) exceeds 0.1% SLA"
+          
+      # Infrastructure Health Alerts
+      - alert: DatabaseConnectionDown
+        expr: sla:database_connection_rate5m < 1
+        for: 30s
+        labels:
+          severity: critical
+          component: database
+          team: infrastructure
+        annotations:
+          summary: "Database connection issues"
+          description: "Database availability ({{ $value | humanizePercentage }}) below 100%"
+          
+      - alert: HighMemoryUsage
+        expr: performance:memory_utilization_efficiency > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: compute
+          team: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory utilization ({{ $value }}%) exceeds 90% threshold"
+          
+      - alert: DiskSpaceLow
+        expr: (disk_free_bytes / disk_total_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+          component: storage
+          team: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space usage above 90% on {{ $labels.instance }}"
+          
+      # Cost Optimization Alerts
+      - alert: UnderutilizedResources
+        expr: cost:cpu_underutilization_7d == 1
+        for: 1h
+        labels:
+          severity: info
+          component: cost-optimization
+          team: finops
+        annotations:
+          summary: "Resources underutilized for 7 days"
+          description: "CPU utilization below 20% for 7 days - consider rightsizing"
+          
+      - alert: MonthlyCostBudgetExceeded
+        expr: cost:monthly_spend_projection > 50000
+        for: 15m
+        labels:
+          severity: warning
+          component: cost-management
+          team: finops
+        annotations:
+          summary: "Monthly cost projection exceeds budget"
+          description: "Projected monthly cost (${{ $value }}) exceeds $50,000 budget"
+
+  business-rules.yml: |
+    groups:
+    - name: business.metrics
+      interval: 30s
+      rules:
+      # API Usage Patterns
+      - record: business:api_requests_per_minute
+        expr: |
+          rate(http_requests_total{job="bmad-api"}[1m]) * 60
+          
+      - record: business:active_users_5m
+        expr: |
+          count by (user_id) (http_requests_total{job="bmad-api"}[5m])
+          
+      # Data Processing Metrics
+      - record: business:data_ingestion_rate_mb_per_min
+        expr: |
+          rate(data_bytes_ingested_total[1m]) / 1024 / 1024 * 60
+          
+      - record: business:etl_job_success_rate
+        expr: |
+          (
+            rate(etl_jobs_completed_total[5m]) /
+            rate(etl_jobs_started_total[5m])
+          ) * 100
+          
+      # Mobile Analytics
+      - record: business:mobile_app_sessions_5m
+        expr: |
+          increase(mobile_sessions_started_total[5m])
+          
+      - record: business:mobile_crash_rate
+        expr: |
+          (
+            rate(mobile_crashes_total[5m]) /
+            rate(mobile_sessions_started_total[5m])
+          ) * 100
+
+---
+# Prometheus Deployment with High Availability
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-server
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus-server
+    component: monitoring
+spec:
+  replicas: 2  # High availability setup
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: prometheus-server
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+        component: monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        config.hash: "prometheus-config-hash"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["prometheus-server"]
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: prometheus-service-account
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.47.0
+        args:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus/'
+        - '--web.console.libraries=/etc/prometheus/console_libraries'
+        - '--web.console.templates=/etc/prometheus/consoles'
+        - '--storage.tsdb.retention.time=90d'
+        - '--storage.tsdb.retention.size=100GB'
+        - '--web.enable-lifecycle'
+        - '--web.enable-admin-api'
+        - '--storage.tsdb.wal-compression'
+        - '--storage.tsdb.max-block-duration=2h'
+        - '--storage.tsdb.min-block-duration=2h'
+        ports:
+        - containerPort: 9090
+          name: web
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 12Gi
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus/
+        - name: rules-volume
+          mountPath: /etc/prometheus/rules/
+        - name: prometheus-storage
+          mountPath: /prometheus/
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-config
+      - name: rules-volume
+        configMap:
+          name: prometheus-rules
+      - name: prometheus-storage
+        persistentVolumeClaim:
+          claimName: prometheus-storage-pvc
+
+---
+# Prometheus Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-storage-pvc
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus-server
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: fast-ssd
+
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus-server
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: prometheus-server
+
+---
+# Service Account for Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-service-account
+  namespace: bmad-monitoring
+  labels:
+    app: prometheus
+
+---
+# ClusterRole for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-cluster-role
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+
+---
+# ClusterRoleBinding for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: prometheus-service-account
+  namespace: bmad-monitoring
+
+---
+# AlertManager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: bmad-monitoring
+  labels:
+    app: alertmanager
+    component: alerting
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.company.com:587'
+      smtp_from: 'alerts@company.com'
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+      
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default-receiver'
+      routes:
+      # Critical alerts go to PagerDuty
+      - match:
+          severity: critical
+        receiver: 'pagerduty-critical'
+        group_wait: 10s
+        repeat_interval: 1m
+      # SLA violations get immediate attention
+      - match_re:
+          alertname: '.*SLA.*|.*Availability.*'
+        receiver: 'sla-team'
+        group_wait: 10s
+        repeat_interval: 2m
+      # Infrastructure alerts
+      - match:
+          team: infrastructure
+        receiver: 'infrastructure-team'
+      # Cost optimization alerts
+      - match:
+          team: finops
+        receiver: 'finops-team'
+        repeat_interval: 24h  # Less frequent for cost alerts
+        
+    receivers:
+    - name: 'default-receiver'
+      slack_configs:
+      - channel: '#alerts-general'
+        title: 'BMAD Platform Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Team:* {{ .Labels.team }}
+          {{ end }}
+        
+    - name: 'pagerduty-critical'
+      pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_KEY'
+        severity: 'critical'
+        description: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ end }}
+      slack_configs:
+      - channel: '#alerts-critical'
+        title: '🚨 CRITICAL ALERT'
+        text: |
+          {{ range .Alerts }}
+          *CRITICAL:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+        
+    - name: 'sla-team'
+      email_configs:
+      - to: 'sla-team@company.com'
+        subject: 'SLA Violation: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          SLA Violation Detected:
+          
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Time: {{ .StartsAt }}
+          
+          This requires immediate attention to maintain our 99.99% availability SLA.
+          {{ end }}
+      slack_configs:
+      - channel: '#sla-violations'
+        title: '📊 SLA Violation'
+        color: 'danger'
+        
+    - name: 'infrastructure-team'
+      slack_configs:
+      - channel: '#infrastructure-alerts'
+        title: 'Infrastructure Alert'
+        
+    - name: 'finops-team'
+      email_configs:
+      - to: 'finops@company.com'
+        subject: 'Cost Optimization Alert'
+      slack_configs:
+      - channel: '#cost-optimization'
+        title: '💰 Cost Alert'
+        
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'cluster', 'service']
+
+---
+# AlertManager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: bmad-monitoring
+  labels:
+    app: alertmanager
+    component: alerting
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        component: alerting
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["alertmanager"]
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+        - '--config.file=/etc/alertmanager/alertmanager.yml'
+        - '--storage.path=/alertmanager'
+        - '--data.retention=72h'
+        - '--web.listen-address=0.0.0.0:9093'
+        - '--cluster.listen-address=0.0.0.0:8001'
+        - '--cluster.peer=alertmanager-0.alertmanager.bmad-monitoring.svc.cluster.local:8001'
+        - '--cluster.peer=alertmanager-1.alertmanager.bmad-monitoring.svc.cluster.local:8001'
+        ports:
+        - containerPort: 9093
+          name: web
+        - containerPort: 8001
+          name: cluster
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/alertmanager
+        - name: alertmanager-storage
+          mountPath: /alertmanager
+      volumes:
+      - name: config-volume
+        configMap:
+          name: alertmanager-config
+      - name: alertmanager-storage
+        persistentVolumeClaim:
+          claimName: alertmanager-storage-pvc
+
+---
+# AlertManager Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-storage-pvc
+  namespace: bmad-monitoring
+  labels:
+    app: alertmanager
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+
+---
+# AlertManager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: bmad-monitoring
+  labels:
+    app: alertmanager
+    component: alerting
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  - name: cluster
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  selector:
+    app: alertmanager
+
+---
+# Grafana Configuration for Comprehensive Dashboards
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: bmad-monitoring
+  labels:
+    app: grafana
+    component: visualization
+data:
+  grafana.ini: |
+    [server]
+    http_port = 3000
+    root_url = https://grafana.bmad.pwc-challenge.com
+    
+    [security]
+    admin_user = admin
+    admin_password = $__env{GRAFANA_ADMIN_PASSWORD}
+    secret_key = $__env{GRAFANA_SECRET_KEY}
+    
+    [database]
+    type = postgres
+    host = postgresql.bmad-production.svc.cluster.local:5432
+    name = grafana
+    user = grafana
+    password = $__env{GRAFANA_DB_PASSWORD}
+    ssl_mode = require
+    
+    [auth]
+    disable_login_form = false
+    disable_signout_menu = false
+    
+    [auth.generic_oauth]
+    enabled = true
+    name = Company SSO
+    allow_sign_up = true
+    client_id = $__env{OAUTH_CLIENT_ID}
+    client_secret = $__env{OAUTH_CLIENT_SECRET}
+    scopes = openid profile email
+    auth_url = https://sso.company.com/oauth/authorize
+    token_url = https://sso.company.com/oauth/token
+    api_url = https://sso.company.com/oauth/userinfo
+    
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/overview.json
+    
+    [alerting]
+    enabled = true
+    execute_alerts = true
+    
+    [metrics]
+    enabled = true
+    
+    [log]
+    mode = console file
+    level = info
+
+---
+# Grafana Deployment with High Availability
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: bmad-monitoring
+  labels:
+    app: grafana
+    component: visualization
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: visualization
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["grafana"]
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsUser: 472
+        runAsNonRoot: true
+        fsGroup: 472
+      initContainers:
+      - name: init-grafana
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+        - |
+          chown -R 472:472 /var/lib/grafana
+          chmod -R 755 /var/lib/grafana
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.1.0
+        ports:
+        - containerPort: 3000
+          name: web
+          protocol: TCP
+        env:
+        - name: GRAFANA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: admin-password
+        - name: GRAFANA_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: secret-key
+        - name: GRAFANA_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: db-password
+        - name: OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: oauth-client-id
+        - name: OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: oauth-client-secret
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        volumeMounts:
+        - name: grafana-config
+          mountPath: /etc/grafana/
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+      volumes:
+      - name: grafana-config
+        configMap:
+          name: grafana-config
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-storage-pvc
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
+
+---
+# Grafana Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage-pvc
+  namespace: bmad-monitoring
+  labels:
+    app: grafana
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: fast-ssd
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: bmad-monitoring
+  labels:
+    app: grafana
+    component: visualization
+spec:
+  type: LoadBalancer
+  ports:
+  - name: web
+    port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: grafana
+
+---
+# ServiceMonitor for Monitoring Stack Self-Monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: monitoring-stack-monitor
+  namespace: bmad-monitoring
+  labels:
+    app: monitoring-stack
+    component: self-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: monitoring
+  endpoints:
+  - port: web
+    interval: 30s
+    path: /metrics
+  namespaceSelector:
+    matchNames:
+    - bmad-monitoring

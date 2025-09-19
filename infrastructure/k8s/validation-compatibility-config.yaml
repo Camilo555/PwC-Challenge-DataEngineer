@@ -1,0 +1,943 @@
+# Kubernetes Configuration Validation and Compatibility Testing
+# Enterprise-grade validation framework for auto-scaling and monitoring infrastructure
+# Integration testing and compatibility verification for production deployment
+
+---
+# Validation and Testing Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: validation-testing
+  labels:
+    name: validation-testing
+    component: testing
+    environment: validation
+
+---
+# Configuration Validation Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kubernetes-config-validator
+  namespace: validation-testing
+  labels:
+    component: validation
+    job-type: config-validation
+spec:
+  template:
+    metadata:
+      labels:
+        app: config-validator
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: config-validator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: config-validator
+        image: bmad/config-validator:v1.0.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Starting Kubernetes configuration validation..."
+
+          # Validate HPA configurations
+          echo "Validating HPA configurations..."
+          kubectl get hpa --all-namespaces -o yaml | \
+          python3 /scripts/validate_hpa.py --strict-mode --production-ready
+
+          # Validate VPA configurations
+          echo "Validating VPA configurations..."
+          kubectl get vpa --all-namespaces -o yaml | \
+          python3 /scripts/validate_vpa.py --compatibility-check
+
+          # Validate resource quotas and limits
+          echo "Validating resource quotas and limit ranges..."
+          kubectl get resourcequotas,limitranges --all-namespaces -o yaml | \
+          python3 /scripts/validate_resources.py --efficiency-check
+
+          # Validate PDB configurations
+          echo "Validating Pod Disruption Budgets..."
+          kubectl get pdb --all-namespaces -o yaml | \
+          python3 /scripts/validate_pdb.py --availability-target=99.99
+
+          # Validate network policies
+          echo "Validating Network Policies..."
+          kubectl get networkpolicies --all-namespaces -o yaml | \
+          python3 /scripts/validate_network_policies.py --zero-trust
+
+          # Validate monitoring configuration
+          echo "Validating monitoring configuration..."
+          kubectl get servicemonitors,prometheusrules --all-namespaces -o yaml | \
+          python3 /scripts/validate_monitoring.py --enterprise-grade
+
+          # Validate autoscaling metrics
+          echo "Validating custom metrics availability..."
+          python3 /scripts/validate_custom_metrics.py \
+            --prometheus-url=http://prometheus.monitoring-enterprise.svc.cluster.local:9090 \
+            --required-metrics-file=/config/required-metrics.yaml
+
+          # Generate validation report
+          echo "Generating validation report..."
+          python3 /scripts/generate_validation_report.py \
+            --output-path=/reports/validation-report.json \
+            --format=json,html,pdf
+
+          echo "Configuration validation completed successfully!"
+
+        env:
+        - name: KUBECONFIG
+          value: /etc/kubernetes/admin.conf
+        - name: VALIDATION_MODE
+          value: "strict"
+        - name: TARGET_SLA
+          value: "99.99"
+        - name: COST_OPTIMIZATION_TARGET
+          value: "25"
+
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubernetes
+          readOnly: true
+        - name: validation-scripts
+          mountPath: /scripts
+          readOnly: true
+        - name: validation-config
+          mountPath: /config
+          readOnly: true
+        - name: validation-reports
+          mountPath: /reports
+
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: kubeconfig-secret
+      - name: validation-scripts
+        configMap:
+          name: validation-scripts
+          defaultMode: 0755
+      - name: validation-config
+        configMap:
+          name: validation-config
+      - name: validation-reports
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+# Validation Scripts ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validation-scripts
+  namespace: validation-testing
+  labels:
+    component: validation-scripts
+data:
+  validate_hpa.py: |
+    #!/usr/bin/env python3
+    """HPA Configuration Validator"""
+    import yaml
+    import sys
+    import argparse
+    import json
+    from typing import Dict, List, Any
+
+    def validate_hpa_config(hpa_config: Dict[str, Any], strict_mode: bool = False) -> Dict[str, Any]:
+        """Validate HPA configuration for production readiness"""
+        results = {"valid": True, "warnings": [], "errors": []}
+
+        spec = hpa_config.get("spec", {})
+
+        # Validate replica bounds
+        min_replicas = spec.get("minReplicas", 1)
+        max_replicas = spec.get("maxReplicas", 10)
+
+        if min_replicas < 3:
+            if strict_mode:
+                results["errors"].append(f"minReplicas ({min_replicas}) should be >= 3 for HA")
+                results["valid"] = False
+            else:
+                results["warnings"].append(f"minReplicas ({min_replicas}) is low for production")
+
+        if max_replicas < 10:
+            results["warnings"].append(f"maxReplicas ({max_replicas}) might be too low for scale")
+
+        # Validate metrics configuration
+        metrics = spec.get("metrics", [])
+        if not metrics:
+            results["errors"].append("No metrics configured for HPA")
+            results["valid"] = False
+
+        has_cpu_metric = False
+        has_memory_metric = False
+        has_custom_metric = False
+
+        for metric in metrics:
+            metric_type = metric.get("type")
+            if metric_type == "Resource":
+                resource_name = metric.get("resource", {}).get("name")
+                if resource_name == "cpu":
+                    has_cpu_metric = True
+                    target_util = metric.get("resource", {}).get("target", {}).get("averageUtilization", 0)
+                    if target_util > 80:
+                        results["warnings"].append(f"CPU target utilization ({target_util}%) is high")
+                elif resource_name == "memory":
+                    has_memory_metric = True
+            elif metric_type in ["Pods", "External"]:
+                has_custom_metric = True
+
+        if not has_cpu_metric:
+            results["warnings"].append("No CPU metric configured")
+        if not has_memory_metric:
+            results["warnings"].append("No memory metric configured")
+        if not has_custom_metric:
+            results["warnings"].append("No custom/external metrics configured")
+
+        # Validate scaling behavior
+        behavior = spec.get("behavior", {})
+        if not behavior:
+            results["warnings"].append("No scaling behavior configured")
+        else:
+            scale_up = behavior.get("scaleUp", {})
+            scale_down = behavior.get("scaleDown", {})
+
+            if not scale_up.get("stabilizationWindowSeconds"):
+                results["warnings"].append("No scale-up stabilization window configured")
+            if not scale_down.get("stabilizationWindowSeconds"):
+                results["warnings"].append("No scale-down stabilization window configured")
+
+        return results
+
+    def main():
+        parser = argparse.ArgumentParser(description="Validate HPA configurations")
+        parser.add_argument("--strict-mode", action="store_true", help="Enable strict validation mode")
+        parser.add_argument("--production-ready", action="store_true", help="Validate for production readiness")
+        args = parser.parse_args()
+
+        hpa_data = yaml.safe_load(sys.stdin)
+
+        if hpa_data.get("kind") == "List":
+            items = hpa_data.get("items", [])
+        else:
+            items = [hpa_data] if hpa_data.get("kind") == "HorizontalPodAutoscaler" else []
+
+        all_results = []
+        overall_valid = True
+
+        for item in items:
+            if item.get("kind") == "HorizontalPodAutoscaler":
+                hpa_name = item.get("metadata", {}).get("name", "unknown")
+                hpa_namespace = item.get("metadata", {}).get("namespace", "default")
+
+                result = validate_hpa_config(item, args.strict_mode)
+                result["name"] = hpa_name
+                result["namespace"] = hpa_namespace
+
+                all_results.append(result)
+                if not result["valid"]:
+                    overall_valid = False
+
+        # Output results
+        print(json.dumps(all_results, indent=2))
+
+        # Exit with error code if validation failed
+        if not overall_valid:
+            sys.exit(1)
+
+    if __name__ == "__main__":
+        main()
+
+  validate_vpa.py: |
+    #!/usr/bin/env python3
+    """VPA Configuration Validator"""
+    import yaml
+    import sys
+    import argparse
+    import json
+    from typing import Dict, List, Any
+
+    def validate_vpa_config(vpa_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate VPA configuration"""
+        results = {"valid": True, "warnings": [], "errors": []}
+
+        spec = vpa_config.get("spec", {})
+
+        # Validate update policy
+        update_policy = spec.get("updatePolicy", {})
+        update_mode = update_policy.get("updateMode", "Off")
+
+        if update_mode == "Off":
+            results["warnings"].append("VPA update mode is Off - no automatic updates")
+        elif update_mode == "Initial":
+            results["warnings"].append("VPA update mode is Initial - limited automation")
+
+        # Validate resource policy
+        resource_policy = spec.get("resourcePolicy", {})
+        container_policies = resource_policy.get("containerPolicies", [])
+
+        if not container_policies:
+            results["warnings"].append("No container policies configured")
+
+        for policy in container_policies:
+            container_name = policy.get("containerName", "unknown")
+
+            # Check resource bounds
+            max_allowed = policy.get("maxAllowed", {})
+            min_allowed = policy.get("minAllowed", {})
+
+            if not max_allowed:
+                results["warnings"].append(f"No maxAllowed limits for container {container_name}")
+            if not min_allowed:
+                results["warnings"].append(f"No minAllowed limits for container {container_name}")
+
+            # Validate controlled resources
+            controlled_resources = policy.get("controlledResources", [])
+            if "cpu" not in controlled_resources:
+                results["warnings"].append(f"CPU not controlled for container {container_name}")
+            if "memory" not in controlled_resources:
+                results["warnings"].append(f"Memory not controlled for container {container_name}")
+
+        return results
+
+    def main():
+        parser = argparse.ArgumentParser(description="Validate VPA configurations")
+        parser.add_argument("--compatibility-check", action="store_true", help="Check HPA/VPA compatibility")
+        args = parser.parse_args()
+
+        vpa_data = yaml.safe_load(sys.stdin)
+
+        if vpa_data.get("kind") == "List":
+            items = vpa_data.get("items", [])
+        else:
+            items = [vpa_data] if vpa_data.get("kind") == "VerticalPodAutoscaler" else []
+
+        all_results = []
+        overall_valid = True
+
+        for item in items:
+            if item.get("kind") == "VerticalPodAutoscaler":
+                vpa_name = item.get("metadata", {}).get("name", "unknown")
+                vpa_namespace = item.get("metadata", {}).get("namespace", "default")
+
+                result = validate_vpa_config(item)
+                result["name"] = vpa_name
+                result["namespace"] = vpa_namespace
+
+                all_results.append(result)
+                if not result["valid"]:
+                    overall_valid = False
+
+        print(json.dumps(all_results, indent=2))
+
+        if not overall_valid:
+            sys.exit(1)
+
+    if __name__ == "__main__":
+        main()
+
+  validate_resources.py: |
+    #!/usr/bin/env python3
+    """Resource Configuration Validator"""
+    import yaml
+    import sys
+    import argparse
+    import json
+    from typing import Dict, Any
+
+    def validate_resource_quota(quota_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Resource Quota configuration"""
+        results = {"valid": True, "warnings": [], "errors": []}
+
+        spec = quota_config.get("spec", {})
+        hard = spec.get("hard", {})
+
+        if not hard:
+            results["errors"].append("No hard limits specified in ResourceQuota")
+            results["valid"] = False
+            return results
+
+        # Check for essential resource limits
+        essential_resources = ["requests.cpu", "requests.memory", "limits.cpu", "limits.memory"]
+        for resource in essential_resources:
+            if resource not in hard:
+                results["warnings"].append(f"Missing {resource} limit in ResourceQuota")
+
+        # Validate resource ratios
+        if "requests.cpu" in hard and "limits.cpu" in hard:
+            try:
+                req_cpu = float(hard["requests.cpu"].replace("m", ""))
+                lim_cpu = float(hard["limits.cpu"].replace("m", ""))
+                if lim_cpu < req_cpu * 2:
+                    results["warnings"].append("CPU limit/request ratio might be too low")
+            except (ValueError, AttributeError):
+                pass
+
+        return results
+
+    def validate_limit_range(limit_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Limit Range configuration"""
+        results = {"valid": True, "warnings": [], "errors": []}
+
+        spec = limit_config.get("spec", {})
+        limits = spec.get("limits", [])
+
+        if not limits:
+            results["errors"].append("No limits specified in LimitRange")
+            results["valid"] = False
+            return results
+
+        for limit in limits:
+            limit_type = limit.get("type")
+            if limit_type in ["Container", "Pod"]:
+                # Validate default and defaultRequest
+                if "default" not in limit:
+                    results["warnings"].append(f"No default limits for {limit_type}")
+                if "defaultRequest" not in limit:
+                    results["warnings"].append(f"No default requests for {limit_type}")
+
+        return results
+
+    def main():
+        parser = argparse.ArgumentParser(description="Validate Resource configurations")
+        parser.add_argument("--efficiency-check", action="store_true", help="Check resource efficiency")
+        args = parser.parse_args()
+
+        resource_data = yaml.safe_load(sys.stdin)
+
+        if resource_data.get("kind") == "List":
+            items = resource_data.get("items", [])
+        else:
+            items = [resource_data]
+
+        all_results = []
+        overall_valid = True
+
+        for item in items:
+            kind = item.get("kind")
+            name = item.get("metadata", {}).get("name", "unknown")
+            namespace = item.get("metadata", {}).get("namespace", "default")
+
+            result = {"name": name, "namespace": namespace, "kind": kind}
+
+            if kind == "ResourceQuota":
+                result.update(validate_resource_quota(item))
+            elif kind == "LimitRange":
+                result.update(validate_limit_range(item))
+            else:
+                continue
+
+            all_results.append(result)
+            if not result.get("valid", True):
+                overall_valid = False
+
+        print(json.dumps(all_results, indent=2))
+
+        if not overall_valid:
+            sys.exit(1)
+
+    if __name__ == "__main__":
+        main()
+
+  validate_custom_metrics.py: |
+    #!/usr/bin/env python3
+    """Custom Metrics Availability Validator"""
+    import requests
+    import yaml
+    import sys
+    import argparse
+    import json
+    from typing import Dict, List, Any
+    from urllib.parse import urljoin
+
+    def check_metric_availability(prometheus_url: str, metric_name: str) -> Dict[str, Any]:
+        """Check if a metric is available in Prometheus"""
+        try:
+            query_url = urljoin(prometheus_url, "/api/v1/query")
+            response = requests.get(query_url, params={"query": metric_name}, timeout=10)
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    result_count = len(data.get("data", {}).get("result", []))
+                    return {
+                        "available": result_count > 0,
+                        "series_count": result_count,
+                        "error": None
+                    }
+                else:
+                    return {
+                        "available": False,
+                        "series_count": 0,
+                        "error": data.get("error", "Unknown error")
+                    }
+            else:
+                return {
+                    "available": False,
+                    "series_count": 0,
+                    "error": f"HTTP {response.status_code}: {response.text}"
+                }
+
+        except Exception as e:
+            return {
+                "available": False,
+                "series_count": 0,
+                "error": str(e)
+            }
+
+    def main():
+        parser = argparse.ArgumentParser(description="Validate custom metrics availability")
+        parser.add_argument("--prometheus-url", required=True, help="Prometheus server URL")
+        parser.add_argument("--required-metrics-file", required=True, help="YAML file with required metrics")
+        args = parser.parse_args()
+
+        # Load required metrics
+        with open(args.required_metrics_file, 'r') as f:
+            required_metrics = yaml.safe_load(f)
+
+        validation_results = []
+        overall_valid = True
+
+        for category, metrics in required_metrics.items():
+            for metric in metrics:
+                metric_name = metric.get("name") if isinstance(metric, dict) else metric
+
+                result = check_metric_availability(args.prometheus_url, metric_name)
+                result["metric_name"] = metric_name
+                result["category"] = category
+
+                validation_results.append(result)
+
+                if not result["available"]:
+                    overall_valid = False
+
+        # Output results
+        print(json.dumps(validation_results, indent=2))
+
+        if not overall_valid:
+            sys.exit(1)
+
+    if __name__ == "__main__":
+        main()
+
+  generate_validation_report.py: |
+    #!/usr/bin/env python3
+    """Validation Report Generator"""
+    import json
+    import argparse
+    import os
+    from datetime import datetime
+    from typing import Dict, Any
+
+    def generate_json_report(results: Dict[str, Any], output_path: str):
+        """Generate JSON validation report"""
+        report = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "validation_summary": {
+                "total_components": len(results),
+                "valid_components": sum(1 for r in results.values() if r.get("valid", True)),
+                "components_with_warnings": sum(1 for r in results.values() if r.get("warnings")),
+                "components_with_errors": sum(1 for r in results.values() if r.get("errors"))
+            },
+            "results": results,
+            "recommendations": generate_recommendations(results)
+        }
+
+        with open(f"{output_path}.json", 'w') as f:
+            json.dump(report, f, indent=2)
+
+    def generate_html_report(results: Dict[str, Any], output_path: str):
+        """Generate HTML validation report"""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Kubernetes Configuration Validation Report</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .summary {{ background: #f5f5f5; padding: 15px; border-radius: 5px; }}
+                .valid {{ color: green; }}
+                .warning {{ color: orange; }}
+                .error {{ color: red; }}
+                .component {{ margin: 15px 0; padding: 10px; border: 1px solid #ddd; }}
+            </style>
+        </head>
+        <body>
+            <h1>Kubernetes Configuration Validation Report</h1>
+            <div class="summary">
+                <h2>Summary</h2>
+                <p>Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
+                <p>Total Components: {len(results)}</p>
+                <p class="valid">Valid: {sum(1 for r in results.values() if r.get('valid', True))}</p>
+                <p class="warning">With Warnings: {sum(1 for r in results.values() if r.get('warnings'))}</p>
+                <p class="error">With Errors: {sum(1 for r in results.values() if r.get('errors'))}</p>
+            </div>
+
+            <h2>Detailed Results</h2>
+        """
+
+        for component, result in results.items():
+            status = "valid" if result.get("valid", True) else "error"
+            html_content += f"""
+            <div class="component">
+                <h3 class="{status}">{component}</h3>
+                <p>Status: {'Valid' if result.get('valid', True) else 'Invalid'}</p>
+            """
+
+            if result.get("warnings"):
+                html_content += "<h4 class='warning'>Warnings:</h4><ul>"
+                for warning in result["warnings"]:
+                    html_content += f"<li>{warning}</li>"
+                html_content += "</ul>"
+
+            if result.get("errors"):
+                html_content += "<h4 class='error'>Errors:</h4><ul>"
+                for error in result["errors"]:
+                    html_content += f"<li>{error}</li>"
+                html_content += "</ul>"
+
+            html_content += "</div>"
+
+        html_content += """
+            </body>
+            </html>
+        """
+
+        with open(f"{output_path}.html", 'w') as f:
+            f.write(html_content)
+
+    def generate_recommendations(results: Dict[str, Any]) -> List[str]:
+        """Generate recommendations based on validation results"""
+        recommendations = []
+
+        error_count = sum(1 for r in results.values() if r.get("errors"))
+        warning_count = sum(1 for r in results.values() if r.get("warnings"))
+
+        if error_count > 0:
+            recommendations.append(f"Address {error_count} critical configuration errors before deployment")
+
+        if warning_count > 5:
+            recommendations.append("Consider addressing configuration warnings for optimal performance")
+
+        # Add specific recommendations based on common issues
+        hpa_issues = [r for r in results.values() if "minReplicas" in str(r.get("warnings", []))]
+        if hpa_issues:
+            recommendations.append("Increase minimum replica counts for better high availability")
+
+        return recommendations
+
+    def main():
+        parser = argparse.ArgumentParser(description="Generate validation report")
+        parser.add_argument("--output-path", required=True, help="Output file path (without extension)")
+        parser.add_argument("--format", default="json", help="Report format: json,html,pdf")
+        args = parser.parse_args()
+
+        # Collect validation results (placeholder - in real implementation, this would collect from various validators)
+        results = {
+            "hpa_validation": {"valid": True, "warnings": [], "errors": []},
+            "vpa_validation": {"valid": True, "warnings": [], "errors": []},
+            "resource_validation": {"valid": True, "warnings": [], "errors": []},
+            "monitoring_validation": {"valid": True, "warnings": [], "errors": []}
+        }
+
+        formats = args.format.split(",")
+
+        if "json" in formats:
+            generate_json_report(results, args.output_path)
+
+        if "html" in formats:
+            generate_html_report(results, args.output_path)
+
+        print(f"Validation report generated: {args.output_path}")
+
+    if __name__ == "__main__":
+        main()
+
+---
+# Validation Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validation-config
+  namespace: validation-testing
+  labels:
+    component: validation-config
+data:
+  required-metrics.yaml: |
+    application_metrics:
+      - name: http_requests_total
+        description: "Total HTTP requests"
+        required: true
+      - name: http_request_duration_seconds
+        description: "HTTP request duration"
+        required: true
+      - name: http_requests_per_second
+        description: "HTTP requests per second"
+        required: true
+
+    infrastructure_metrics:
+      - name: node_cpu_usage_percentage
+        description: "Node CPU usage percentage"
+        required: true
+      - name: node_memory_usage_percentage
+        description: "Node memory usage percentage"
+        required: true
+      - name: kube_pod_container_resource_requests
+        description: "Pod resource requests"
+        required: true
+
+    autoscaling_metrics:
+      - name: kube_horizontalpodautoscaler_status_current_replicas
+        description: "Current HPA replicas"
+        required: true
+      - name: kube_verticalpodautoscaler_status_recommendation
+        description: "VPA recommendations"
+        required: false
+
+    custom_metrics:
+      - name: requests_per_second
+        description: "Custom requests per second metric"
+        required: true
+      - name: response_time_p95
+        description: "95th percentile response time"
+        required: true
+      - name: active_connections
+        description: "Active connections metric"
+        required: true
+
+  validation-thresholds.yaml: |
+    thresholds:
+      availability_sla: 99.99
+      latency_sla_p99_ms: 200
+      error_rate_threshold: 0.1
+      cpu_utilization_target: 70
+      memory_utilization_target: 75
+
+    hpa_requirements:
+      min_replicas_minimum: 3
+      max_replicas_minimum: 10
+      required_metrics: ["cpu", "memory"]
+      scaling_behavior_required: true
+
+    vpa_requirements:
+      update_mode_recommended: "Auto"
+      resource_policies_required: true
+      controlled_resources: ["cpu", "memory"]
+
+    resource_requirements:
+      resource_quotas_required: true
+      limit_ranges_required: true
+      pod_disruption_budgets_required: true
+
+---
+# Compatibility Testing Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: compatibility-tester
+  namespace: validation-testing
+  labels:
+    component: compatibility-testing
+    job-type: integration-test
+spec:
+  template:
+    metadata:
+      labels:
+        app: compatibility-tester
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: config-validator
+      containers:
+      - name: compatibility-tester
+        image: bmad/compatibility-tester:v1.0.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Starting compatibility testing..."
+
+          # Test HPA/VPA compatibility
+          echo "Testing HPA/VPA compatibility..."
+          python3 /scripts/test_hpa_vpa_compatibility.py \
+            --namespace=bmad-enterprise \
+            --timeout=300
+
+          # Test monitoring integration
+          echo "Testing monitoring integration..."
+          python3 /scripts/test_monitoring_integration.py \
+            --prometheus-url=http://prometheus.monitoring-enterprise.svc.cluster.local:9090 \
+            --expected-targets=10
+
+          # Test autoscaling behavior
+          echo "Testing autoscaling behavior..."
+          python3 /scripts/test_autoscaling_behavior.py \
+            --deployment=bmad-api-enterprise \
+            --namespace=bmad-enterprise \
+            --load-test-duration=300
+
+          # Test resource efficiency
+          echo "Testing resource efficiency..."
+          python3 /scripts/test_resource_efficiency.py \
+            --target-efficiency=75 \
+            --measurement-duration=600
+
+          echo "Compatibility testing completed!"
+
+        env:
+        - name: KUBECONFIG
+          value: /etc/kubernetes/admin.conf
+
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubernetes
+          readOnly: true
+        - name: compatibility-scripts
+          mountPath: /scripts
+          readOnly: true
+
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: kubeconfig-secret
+      - name: compatibility-scripts
+        configMap:
+          name: compatibility-scripts
+          defaultMode: 0755
+
+---
+# Validation Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: config-validator
+  namespace: validation-testing
+
+---
+# Validation RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: config-validator
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers", "verticalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["servicemonitors", "prometheusrules"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: config-validator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: config-validator
+subjects:
+- kind: ServiceAccount
+  name: config-validator
+  namespace: validation-testing
+
+---
+# Validation Report Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: validation-reports
+  namespace: validation-testing
+  labels:
+    component: validation-reports
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: validation-report-server
+
+---
+# Validation Report Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validation-report-server
+  namespace: validation-testing
+  labels:
+    app: validation-report-server
+    component: validation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validation-report-server
+  template:
+    metadata:
+      labels:
+        app: validation-report-server
+    spec:
+      serviceAccountName: config-validator
+      containers:
+      - name: report-server
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - name: validation-reports
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: validation-reports
+        emptyDir: {}

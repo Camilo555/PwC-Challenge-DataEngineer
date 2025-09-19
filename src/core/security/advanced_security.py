@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from ipaddress import AddressValueError, IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import geoip2.database
 import geoip2.errors

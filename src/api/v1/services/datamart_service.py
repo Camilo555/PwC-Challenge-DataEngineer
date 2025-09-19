@@ -42,20 +42,33 @@ class DataMartService:
             if date_filter is not None:
                 total_sales_query = total_sales_query.join(DimDate).where(date_filter)
 
-            result = self.session.exec(total_sales_query).first()
+            # Execute database queries concurrently for better performance
+            import asyncio
 
-            # Get period comparison (previous period)
-            prev_period_query = self._get_previous_period_metrics(date_from, date_to)
-            prev_result = self.session.exec(prev_period_query).first() if prev_period_query else None
+            # Run main query and previous period query concurrently
+            async def get_main_metrics():
+                return await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self.session.exec(total_sales_query).first()
+                )
+
+            async def get_prev_metrics():
+                prev_period_query = self._get_previous_period_metrics(date_from, date_to)
+                if prev_period_query:
+                    return await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: self.session.exec(prev_period_query).first()
+                    )
+                return None
+
+            # Run all queries in parallel for optimal performance
+            result, prev_result, top_products, top_countries = await asyncio.gather(
+                get_main_metrics(),
+                get_prev_metrics(),
+                self._get_top_products(limit=5, date_filter=date_filter),
+                self._get_top_countries(limit=5, date_filter=date_filter)
+            )
 
             # Calculate growth rates
             growth_metrics = self._calculate_growth_metrics(result, prev_result)
-
-            # Get top selling products
-            top_products = await self._get_top_products(limit=5, date_filter=date_filter)
-
-            # Get top countries
-            top_countries = await self._get_top_countries(limit=5, date_filter=date_filter)
 
             return {
                 "period": {
@@ -211,12 +224,16 @@ class DataMartService:
                     DimCustomer.is_current == True
                 )
             )
-            customer = self.session.exec(customer_query).first()
+            # Execute customer query first to get customer_key
+            import asyncio
+            customer = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.session.exec(customer_query).first()
+            )
 
             if not customer:
                 return None
 
-            # Get customer's purchase history
+            # Build additional queries with customer_key
             purchase_history_query = select(
                 DimDate.date,
                 FactSale.total_amount,
@@ -230,9 +247,6 @@ class DataMartService:
              .order_by(desc(DimDate.date))\
              .limit(20)
 
-            purchases = self.session.exec(purchase_history_query).all()
-
-            # Get favorite categories
             category_query = select(
                 DimProduct.category,
                 func.sum(FactSale.total_amount).label("total_spent"),
@@ -243,7 +257,21 @@ class DataMartService:
              .group_by(DimProduct.category)\
              .order_by(desc("total_spent"))
 
-            categories = self.session.exec(category_query).all()
+            # Execute purchase and category queries in parallel
+            async def get_purchases():
+                return await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self.session.exec(purchase_history_query).all()
+                )
+
+            async def get_categories():
+                return await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self.session.exec(category_query).all()
+                )
+
+            purchases, categories = await asyncio.gather(
+                get_purchases(),
+                get_categories()
+            )
 
             return {
                 "customer_id": customer.customer_id,
@@ -615,7 +643,11 @@ class DataMartService:
                     .order_by(desc("revenue"))\
                     .limit(limit)
 
-        results = self.session.exec(query).all()
+        # Execute query asynchronously for better performance
+        import asyncio
+        results = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self.session.exec(query).all()
+        )
 
         return [
             {
@@ -641,7 +673,11 @@ class DataMartService:
                     .order_by(desc("revenue"))\
                     .limit(limit)
 
-        results = self.session.exec(query).all()
+        # Execute query asynchronously for better performance
+        import asyncio
+        results = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self.session.exec(query).all()
+        )
 
         return [
             {

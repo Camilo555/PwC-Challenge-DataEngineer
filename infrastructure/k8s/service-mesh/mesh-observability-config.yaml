@@ -1,0 +1,730 @@
+---
+# Comprehensive Service Mesh Observability Configuration
+# Advanced monitoring, tracing, and logging for PwC Enterprise Service Mesh
+
+# Jaeger Tracing Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-configuration
+  namespace: istio-system
+data:
+  jaeger.yaml: |
+    # Jaeger configuration for distributed tracing
+    query:
+      port: 16686
+      grpc-server:
+        host-port: 0.0.0.0:16685
+      http-server:
+        host-port: 0.0.0.0:16686
+      max-clock-skew-adjustment: 0s
+
+    collector:
+      grpc-server:
+        host-port: 0.0.0.0:14250
+      http-server:
+        host-port: 0.0.0.0:14268
+      otlp:
+        grpc:
+          host-port: 0.0.0.0:4317
+        http:
+          host-port: 0.0.0.0:4318
+
+    storage:
+      type: elasticsearch
+      elasticsearch:
+        server-urls: http://elasticsearch.monitoring.svc.cluster.local:9200
+        index-prefix: jaeger
+        max-span-age: 168h  # 7 days
+        max-num-spans: 10000000
+
+    sampling:
+      default_strategy:
+        type: probabilistic
+        param: 0.1  # 10% sampling rate
+
+---
+# Jaeger Deployment for Distributed Tracing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: istio-system
+  labels:
+    app: jaeger
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.50
+          ports:
+            - containerPort: 16686
+              name: query
+            - containerPort: 14268
+              name: collector-http
+            - containerPort: 14250
+              name: collector-grpc
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch
+            - name: ES_SERVER_URLS
+              value: http://elasticsearch.monitoring.svc.cluster.local:9200
+            - name: ES_INDEX_PREFIX
+              value: jaeger
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: jaeger-config
+              mountPath: /etc/jaeger
+      volumes:
+        - name: jaeger-config
+          configMap:
+            name: jaeger-configuration
+
+---
+# Jaeger Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: istio-system
+  labels:
+    app: jaeger
+spec:
+  ports:
+    - port: 16686
+      name: query
+      targetPort: 16686
+    - port: 14268
+      name: collector-http
+      targetPort: 14268
+    - port: 14250
+      name: collector-grpc
+      targetPort: 14250
+    - port: 4317
+      name: otlp-grpc
+      targetPort: 4317
+    - port: 4318
+      name: otlp-http
+      targetPort: 4318
+  selector:
+    app: jaeger
+
+---
+# Kiali for Service Mesh Visualization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kiali-config
+  namespace: istio-system
+data:
+  config.yaml: |
+    auth:
+      strategy: "anonymous"
+
+    deployment:
+      accessible_namespaces:
+        - "**"
+      namespace: istio-system
+
+    external_services:
+      prometheus:
+        url: "http://prometheus.monitoring.svc.cluster.local:9090"
+      grafana:
+        url: "http://grafana.monitoring.svc.cluster.local:3000"
+        in_cluster_url: "http://grafana.monitoring.svc.cluster.local:3000"
+      jaeger:
+        url: "http://jaeger-collector.istio-system.svc.cluster.local:16686"
+        in_cluster_url: "http://jaeger-collector.istio-system.svc.cluster.local:16686"
+
+    server:
+      port: 20001
+      web_root: "/kiali"
+
+    api:
+      namespaces:
+        exclude:
+          - "kube-system"
+          - "kube-public"
+          - "kube-node-lease"
+
+---
+# Kiali Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kiali
+  template:
+    metadata:
+      labels:
+        app: kiali
+    spec:
+      serviceAccountName: kiali-service-account
+      containers:
+        - name: kiali
+          image: quay.io/kiali/kiali:v1.74
+          ports:
+            - containerPort: 20001
+              name: api-port
+          env:
+            - name: ACTIVE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: kiali-configuration
+              mountPath: "/kiali-configuration"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+      volumes:
+        - name: kiali-configuration
+          configMap:
+            name: kiali-config
+
+---
+# Kiali Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kiali-service-account
+  namespace: istio-system
+
+---
+# Kiali ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kiali-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "endpoints", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.istio.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["security.istio.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+---
+# Kiali ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kiali-viewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kiali-viewer
+subjects:
+  - kind: ServiceAccount
+    name: kiali-service-account
+    namespace: istio-system
+
+---
+# Kiali Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+spec:
+  ports:
+    - port: 20001
+      name: http-kiali
+      targetPort: 20001
+  selector:
+    app: kiali
+
+---
+# Prometheus ServiceMonitor for Istio Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istio-mesh-metrics
+  namespace: istio-system
+  labels:
+    app: istio-proxy
+spec:
+  selector:
+    matchLabels:
+      app: istiod
+  endpoints:
+    - port: http-monitoring
+      interval: 15s
+      path: /stats/prometheus
+
+---
+# Prometheus ServiceMonitor for Envoy Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: envoy-stats
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      app: istio-proxy
+  endpoints:
+    - port: http-envoy-prom
+      interval: 15s
+      path: /stats/prometheus
+
+---
+# Grafana Dashboard ConfigMap for Service Mesh
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-mesh-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  service-mesh-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "PwC Service Mesh Overview",
+        "tags": ["istio", "service-mesh", "pwc"],
+        "style": "dark",
+        "timezone": "UTC",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Mesh Request Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total[5m]))",
+                "legendFormat": "Request Rate"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "reqps"
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Service Mesh Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{response_code!~\"5.*\"}[5m])) / sum(rate(istio_requests_total[5m])) * 100",
+                "legendFormat": "Success Rate"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Request Latency P99",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket[5m])) by (le, destination_service_name))",
+                "legendFormat": "{{destination_service_name}}"
+              }
+            ],
+            "yAxes": [
+              {
+                "unit": "ms"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "Service Mesh Traffic Distribution",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total[5m])) by (destination_service_name)",
+                "legendFormat": "{{destination_service_name}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 5,
+            "title": "Circuit Breaker Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(envoy_cluster_outlier_detection_ejections_active) by (cluster_name)",
+                "legendFormat": "{{cluster_name}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }
+
+---
+# Custom Metrics for Business Intelligence
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-business-metrics
+  namespace: pwc-data-engineering
+spec:
+  metrics:
+    - providers:
+        - name: prometheus
+    # API endpoint performance metrics
+    - overrides:
+        - match:
+            metric: requests_total
+          operation: UPSERT
+          tags:
+            api_endpoint:
+              value: |
+                has(request.url_path) ?
+                  (request.url_path | startsWith("/api/v1/analytics") ? "analytics" :
+                   request.url_path | startsWith("/api/v1/data") ? "data" :
+                   request.url_path | startsWith("/api/v1/reports") ? "reports" :
+                   "other") : "unknown"
+
+    # Business metrics
+    - providers:
+        - name: prometheus
+      overrides:
+        - match:
+            metric: ALL_METRICS
+          operation: UPSERT
+          tags:
+            business_unit:
+              value: "data-engineering"
+            cost_center:
+              value: "technology"
+            service_tier:
+              value: |
+                has(request.headers['x-service-tier']) ?
+                  request.headers['x-service-tier'] : "standard"
+            user_type:
+              value: |
+                has(request.headers['x-user-type']) ?
+                  request.headers['x-user-type'] : "external"
+
+---
+# Log Aggregation Configuration
+apiVersion: logging.coreos.com/v1
+kind: ClusterLogForwarder
+metadata:
+  name: istio-log-forwarder
+  namespace: openshift-logging
+spec:
+  outputs:
+    - name: elasticsearch-istio
+      type: elasticsearch
+      url: http://elasticsearch.monitoring.svc.cluster.local:9200
+      elasticsearch:
+        index: istio-logs-{.log_type}
+  pipelines:
+    - name: istio-access-logs
+      inputRefs:
+        - application
+      filterRefs:
+        - istio-filter
+      outputRefs:
+        - elasticsearch-istio
+
+---
+# Log Filter for Istio
+apiVersion: logging.coreos.com/v1
+kind: ClusterLogFilter
+metadata:
+  name: istio-filter
+spec:
+  type: json
+  json:
+    javascript: |
+      const log = record.log;
+      if (log && log.includes('envoy')) {
+        try {
+          const parsed = JSON.parse(log);
+          record.istio = {
+            timestamp: parsed.timestamp,
+            method: parsed.method,
+            path: parsed.path,
+            response_code: parsed.response_code,
+            duration: parsed.duration,
+            user_agent: parsed.user_agent,
+            x_forwarded_for: parsed.x_forwarded_for
+          };
+        } catch (e) {
+          // Failed to parse, keep original log
+        }
+      }
+      return record;
+
+---
+# Alertmanager Rules for Service Mesh
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: istio-alerts
+  namespace: istio-system
+  labels:
+    app: istio
+spec:
+  groups:
+    - name: istio.alerts
+      interval: 30s
+      rules:
+        # High Error Rate Alert
+        - alert: IstioHighErrorRate
+          expr: |
+            (
+              sum(rate(istio_requests_total{response_code=~"5.*"}[5m])) by (destination_service_name, destination_service_namespace)
+              /
+              sum(rate(istio_requests_total[5m])) by (destination_service_name, destination_service_namespace)
+            ) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate in service mesh"
+            description: "Service {{ $labels.destination_service_name }} in namespace {{ $labels.destination_service_namespace }} has error rate {{ $value | humanizePercentage }}"
+
+        # High Latency Alert
+        - alert: IstioHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(istio_request_duration_milliseconds_bucket[5m]))
+              by (destination_service_name, destination_service_namespace, le)
+            ) > 1000
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency in service mesh"
+            description: "Service {{ $labels.destination_service_name }} has 99th percentile latency {{ $value }}ms"
+
+        # Circuit Breaker Open Alert
+        - alert: IstioCircuitBreakerOpen
+          expr: envoy_cluster_outlier_detection_ejections_active > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Circuit breaker is open"
+            description: "Circuit breaker is open for cluster {{ $labels.cluster_name }}"
+
+        # mTLS Configuration Alert
+        - alert: IstioMTLSDisabled
+          expr: |
+            sum(increase(istio_requests_total{source_principal="unknown"}[5m])) by (destination_service_name) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "mTLS not properly configured"
+            description: "Service {{ $labels.destination_service_name }} is receiving requests without proper mTLS"
+
+        # Gateway Certificate Expiry
+        - alert: IstioGatewayCertificateExpiring
+          expr: (cert_manager_certificate_expiration_timestamp_seconds - time()) / 86400 < 30
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Gateway certificate expiring soon"
+            description: "Certificate for gateway will expire in {{ $value }} days"
+
+---
+# Service Level Objectives (SLOs) Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio-slos
+  namespace: istio-system
+data:
+  slos.yaml: |
+    # Service Level Objectives for Service Mesh
+    services:
+      pwc-api-service:
+        availability_slo: 99.9  # 99.9% availability
+        latency_slo:
+          p50: 100ms
+          p95: 500ms
+          p99: 1000ms
+        error_rate_slo: 0.1  # Less than 0.1% error rate
+
+      pwc-analytics-service:
+        availability_slo: 99.5
+        latency_slo:
+          p50: 500ms
+          p95: 2000ms
+          p99: 5000ms
+        error_rate_slo: 1.0
+
+      pwc-data-service:
+        availability_slo: 99.9
+        latency_slo:
+          p50: 200ms
+          p95: 1000ms
+          p99: 2000ms
+        error_rate_slo: 0.5
+
+---
+# Advanced Telemetry Configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: pwc-advanced-telemetry
+  namespace: istio-system
+spec:
+  # Enhanced access logging with structured format
+  accessLogging:
+    - providers:
+        - name: otel
+    - format: |
+        {
+          "timestamp": "%START_TIME%",
+          "method": "%REQ(:METHOD)%",
+          "path": "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+          "protocol": "%PROTOCOL%",
+          "response_code": "%RESPONSE_CODE%",
+          "response_flags": "%RESPONSE_FLAGS%",
+          "bytes_received": "%BYTES_RECEIVED%",
+          "bytes_sent": "%BYTES_SENT%",
+          "duration_ms": "%DURATION%",
+          "upstream_service_time_ms": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+          "x_forwarded_for": "%REQ(X-FORWARDED-FOR)%",
+          "user_agent": "%REQ(USER-AGENT)%",
+          "request_id": "%REQ(X-REQUEST-ID)%",
+          "authority": "%REQ(:AUTHORITY)%",
+          "upstream_host": "%UPSTREAM_HOST%",
+          "upstream_cluster": "%UPSTREAM_CLUSTER%",
+          "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+          "source_namespace": "%REQ(X-SOURCE-NAMESPACE)%",
+          "source_workload": "%REQ(X-SOURCE-WORKLOAD)%",
+          "destination_namespace": "%REQ(X-DESTINATION-NAMESPACE)%",
+          "destination_workload": "%REQ(X-DESTINATION-WORKLOAD)%",
+          "mtls_status": "%REQ(X-MTLS-STATUS)%",
+          "mesh_id": "pwc-enterprise-mesh"
+        }
+
+  # Distributed tracing with custom tags
+  tracing:
+    - providers:
+        - name: jaeger
+    - customTags:
+        request_id:
+          header:
+            name: x-request-id
+        user_id:
+          header:
+            name: x-user-id
+        api_version:
+          header:
+            name: x-api-version
+        business_unit:
+          literal:
+            value: "data-engineering"
+        environment:
+          environment:
+            name: ENVIRONMENT
+            defaultValue: "production"
+
+---
+# Custom Dashboards for Service Mesh Operations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio-operations-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  istio-operations.json: |
+    {
+      "dashboard": {
+        "title": "Istio Operations Dashboard",
+        "panels": [
+          {
+            "title": "mTLS Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{source_principal!=\"unknown\"}[5m])) / sum(rate(istio_requests_total[5m])) * 100",
+                "legendFormat": "mTLS Coverage %"
+              }
+            ]
+          },
+          {
+            "title": "Gateway Performance",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{source_workload=\"istio-gateway\"}[5m])) by (destination_service_name)",
+                "legendFormat": "{{destination_service_name}}"
+              }
+            ]
+          },
+          {
+            "title": "Certificate Status",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "cert_manager_certificate_expiration_timestamp_seconds",
+                "format": "table"
+              }
+            ]
+          }
+        ]
+      }
+    }

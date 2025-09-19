@@ -25,7 +25,7 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70
+        averageUtilization: 60  # More aggressive CPU scaling for 99.99% availability
   # Memory-based scaling
   - type: Resource
     resource:
@@ -240,15 +240,21 @@ spec:
         periodSeconds: 60
 
 ---
-# VPA for Vector Database
+# Enhanced VPA for Vector Database with AI-powered resource optimization
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
-  name: bmad-vector-db-vpa
+  name: bmad-vector-db-vpa-enhanced
   namespace: default
   labels:
     app: bmad-vector-db
-    component: autoscaling
+    component: intelligent-autoscaling
+    version: v2.0.0
+  annotations:
+    vpa.kubernetes.io/cpu-policy: "proportional"
+    vpa.kubernetes.io/memory-policy: "proportional"
+    cost-optimization.bmad.com/enabled: "true"
+    performance-tuning.bmad.com/ml-driven: "true"
 spec:
   targetRef:
     apiVersion: apps/v1
@@ -256,19 +262,306 @@ spec:
     name: bmad-vector-db-deployment
   updatePolicy:
     updateMode: "Auto"
+    minReplicas: 3
   resourcePolicy:
     containerPolicies:
     - containerName: vector-db
       maxAllowed:
-        cpu: 8
-        memory: 32Gi
+        cpu: 16        # Increased for AI workloads
+        memory: 64Gi   # Increased for vector operations
+        ephemeral-storage: 20Gi
       minAllowed:
-        cpu: 500m
-        memory: 2Gi
+        cpu: 1         # Higher minimum for vector operations
+        memory: 4Gi    # Higher minimum for embeddings
+        ephemeral-storage: 2Gi
       controlledResources:
       - cpu
       - memory
+      - ephemeral-storage
       controlledValues: RequestsAndLimits
+      mode: Auto
+    - containerName: vector-db-sidecar
+      maxAllowed:
+        cpu: 2
+        memory: 8Gi
+      minAllowed:
+        cpu: 200m
+        memory: 512Mi
+      controlledResources:
+      - cpu
+      - memory
+      mode: Auto
+
+---
+# Advanced VPA for API Service with Cost Optimization
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-api-vpa-cost-optimized
+  namespace: default
+  labels:
+    app: bmad-api
+    component: intelligent-autoscaling
+    cost-tier: "optimized"
+  annotations:
+    cost-optimization.bmad.com/target-reduction: "25%"
+    performance.bmad.com/sla-compliance: "99.99%"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-api-deployment
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 6
+    evictionRequirements:
+    - resources: ["cpu", "memory"]
+      changeRequirement: 0.2  # Only evict if 20%+ change needed
+  resourcePolicy:
+    containerPolicies:
+    - containerName: bmad-api
+      maxAllowed:
+        cpu: 8         # Increased for high-performance API
+        memory: 16Gi   # Increased for caching and processing
+        ephemeral-storage: 5Gi
+      minAllowed:
+        cpu: 500m      # Reasonable minimum for API responsiveness
+        memory: 1Gi    # Minimum for application startup
+        ephemeral-storage: 500Mi
+      controlledResources:
+      - cpu
+      - memory
+      - ephemeral-storage
+      controlledValues: RequestsAndLimits
+      mode: Auto
+      # Advanced resource scaling configuration
+      scalingMode: "Conservative"  # Gradual scaling for stability
+
+---
+# VPA for Analytics Service with Query-based Scaling
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-analytics-vpa-query-aware
+  namespace: default
+  labels:
+    app: bmad-analytics
+    component: query-aware-autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-analytics-deployment
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: analytics-engine
+      maxAllowed:
+        cpu: 12        # High CPU for complex analytics queries
+        memory: 48Gi   # Large memory for in-memory processing
+        ephemeral-storage: 15Gi
+      minAllowed:
+        cpu: 1
+        memory: 2Gi
+        ephemeral-storage: 1Gi
+      controlledResources:
+      - cpu
+      - memory
+      - ephemeral-storage
+      controlledValues: RequestsAndLimits
+      mode: Auto
+
+---
+# VPA for Mobile Service with Device-aware Scaling
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: bmad-mobile-vpa-device-aware
+  namespace: default
+  labels:
+    app: bmad-mobile
+    component: device-aware-autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bmad-mobile-deployment
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 2
+  resourcePolicy:
+    containerPolicies:
+    - containerName: mobile-api
+      maxAllowed:
+        cpu: 4
+        memory: 8Gi
+        ephemeral-storage: 3Gi
+      minAllowed:
+        cpu: 300m
+        memory: 512Mi
+        ephemeral-storage: 256Mi
+      controlledResources:
+      - cpu
+      - memory
+      - ephemeral-storage
+      controlledValues: RequestsAndLimits
+      mode: Auto
+
+---
+# VPA Configuration Manager - ConfigMap for intelligent resource policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vpa-intelligent-policies
+  namespace: default
+  labels:
+    component: vpa-configuration
+    version: v2.0.0
+data:
+  intelligent-scaling-policies.yaml: |
+    vpa_policies:
+      # Global VPA settings
+      global:
+        update_frequency_seconds: 300    # 5 minutes
+        recommendation_margin_fraction: 0.15  # 15% safety margin
+        pod_update_threshold: 0.1       # Update if 10% change needed
+        history_length: "7d"            # Keep 7 days of history
+        target_cpu_percentile: 95       # Use 95th percentile for CPU
+        target_memory_percentile: 95    # Use 95th percentile for memory
+        
+      # Service-specific policies
+      service_policies:
+        api_service:
+          scaling_mode: "balanced"      # Balance cost and performance
+          cpu_scaling_factor: 1.2       # 20% overhead for CPU spikes
+          memory_scaling_factor: 1.15   # 15% overhead for memory
+          cost_optimization:
+            enabled: true
+            target_utilization: 75      # Target 75% utilization
+            max_cost_increase_percent: 10
+          performance_requirements:
+            max_startup_time_seconds: 30
+            target_response_time_ms: 100
+            
+        vector_db:
+          scaling_mode: "performance"   # Prioritize performance
+          cpu_scaling_factor: 1.5       # 50% overhead for ML workloads
+          memory_scaling_factor: 1.3    # 30% overhead for vector storage
+          specialized_resources:
+            gpu_memory_scaling: true
+            vector_index_memory_reservation: "20%"
+            embedding_cache_size_factor: 2.0
+            
+        analytics_service:
+          scaling_mode: "adaptive"      # Adapt to query complexity
+          cpu_scaling_factor: 2.0       # High CPU overhead for analytics
+          memory_scaling_factor: 1.8    # High memory for data processing
+          query_aware_scaling:
+            simple_query_multiplier: 1.0
+            complex_query_multiplier: 3.0
+            aggregation_query_multiplier: 5.0
+            
+        mobile_service:
+          scaling_mode: "efficient"     # Optimize for mobile workloads
+          cpu_scaling_factor: 1.1       # Lower CPU overhead
+          memory_scaling_factor: 1.2    # Moderate memory overhead
+          device_optimization:
+            concurrent_connections_factor: 0.8
+            push_notification_memory_factor: 1.5
+            
+      # Advanced resource prediction models
+      prediction_models:
+        time_series_forecasting:
+          enabled: true
+          model_type: "arima"
+          prediction_window_hours: 6
+          confidence_interval: 0.95
+          seasonal_adjustment: true
+          
+        workload_pattern_analysis:
+          enabled: true
+          pattern_detection_days: 14
+          similarity_threshold: 0.8
+          anomaly_detection_sensitivity: 0.95
+          
+        business_metric_correlation:
+          enabled: true
+          correlation_metrics:
+            - daily_active_users
+            - transaction_volume
+            - data_processing_volume
+            - api_request_complexity
+          correlation_window_hours: 24
+          
+      # Cost optimization strategies
+      cost_optimization:
+        enabled: true
+        strategies:
+          rightsizing:
+            enabled: true
+            underutilization_threshold: 0.3  # 30% utilization
+            evaluation_period_days: 7
+            min_savings_threshold_usd: 50
+            
+          spot_instance_optimization:
+            enabled: true
+            suitable_workloads: ["analytics", "batch-processing"]
+            savings_target_percentage: 60
+            
+          scheduled_scaling:
+            enabled: true
+            business_hours_scale_factor: 1.0
+            off_hours_scale_factor: 0.6
+            weekend_scale_factor: 0.4
+            
+          resource_pooling:
+            enabled: true
+            shared_resource_types: ["gpu", "high-memory"]
+            pool_utilization_target: 85
+            
+      # Performance monitoring and alerting
+      monitoring:
+        enabled: true
+        metrics_collection_interval: 60
+        alerting_rules:
+          - name: "VPA_Recommendation_Drift"
+            condition: "recommendation_drift > 50%"
+            severity: "warning"
+            
+          - name: "Resource_Waste_Alert"
+            condition: "utilization < 30% for 4h"
+            severity: "info"
+            
+          - name: "Cost_Increase_Alert"
+            condition: "cost_increase > 20%"
+            severity: "critical"
+            
+        dashboard_metrics:
+          - resource_utilization_trends
+          - cost_optimization_savings
+          - recommendation_accuracy
+          - scaling_event_frequency
+          
+      # Machine learning enhancements
+      ml_optimization:
+        enabled: true
+        models:
+          resource_prediction:
+            algorithm: "lstm"
+            features: ["cpu_usage", "memory_usage", "request_rate", "queue_depth"]
+            training_window_days: 30
+            retraining_frequency_days: 7
+            
+          anomaly_detection:
+            algorithm: "isolation_forest"
+            sensitivity: 0.95
+            feature_importance_analysis: true
+            
+          cost_performance_optimization:
+            algorithm: "multi_objective_optimization"
+            objectives: ["minimize_cost", "maximize_performance", "maintain_sla"]
+            pareto_frontier_analysis: true
 
 ---
 # HPA for Analytics Service
@@ -330,7 +623,7 @@ spec:
         periodSeconds: 30
 
 ---
-# Custom Resource for ML-Driven Predictive Scaling
+# Advanced ML-Driven Predictive Scaling Configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -338,56 +631,233 @@ metadata:
   namespace: default
   labels:
     component: ml-autoscaling
+    version: v2.0.0
 data:
   config.yaml: |
     predictive_scaling:
       enabled: true
       model_endpoint: "http://ml-predictor-service.ml-system.svc.cluster.local:8080/predict"
       prediction_window: 900  # 15 minutes
-      metrics_history: 7200   # 2 hours
-      confidence_threshold: 0.8
+      metrics_history: 14400  # 4 hours enhanced history
+      confidence_threshold: 0.85
+      learning_rate: 0.01
+      model_update_frequency: 1800  # 30 minutes
       
+      # Advanced ML models for different scaling scenarios
       models:
         load_prediction:
-          type: "time_series"
+          type: "lstm_time_series"  # Enhanced LSTM model
           features:
             - cpu_utilization
             - memory_utilization
             - request_rate
             - queue_depth
+            - response_time_p95
+            - error_rate
+            - active_connections
             - time_of_day
             - day_of_week
-          update_frequency: 300  # 5 minutes
+            - month_of_year
+            - is_holiday
+            - weather_conditions  # External data
+            - market_events      # Business events
+          update_frequency: 180  # 3 minutes
+          lookback_window: 168   # 7 days
+          prediction_horizon: 60 # 1 hour ahead
+          ensemble_models: 3     # Use ensemble of 3 models
           
         anomaly_detection:
-          type: "isolation_forest"
+          type: "isolation_forest_ensemble"
           features:
             - request_latency
             - error_rate
             - resource_utilization
-          threshold: 0.95
+            - network_throughput
+            - database_connections
+            - cache_hit_ratio
+            - queue_latency
+          threshold: 0.97
+          contamination: 0.05
+          n_estimators: 200
           
+        traffic_pattern_recognition:
+          type: "clustering_analysis"
+          features:
+            - hourly_request_patterns
+            - daily_usage_cycles
+            - weekly_trends
+            - seasonal_variations
+          clusters: 8
+          update_frequency: 3600  # 1 hour
+          
+        capacity_forecasting:
+          type: "prophet_forecasting"
+          features:
+            - historical_capacity_usage
+            - business_growth_metrics
+            - seasonal_adjustments
+          forecast_horizon: 2160  # 36 hours
+          confidence_intervals: [0.8, 0.95]
+          
+      # Enhanced scaling policies with intelligent thresholds
       scaling_policies:
         api_service:
-          min_replicas: 3
-          max_replicas: 50
-          scale_up_threshold: 80
-          scale_down_threshold: 30
-          cooldown_period: 180
-          
-        mobile_service:
-          min_replicas: 2
-          max_replicas: 25
-          scale_up_threshold: 70
+          min_replicas: 6
+          max_replicas: 100
+          target_utilization: 60
+          scale_up_threshold: 75
           scale_down_threshold: 25
           cooldown_period: 120
+          aggressive_scaling_threshold: 90
+          emergency_scaling_replicas: 10
+          predictive_scaling:
+            enabled: true
+            confidence_required: 0.8
+            preemptive_scaling_minutes: 5
+            trend_analysis_weight: 0.3
+          
+        mobile_service:
+          min_replicas: 3
+          max_replicas: 50
+          target_utilization: 65
+          scale_up_threshold: 70
+          scale_down_threshold: 20
+          cooldown_period: 90
+          mobile_specific_metrics:
+            app_downloads_rate: 100
+            push_notification_queue: 500
+            session_duration_impact: 0.2
           
         vector_db:
-          min_replicas: 3
-          max_replicas: 20
-          scale_up_threshold: 85
-          scale_down_threshold: 40
+          min_replicas: 5
+          max_replicas: 30
+          target_utilization: 70
+          scale_up_threshold: 80
+          scale_down_threshold: 35
           cooldown_period: 300
+          vector_specific_metrics:
+            embedding_queue_depth: 200
+            similarity_search_latency: 50
+            index_building_load: 0.8
+          
+        analytics_service:
+          min_replicas: 3
+          max_replicas: 40
+          target_utilization: 65
+          scale_up_threshold: 75
+          scale_down_threshold: 30
+          cooldown_period: 180
+          query_complexity_scaling:
+            simple_queries_threshold: 1000
+            complex_queries_threshold: 100
+            aggregation_intensive_threshold: 50
+            
+      # Advanced custom metrics configuration
+      custom_metrics:
+        business_metrics:
+          - name: "daily_active_users"
+            source: "prometheus"
+            query: "daily_active_users"
+            scaling_factor: 0.1
+            
+          - name: "revenue_per_request"
+            source: "prometheus" 
+            query: "avg(revenue_total) / avg(requests_total)"
+            scaling_factor: 0.05
+            
+          - name: "customer_satisfaction_score"
+            source: "prometheus"
+            query: "customer_satisfaction_score"
+            inverse_scaling: true  # Scale down when satisfaction is low
+            scaling_factor: 0.15
+            
+        performance_metrics:
+          - name: "response_time_sla_compliance"
+            source: "prometheus"
+            query: "sla_compliance_percentage"
+            target: 99.5
+            critical_threshold: 95.0
+            scaling_factor: 0.2
+            
+          - name: "database_connection_pool_usage"
+            source: "prometheus"
+            query: "db_connection_pool_usage_percentage"
+            target: 70
+            scaling_factor: 0.3
+            
+          - name: "cache_efficiency"
+            source: "prometheus"
+            query: "cache_hit_ratio_percentage"
+            target: 85
+            inverse_scaling: true
+            scaling_factor: 0.1
+            
+        infrastructure_metrics:
+          - name: "network_bandwidth_utilization"
+            source: "prometheus"
+            query: "network_bandwidth_usage_percentage"
+            target: 60
+            scaling_factor: 0.25
+            
+          - name: "storage_iops_utilization"
+            source: "prometheus"
+            query: "storage_iops_usage_percentage"  
+            target: 65
+            scaling_factor: 0.2
+            
+        external_metrics:
+          - name: "cloud_provider_pricing_index"
+            source: "external_api"
+            endpoint: "https://api.cloud-pricing.com/index"
+            scaling_factor: -0.1  # Scale up when prices are low
+            update_frequency: 3600
+            
+          - name: "competitor_response_time"
+            source: "external_monitor"
+            endpoint: "https://monitor.competitor.com/api/metrics"
+            scaling_factor: 0.1   # Scale up when competitors are slower
+            update_frequency: 1800
+            
+      # Intelligent scaling behaviors
+      advanced_behaviors:
+        predictive_scaling:
+          enabled: true
+          algorithms: ["arima", "lstm", "prophet", "linear_regression"]
+          ensemble_weight: [0.3, 0.4, 0.2, 0.1]
+          confidence_threshold: 0.85
+          prediction_accuracy_tracking: true
+          model_retraining_threshold: 0.8
+          
+        adaptive_thresholds:
+          enabled: true
+          learning_period_hours: 168  # 1 week
+          adaptation_rate: 0.05
+          minimum_threshold: 10
+          maximum_threshold: 95
+          
+        intelligent_cooldown:
+          enabled: true
+          base_cooldown: 60
+          adaptive_multiplier: 1.5
+          max_cooldown: 600
+          performance_based_adjustment: true
+          
+        cost_optimization:
+          enabled: true
+          cost_per_instance_hour: 0.10
+          performance_cost_ratio: 0.7
+          spot_instance_preference: 0.6
+          scheduling_optimization: true
+          
+        emergency_scaling:
+          enabled: true
+          triggers:
+            - error_rate_threshold: 5.0
+            - response_time_threshold: 5000
+            - queue_depth_threshold: 10000
+          emergency_replicas: 15
+          emergency_cooldown: 30
+          auto_recovery_enabled: true
 
 ---
 # KEDA ScaledObject for Event-Driven Autoscaling

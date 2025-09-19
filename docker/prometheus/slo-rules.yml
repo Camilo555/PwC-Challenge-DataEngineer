@@ -1,0 +1,435 @@
+groups:
+  # =================== SLO RECORDING RULES ===================
+
+  - name: slo_recording_rules
+    interval: 30s
+    rules:
+      # API Availability SLI
+      - record: sli:api_availability:rate5m
+        expr: |
+          (
+            sum(rate(api_requests_total{status_code!~"5.."}[5m])) /
+            sum(rate(api_requests_total[5m]))
+          ) * 100
+        labels:
+          service: "api"
+          slo_type: "availability"
+
+      - record: sli:api_availability:rate1h
+        expr: |
+          (
+            sum(rate(api_requests_total{status_code!~"5.."}[1h])) /
+            sum(rate(api_requests_total[1h]))
+          ) * 100
+        labels:
+          service: "api"
+          slo_type: "availability"
+
+      - record: sli:api_availability:rate24h
+        expr: |
+          (
+            sum(rate(api_requests_total{status_code!~"5.."}[24h])) /
+            sum(rate(api_requests_total[24h]))
+          ) * 100
+        labels:
+          service: "api"
+          slo_type: "availability"
+
+      # API Latency SLI (P99)
+      - record: sli:api_latency_p99:5m
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(api_request_duration_seconds_bucket[5m])) by (le)
+          ) * 1000
+        labels:
+          service: "api"
+          slo_type: "latency"
+          percentile: "p99"
+
+      - record: sli:api_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(api_request_duration_seconds_bucket[5m])) by (le)
+          ) * 1000
+        labels:
+          service: "api"
+          slo_type: "latency"
+          percentile: "p95"
+
+      # Database Availability SLI
+      - record: sli:database_availability:rate5m
+        expr: |
+          up{job="postgres-performance"} * 100
+        labels:
+          service: "database"
+          slo_type: "availability"
+
+      # ETL Pipeline Success Rate SLI
+      - record: sli:etl_success_rate:1h
+        expr: |
+          (
+            sum(rate(etl_records_processed_total{status="success"}[1h])) /
+            sum(rate(etl_records_processed_total[1h]))
+          ) * 100
+        labels:
+          service: "etl"
+          slo_type: "success_rate"
+
+      # Business Metrics SLI
+      - record: sli:revenue_growth_rate:daily
+        expr: |
+          (
+            (sum(increase(sales_revenue_total[24h])) -
+             sum(increase(sales_revenue_total[24h] offset 1d))) /
+            sum(increase(sales_revenue_total[24h] offset 1d))
+          ) * 100
+        labels:
+          service: "business"
+          slo_type: "revenue_growth"
+
+  # =================== SLO COMPLIANCE RULES ===================
+
+  - name: slo_compliance
+    interval: 60s
+    rules:
+      # API Availability SLO (99.9%)
+      - record: slo:api_availability_compliance:5m
+        expr: |
+          (sli:api_availability:rate5m >= 99.9) * 100
+        labels:
+          service: "api"
+          slo_target: "99.9"
+          slo_type: "availability"
+          window: "5m"
+
+      - record: slo:api_availability_compliance:1h
+        expr: |
+          (sli:api_availability:rate1h >= 99.9) * 100
+        labels:
+          service: "api"
+          slo_target: "99.9"
+          slo_type: "availability"
+          window: "1h"
+
+      - record: slo:api_availability_compliance:24h
+        expr: |
+          (sli:api_availability:rate24h >= 99.9) * 100
+        labels:
+          service: "api"
+          slo_target: "99.9"
+          slo_type: "availability"
+          window: "24h"
+
+      # API Latency SLO (P99 < 200ms)
+      - record: slo:api_latency_compliance:5m
+        expr: |
+          (sli:api_latency_p99:5m <= 200) * 100
+        labels:
+          service: "api"
+          slo_target: "200ms"
+          slo_type: "latency"
+          percentile: "p99"
+          window: "5m"
+
+      # Database Availability SLO (99.99%)
+      - record: slo:database_availability_compliance:5m
+        expr: |
+          (sli:database_availability:rate5m >= 99.99) * 100
+        labels:
+          service: "database"
+          slo_target: "99.99"
+          slo_type: "availability"
+          window: "5m"
+
+      # ETL Success Rate SLO (99.5%)
+      - record: slo:etl_success_rate_compliance:1h
+        expr: |
+          (sli:etl_success_rate:1h >= 99.5) * 100
+        labels:
+          service: "etl"
+          slo_target: "99.5"
+          slo_type: "success_rate"
+          window: "1h"
+
+  # =================== ERROR BUDGET CALCULATIONS ===================
+
+  - name: error_budget_calculations
+    interval: 300s
+    rules:
+      # API Availability Error Budget (monthly)
+      - record: error_budget:api_availability:monthly_budget
+        expr: |
+          (1 - 99.9 / 100) * 30 * 24 * 60 * 60
+        labels:
+          service: "api"
+          slo_type: "availability"
+          period: "monthly"
+          budget_seconds: "true"
+
+      - record: error_budget:api_availability:consumed_monthly
+        expr: |
+          (
+            sum(increase(api_requests_total{status_code=~"5.."}[30d])) /
+            sum(increase(api_requests_total[30d]))
+          ) * 30 * 24 * 60 * 60
+        labels:
+          service: "api"
+          slo_type: "availability"
+          period: "monthly"
+          consumed_seconds: "true"
+
+      - record: error_budget:api_availability:remaining_monthly
+        expr: |
+          (
+            error_budget:api_availability:monthly_budget -
+            error_budget:api_availability:consumed_monthly
+          ) / error_budget:api_availability:monthly_budget * 100
+        labels:
+          service: "api"
+          slo_type: "availability"
+          period: "monthly"
+          remaining_percentage: "true"
+
+      # Database Error Budget
+      - record: error_budget:database_availability:monthly_budget
+        expr: |
+          (1 - 99.99 / 100) * 30 * 24 * 60 * 60
+        labels:
+          service: "database"
+          slo_type: "availability"
+          period: "monthly"
+
+      - record: error_budget:database_availability:consumed_monthly
+        expr: |
+          (1 - avg_over_time(up{job="postgres-performance"}[30d])) * 30 * 24 * 60 * 60
+        labels:
+          service: "database"
+          slo_type: "availability"
+          period: "monthly"
+
+      - record: error_budget:database_availability:remaining_monthly
+        expr: |
+          (
+            error_budget:database_availability:monthly_budget -
+            error_budget:database_availability:consumed_monthly
+          ) / error_budget:database_availability:monthly_budget * 100
+        labels:
+          service: "database"
+          slo_type: "availability"
+          period: "monthly"
+
+  # =================== BURN RATE CALCULATIONS ===================
+
+  - name: burn_rate_calculations
+    interval: 60s
+    rules:
+      # Fast Burn Rate (1 hour)
+      - record: burn_rate:api_availability:1h
+        expr: |
+          (
+            (1 - sli:api_availability:rate1h / 100) /
+            (1 - 99.9 / 100)
+          )
+        labels:
+          service: "api"
+          slo_type: "availability"
+          burn_window: "1h"
+
+      # Slow Burn Rate (6 hours)
+      - record: burn_rate:api_availability:6h
+        expr: |
+          (
+            (1 - avg_over_time(sli:api_availability:rate5m[6h]) / 100) /
+            (1 - 99.9 / 100)
+          )
+        labels:
+          service: "api"
+          slo_type: "availability"
+          burn_window: "6h"
+
+      # Latency Burn Rate
+      - record: burn_rate:api_latency:1h
+        expr: |
+          (
+            avg_over_time(sli:api_latency_p99:5m[1h]) > 200
+          )
+        labels:
+          service: "api"
+          slo_type: "latency"
+          burn_window: "1h"
+
+  # =================== BUSINESS SLO METRICS ===================
+
+  - name: business_slo_metrics
+    interval: 300s
+    rules:
+      # Revenue Target Achievement
+      - record: slo:revenue_target:daily_achievement
+        expr: |
+          (
+            sum(increase(sales_revenue_total[24h])) / 50000
+          ) * 100
+        labels:
+          business_metric: "revenue"
+          target: "50000_usd_daily"
+          period: "daily"
+
+      # Customer Satisfaction SLO (based on low error rates)
+      - record: slo:customer_satisfaction:hourly
+        expr: |
+          (
+            (1 - rate(api_requests_total{status_code=~"5.."}[1h]) /
+                 rate(api_requests_total[1h])) * 100 >= 99.0
+          ) * 100
+        labels:
+          business_metric: "customer_satisfaction"
+          target: "99_percent"
+          period: "hourly"
+
+      # Data Freshness SLO
+      - record: slo:data_freshness:hourly
+        expr: |
+          (
+            rate(etl_records_processed_total{status="success"}[1h]) > 0
+          ) * 100
+        labels:
+          business_metric: "data_freshness"
+          target: "continuous_processing"
+          period: "hourly"
+
+  # =================== COST EFFICIENCY SLO ===================
+
+  - name: cost_efficiency_slo
+    interval: 600s
+    rules:
+      # Cost per Request SLO
+      - record: slo:cost_per_request:daily
+        expr: |
+          (
+            sum(infrastructure_cost_usd_daily) /
+            sum(increase(api_requests_total[24h]))
+          ) <= 0.005
+        labels:
+          business_metric: "cost_efficiency"
+          target: "0.005_usd_per_request"
+          period: "daily"
+
+      # Resource Utilization Efficiency
+      - record: slo:resource_efficiency:hourly
+        expr: |
+          (
+            avg(resource_utilization_percentage{resource_type="cpu"}) >= 60 and
+            avg(resource_utilization_percentage{resource_type="cpu"}) <= 80
+          ) * 100
+        labels:
+          business_metric: "resource_efficiency"
+          target: "60_80_percent_utilization"
+          period: "hourly"
+
+  # =================== COMPLIANCE AND QUALITY SLO ===================
+
+  - name: compliance_quality_slo
+    interval: 300s
+    rules:
+      # Data Quality SLO
+      - record: slo:data_quality:hourly
+        expr: |
+          (
+            avg(etl_data_quality_score) >= 95
+          ) * 100
+        labels:
+          quality_metric: "data_accuracy"
+          target: "95_percent"
+          period: "hourly"
+
+      # Security Compliance SLO (no authentication failures > threshold)
+      - record: slo:security_compliance:hourly
+        expr: |
+          (
+            rate(api_requests_total{status_code="401"}[1h]) <= 0.01
+          ) * 100
+        labels:
+          security_metric: "auth_failure_rate"
+          target: "1_percent_max"
+          period: "hourly"
+
+      # Backup Success Rate SLO
+      - record: slo:backup_success:daily
+        expr: |
+          # Placeholder - would integrate with backup system metrics
+          100
+        labels:
+          operational_metric: "backup_success"
+          target: "100_percent"
+          period: "daily"
+
+  # =================== MULTI-WINDOW BURN RATES ===================
+
+  - name: multi_window_burn_rates
+    interval: 60s
+    rules:
+      # Page (2% budget in 1 hour)
+      - record: burn_rate:api_availability:page
+        expr: |
+          (
+            burn_rate:api_availability:1h > 14.4 and
+            burn_rate:api_availability:6h > 6
+          )
+        labels:
+          service: "api"
+          alert_type: "page"
+          severity: "critical"
+
+      # Ticket (5% budget in 6 hours)
+      - record: burn_rate:api_availability:ticket
+        expr: |
+          (
+            burn_rate:api_availability:6h > 6 and
+            avg_over_time(burn_rate:api_availability:1h[24h]) > 3
+          )
+        labels:
+          service: "api"
+          alert_type: "ticket"
+          severity: "warning"
+
+  # =================== SLO DASHBOARD METRICS ===================
+
+  - name: slo_dashboard_metrics
+    interval: 300s
+    rules:
+      # Overall System Health Score
+      - record: dashboard:system_health_score
+        expr: |
+          (
+            (slo:api_availability_compliance:5m * 0.4) +
+            (slo:database_availability_compliance:5m * 0.3) +
+            (slo:data_quality:hourly * 0.2) +
+            (slo:security_compliance:hourly * 0.1)
+          )
+        labels:
+          metric_type: "composite"
+          dashboard: "executive"
+
+      # Business Performance Score
+      - record: dashboard:business_performance_score
+        expr: |
+          (
+            (slo:revenue_target:daily_achievement * 0.5) +
+            (slo:customer_satisfaction:hourly * 0.3) +
+            (slo:cost_per_request:daily * 100 * 0.2)
+          )
+        labels:
+          metric_type: "business"
+          dashboard: "executive"
+
+      # Operational Excellence Score
+      - record: dashboard:operational_excellence_score
+        expr: |
+          (
+            (slo:data_freshness:hourly * 0.4) +
+            (slo:resource_efficiency:hourly * 0.3) +
+            (slo:backup_success:daily * 0.3)
+          )
+        labels:
+          metric_type: "operational"
+          dashboard: "operations"

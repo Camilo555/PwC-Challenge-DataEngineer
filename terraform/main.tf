@@ -740,3 +740,386 @@ locals {
     gcp   = local.deploy_to_gcp && length(module.gcp_infrastructure) > 0 ? module.gcp_infrastructure[0].cluster_name : null
   }
 }
+
+# ============================================================================
+# INTELLIGENT SCALING AND PERFORMANCE OPTIMIZATION MODULE
+# ============================================================================
+
+module "intelligent_scaling" {
+  count  = var.enable_intelligent_scaling ? 1 : 0
+  source = "./modules/intelligent-scaling"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Multi-cloud scaling configuration
+  primary_cloud   = local.primary_cloud
+  secondary_cloud = local.secondary_cloud
+
+  # Kubernetes cluster configuration
+  cluster_names = local.all_cluster_names
+
+  # HPA Configuration with custom metrics
+  enable_hpa                    = var.enable_hpa
+  hpa_metrics_server_enabled   = true
+  custom_metrics_enabled       = true
+
+  # VPA Configuration
+  enable_vpa                 = var.enable_vpa
+  vpa_update_mode           = var.vpa_update_mode
+  vpa_recommender_enabled   = true
+
+  # Cluster Autoscaler Configuration
+  enable_cluster_autoscaler          = var.enable_cluster_autoscaler
+  cluster_autoscaler_scale_down_delay = var.cluster_autoscaler_scale_down_delay
+  cluster_autoscaler_max_nodes       = var.cluster_autoscaler_max_nodes
+
+  # Business Intelligence Scaling
+  enable_business_aware_scaling = var.enable_business_aware_scaling
+  business_metrics_endpoint     = var.business_metrics_endpoint
+  revenue_growth_threshold      = var.revenue_growth_threshold
+  customer_activity_threshold   = var.customer_activity_threshold
+
+  # ML-driven Predictive Scaling
+  enable_predictive_scaling        = var.enable_predictive_scaling
+  predictive_scaling_model_endpoint = var.predictive_scaling_model_endpoint
+  scaling_prediction_window_hours   = var.scaling_prediction_window_hours
+
+  # Performance SLA Compliance
+  enable_sla_compliance_scaling = var.enable_sla_compliance_scaling
+  target_api_response_time_ms   = var.target_api_response_time_ms
+  target_throughput_rps        = var.target_throughput_rps
+  target_error_rate_percentage = var.target_error_rate_percentage
+
+  # Cost Optimization
+  enable_cost_aware_scaling = var.enable_cost_aware_scaling
+  max_hourly_cost_usd      = var.max_hourly_cost_usd
+  preferred_instance_types = var.preferred_instance_types
+  spot_instance_percentage = var.spot_instance_percentage
+
+  tags = local.common_tags
+}
+
+# ============================================================================
+# ENTERPRISE SECURITY AND COMPLIANCE MODULE
+# ============================================================================
+
+module "enterprise_security" {
+  count  = var.enable_enterprise_security ? 1 : 0
+  source = "./modules/enterprise-security"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Multi-cloud security configuration
+  deploy_to_aws   = local.deploy_to_aws
+  deploy_to_azure = local.deploy_to_azure
+  deploy_to_gcp   = local.deploy_to_gcp
+
+  # Zero Trust Architecture
+  enable_zero_trust             = var.enable_zero_trust
+  enable_service_mesh          = var.enable_service_mesh
+  service_mesh_type           = var.service_mesh_type  # istio, linkerd, consul
+  enable_mTLS                 = var.enable_mTLS
+
+  # Advanced Threat Detection
+  enable_falco_runtime_security = var.enable_falco_runtime_security
+  enable_sysdig_security       = var.enable_sysdig_security
+  enable_aqua_security         = var.enable_aqua_security
+
+  # Data Loss Prevention (DLP)
+  enable_dlp                  = var.enable_dlp
+  dlp_policy_templates       = var.dlp_policy_templates
+  sensitive_data_patterns    = var.sensitive_data_patterns
+
+  # SIEM Integration
+  enable_siem_integration    = var.enable_siem_integration
+  siem_endpoint             = var.siem_endpoint
+  siem_api_key              = var.siem_api_key
+
+  # Compliance Frameworks
+  compliance_frameworks = var.compliance_frameworks
+  enable_sox_compliance = contains(var.compliance_frameworks, "SOX")
+  enable_gdpr_compliance = contains(var.compliance_frameworks, "GDPR")
+  enable_hipaa_compliance = contains(var.compliance_frameworks, "HIPAA")
+  enable_pci_compliance = contains(var.compliance_frameworks, "PCI-DSS")
+
+  # Kubernetes Security
+  enable_pod_security_policies = var.enable_pod_security_policies
+  enable_network_policies      = var.enable_network_policies
+  enable_admission_controllers = var.enable_admission_controllers
+
+  # Container Security
+  enable_container_scanning    = var.enable_container_scanning
+  container_registry_scanning = var.container_registry_scanning
+  vulnerability_scan_schedule = var.vulnerability_scan_schedule
+
+  # API Security
+  enable_api_gateway_security = var.enable_api_gateway_security
+  api_rate_limiting_enabled  = var.api_rate_limiting_enabled
+  api_authentication_methods = var.api_authentication_methods
+
+  # Secrets Management
+  secrets_management_backend = var.secrets_management_backend
+  enable_secret_rotation     = var.enable_secret_rotation
+  secret_rotation_schedule   = var.secret_rotation_schedule
+
+  tags = local.common_tags
+}
+
+# ============================================================================
+# ADVANCED MONITORING AND OBSERVABILITY MODULE
+# ============================================================================
+
+module "advanced_monitoring" {
+  count  = var.enable_advanced_monitoring ? 1 : 0
+  source = "./modules/advanced-monitoring"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Multi-cloud monitoring
+  cluster_names = local.all_cluster_names
+
+  # Prometheus Enhanced Configuration
+  prometheus_federation_enabled   = var.prometheus_federation_enabled
+  prometheus_remote_write_enabled = var.prometheus_remote_write_enabled
+  prometheus_recording_rules      = var.prometheus_recording_rules
+
+  # Grafana Enterprise Features
+  grafana_enterprise_enabled     = var.grafana_enterprise_enabled
+  grafana_alerting_enabled       = var.grafana_alerting_enabled
+  grafana_image_rendering_enabled = var.grafana_image_rendering_enabled
+
+  # Advanced Alerting
+  enable_multi_channel_alerting = var.enable_multi_channel_alerting
+  alerting_channels = {
+    slack     = var.slack_webhook_url
+    pagerduty = var.pagerduty_integration_key
+    email     = var.alert_email_recipients
+    teams     = var.teams_webhook_url
+    webhook   = var.custom_webhook_url
+  }
+
+  # Business Intelligence Monitoring
+  enable_business_metrics_monitoring = var.enable_business_metrics_monitoring
+  business_kpi_dashboards           = var.business_kpi_dashboards
+  executive_summary_reports         = var.executive_summary_reports
+
+  # Distributed Tracing
+  enable_jaeger_tracing       = var.enable_jaeger_tracing
+  enable_zipkin_tracing      = var.enable_zipkin_tracing
+  enable_opentelemetry       = var.enable_opentelemetry
+  tracing_sampling_rate      = var.tracing_sampling_rate
+
+  # Log Management
+  enable_centralized_logging = var.enable_centralized_logging
+  log_aggregation_backend   = var.log_aggregation_backend  # elasticsearch, loki, splunk
+  log_retention_days        = var.log_retention_days
+
+  # Machine Learning for Anomaly Detection
+  enable_ml_anomaly_detection = var.enable_ml_anomaly_detection
+  anomaly_detection_models   = var.anomaly_detection_models
+  anomaly_alert_threshold    = var.anomaly_alert_threshold
+
+  # SLI/SLO Monitoring
+  enable_sli_slo_monitoring = var.enable_sli_slo_monitoring
+  service_level_objectives = var.service_level_objectives
+  error_budget_policy      = var.error_budget_policy
+
+  # Performance APM
+  enable_application_performance_monitoring = var.enable_application_performance_monitoring
+  apm_agent_configuration                  = var.apm_agent_configuration
+  code_profiling_enabled                   = var.code_profiling_enabled
+
+  tags = local.common_tags
+}
+
+# ============================================================================
+# DATA ENGINEERING PLATFORM MODULE
+# ============================================================================
+
+module "data_engineering_platform" {
+  count  = var.enable_data_engineering_platform ? 1 : 0
+  source = "./modules/data-engineering-platform"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Multi-cloud data platform
+  primary_cloud   = local.primary_cloud
+  secondary_cloud = local.secondary_cloud
+
+  # Apache Airflow Configuration
+  enable_airflow                = var.enable_airflow
+  airflow_version              = var.airflow_version
+  airflow_executor_type        = var.airflow_executor_type  # kubernetes, celery, sequential
+  airflow_worker_replicas      = var.airflow_worker_replicas
+  airflow_scheduler_replicas   = var.airflow_scheduler_replicas
+
+  # Apache Spark Configuration
+  enable_spark                 = var.enable_spark
+  spark_version               = var.spark_version
+  spark_driver_memory         = var.spark_driver_memory
+  spark_executor_memory       = var.spark_executor_memory
+  spark_executor_instances    = var.spark_executor_instances
+  spark_history_server_enabled = var.spark_history_server_enabled
+
+  # Dagster Configuration
+  enable_dagster              = var.enable_dagster
+  dagster_version            = var.dagster_version
+  dagster_workspace_enabled  = var.dagster_workspace_enabled
+  dagster_daemon_enabled     = var.dagster_daemon_enabled
+
+  # dbt Configuration
+  enable_dbt                 = var.enable_dbt
+  dbt_version               = var.dbt_version
+  dbt_profiles_config       = var.dbt_profiles_config
+  dbt_docs_enabled          = var.dbt_docs_enabled
+
+  # Kafka Streaming Platform
+  enable_kafka_platform       = var.enable_kafka_platform
+  kafka_cluster_size          = var.kafka_cluster_size
+  kafka_replication_factor    = var.kafka_replication_factor
+  kafka_retention_hours       = var.kafka_retention_hours
+  kafka_schema_registry_enabled = var.kafka_schema_registry_enabled
+  kafka_connect_enabled       = var.kafka_connect_enabled
+
+  # Data Quality and Validation
+  enable_great_expectations   = var.enable_great_expectations
+  enable_data_quality_monitoring = var.enable_data_quality_monitoring
+  data_quality_thresholds    = var.data_quality_thresholds
+
+  # Data Lineage and Catalog
+  enable_apache_atlas        = var.enable_apache_atlas
+  enable_datahub            = var.enable_datahub
+  enable_amundsen           = var.enable_amundsen
+
+  # Real-time Processing
+  enable_flink              = var.enable_flink
+  flink_task_managers       = var.flink_task_managers
+  flink_slots_per_task_manager = var.flink_slots_per_task_manager
+
+  # Database and Storage
+  database_host             = local.database_host
+  database_name             = local.database_name
+  database_username         = local.database_username
+  database_password         = random_password.db_admin_password.result
+
+  # Data Lake Integration
+  data_lake_buckets = var.enable_data_lake ? {
+    aws   = local.deploy_to_aws ? try(module.data_lake[0].aws_bucket_name, null) : null
+    azure = local.deploy_to_azure ? try(module.data_lake[0].azure_container_name, null) : null
+    gcp   = local.deploy_to_gcp ? try(module.data_lake[0].gcp_bucket_name, null) : null
+  } : {}
+
+  tags = local.common_tags
+}
+
+# ============================================================================
+# MACHINE LEARNING PLATFORM MODULE
+# ============================================================================
+
+module "ml_platform" {
+  count  = var.enable_ml_platform ? 1 : 0
+  source = "./modules/ml-platform"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Multi-cloud ML platform
+  primary_cloud = local.primary_cloud
+
+  # MLflow Configuration
+  enable_mlflow              = var.enable_mlflow
+  mlflow_version            = var.mlflow_version
+  mlflow_tracking_uri       = var.mlflow_tracking_uri
+  mlflow_artifact_store     = var.mlflow_artifact_store
+
+  # Kubeflow Configuration
+  enable_kubeflow           = var.enable_kubeflow
+  kubeflow_version         = var.kubeflow_version
+  kubeflow_pipelines_enabled = var.kubeflow_pipelines_enabled
+  kubeflow_katib_enabled   = var.kubeflow_katib_enabled
+
+  # Jupyter Hub for Data Scientists
+  enable_jupyterhub         = var.enable_jupyterhub
+  jupyterhub_authenticator  = var.jupyterhub_authenticator
+  jupyter_notebook_images   = var.jupyter_notebook_images
+
+  # Model Serving
+  enable_seldon_core        = var.enable_seldon_core
+  enable_kserve            = var.enable_kserve
+  model_serving_replicas   = var.model_serving_replicas
+
+  # Feature Store
+  enable_feast_feature_store = var.enable_feast_feature_store
+  feast_online_store        = var.feast_online_store
+  feast_offline_store       = var.feast_offline_store
+
+  # GPU Support
+  enable_gpu_nodes          = var.enable_gpu_nodes
+  gpu_node_instance_types   = var.gpu_node_instance_types
+  gpu_nodes_max_size       = var.gpu_nodes_max_size
+
+  # Model Training Infrastructure
+  enable_distributed_training = var.enable_distributed_training
+  training_job_queue_size     = var.training_job_queue_size
+
+  # Data Integration
+  database_host = local.database_host
+  data_lake_buckets = var.enable_data_lake ? {
+    aws   = local.deploy_to_aws ? try(module.data_lake[0].aws_bucket_name, null) : null
+    azure = local.deploy_to_azure ? try(module.data_lake[0].azure_container_name, null) : null
+    gcp   = local.deploy_to_gcp ? try(module.data_lake[0].gcp_bucket_name, null) : null
+  } : {}
+
+  tags = local.common_tags
+}
+
+# ============================================================================
+# MULTI-CLOUD NETWORKING AND CONNECTIVITY MODULE
+# ============================================================================
+
+module "multi_cloud_networking" {
+  count  = var.enable_multi_cloud && var.enable_cross_cloud_connectivity ? 1 : 0
+  source = "./modules/multi-cloud-networking"
+
+  project_name = local.project_name
+  environment  = local.environment
+
+  # Cloud provider configuration
+  deploy_to_aws   = local.deploy_to_aws
+  deploy_to_azure = local.deploy_to_azure
+  deploy_to_gcp   = local.deploy_to_gcp
+
+  # VPC/VNet IDs from each cloud
+  aws_vpc_id   = local.deploy_to_aws ? try(module.aws_infrastructure[0].vpc_id, null) : null
+  azure_vnet_id = local.deploy_to_azure ? try(module.azure_infrastructure[0].virtual_network_id, null) : null
+  gcp_vpc_id   = local.deploy_to_gcp ? try(module.gcp_infrastructure[0].vpc_id, null) : null
+
+  # Cross-cloud VPN configuration
+  enable_aws_azure_vpn    = var.enable_aws_azure_vpn
+  enable_aws_gcp_vpn     = var.enable_aws_gcp_vpn
+  enable_azure_gcp_vpn   = var.enable_azure_gcp_vpn
+
+  # Global load balancing
+  enable_global_load_balancer = var.enable_global_load_balancer
+  global_lb_backend_services = {
+    aws   = local.deploy_to_aws ? try(module.aws_infrastructure[0].load_balancer_arn, null) : null
+    azure = local.deploy_to_azure ? try(module.azure_infrastructure[0].load_balancer_id, null) : null
+    gcp   = local.deploy_to_gcp ? try(module.gcp_infrastructure[0].load_balancer_id, null) : null
+  }
+
+  # DNS and traffic management
+  enable_multi_cloud_dns     = var.enable_multi_cloud_dns
+  domain_name               = var.domain_name
+  health_check_enabled      = var.health_check_enabled
+  traffic_routing_policy    = var.traffic_routing_policy  # weighted, latency, geolocation
+
+  # Network security
+  enable_cross_cloud_firewall = var.enable_cross_cloud_firewall
+  allowed_cross_cloud_ports  = var.allowed_cross_cloud_ports
+
+  tags = local.common_tags
+}

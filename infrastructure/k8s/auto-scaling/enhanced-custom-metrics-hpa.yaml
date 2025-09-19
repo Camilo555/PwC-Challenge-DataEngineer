@@ -1,0 +1,895 @@
+---
+# Enhanced Custom Metrics HPA Configuration for PwC Enterprise Platform
+# Advanced business-aware auto-scaling with intelligent custom metrics
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: custom-metrics
+  labels:
+    purpose: advanced-autoscaling
+
+---
+# Custom Metrics API Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-metrics-adapter-config
+  namespace: custom-metrics
+  labels:
+    component: custom-metrics-adapter
+data:
+  config.yaml: |
+    resourceRules:
+      cpu:
+        containerQuery: sum(rate(container_cpu_usage_seconds_total{<<.LabelMatchers>>,container!="POD",container!="",pod!=""}[1m])) by (<<.GroupBy>>)
+        nodeQuery: sum(rate(container_cpu_usage_seconds_total{<<.LabelMatchers>>,id='/'}[1m])) by (<<.GroupBy>>)
+        resources:
+          overrides:
+            instance:
+              resource: node
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        containerLabel: container
+      memory:
+        containerQuery: sum(container_memory_working_set_bytes{<<.LabelMatchers>>,container!="POD",container!="",pod!=""}) by (<<.GroupBy>>)
+        nodeQuery: sum(container_memory_working_set_bytes{<<.LabelMatchers>>,id='/'}) by (<<.GroupBy>>)
+        resources:
+          overrides:
+            instance:
+              resource: node
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        containerLabel: container
+      window: 1m
+
+    rules:
+    # API Performance Metrics
+    - seriesQuery: 'pwc_api_requests_per_second{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_api_(.*)_per_second"
+        as: "${1}_per_second"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])'
+
+    - seriesQuery: 'pwc_api_response_time_p95_ms{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_api_response_time_(.*)_ms"
+        as: "response_time_${1}"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[5m])'
+
+    - seriesQuery: 'pwc_api_error_rate_percentage{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_api_(.*)_percentage"
+        as: "api_${1}"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])'
+
+    # Business Metrics
+    - seriesQuery: 'pwc_active_users_count{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_(.*)_users_count"
+        as: "${1}_users"
+      metricsQuery: 'max_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    - seriesQuery: 'pwc_transactions_per_second{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_(.*)_per_second"
+        as: "${1}_rate"
+      metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    - seriesQuery: 'pwc_revenue_per_hour_usd{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_(.*)_per_hour_usd"
+        as: "${1}_hourly"
+      metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[1h])'
+
+    # Database Performance Metrics
+    - seriesQuery: 'pwc_database_connections_active{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_database_(.*)_active"
+        as: "db_${1}_active"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    - seriesQuery: 'pwc_database_query_duration_ms{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_database_(.*)_duration_ms"
+        as: "db_${1}_duration"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[5m])'
+
+    # Cache Performance Metrics
+    - seriesQuery: 'pwc_cache_hit_ratio{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_cache_(.*)_ratio"
+        as: "cache_${1}_ratio"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])'
+
+    - seriesQuery: 'pwc_cache_memory_usage_bytes{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_cache_(.*)_usage_bytes"
+        as: "cache_${1}_usage"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    # Queue Metrics
+    - seriesQuery: 'pwc_queue_depth{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_(.*)_depth"
+        as: "${1}_depth"
+      metricsQuery: 'max_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    - seriesQuery: 'pwc_queue_processing_time_ms{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_queue_(.*)_time_ms"
+        as: "queue_${1}_time"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])'
+
+    # ML/AI Metrics
+    - seriesQuery: 'pwc_ml_model_inference_latency_ms{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_ml_model_(.*)_latency_ms"
+        as: "ml_${1}_latency"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[5m])'
+
+    - seriesQuery: 'pwc_ml_model_accuracy_score{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^pwc_ml_model_(.*)_score"
+        as: "ml_${1}_score"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[10m])'
+
+    # External Metrics Integration
+    externalRules:
+    - seriesQuery: 'pwc_external_api_latency{service!=""}'
+      name:
+        matches: "^pwc_external_(.*)_latency"
+        as: "external_${1}_latency"
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[5m])'
+
+    - seriesQuery: 'pwc_cost_per_hour_usd{cluster!=""}'
+      name:
+        matches: "^pwc_(.*)_per_hour_usd"
+        as: "${1}_cost_hourly"
+      metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[1h])'
+
+---
+# Advanced HPA for API Service with Custom Business Metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-api-business-aware-hpa
+  namespace: pwc-data-engineering
+  labels:
+    app: pwc-api
+    component: business-aware-autoscaling
+  annotations:
+    autoscaling.alpha.kubernetes.io/behavior: '{"scaleDown": {"stabilizationWindowSeconds": 300}, "scaleUp": {"stabilizationWindowSeconds": 60}}'
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-api-deployment
+  minReplicas: 5
+  maxReplicas: 100
+  metrics:
+  # Standard resource metrics with optimized thresholds
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65  # Conservative CPU target for stability
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75  # Memory utilization target
+
+  # API Performance Metrics
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "150"  # Target 150 RPS per pod
+  - type: Pods
+    pods:
+      metric:
+        name: response_time_p95
+      target:
+        type: AverageValue
+        averageValue: "200"  # Target 200ms P95 response time
+  - type: Pods
+    pods:
+      metric:
+        name: api_error_rate
+      target:
+        type: AverageValue
+        averageValue: "2"  # Target max 2% error rate
+
+  # Business Intelligence Metrics
+  - type: Pods
+    pods:
+      metric:
+        name: active_users
+      target:
+        type: AverageValue
+        averageValue: "1000"  # Scale based on active users per pod
+  - type: Pods
+    pods:
+      metric:
+        name: transactions_rate
+      target:
+        type: AverageValue
+        averageValue: "50"  # Target 50 transactions per second per pod
+
+  # Database Performance Metrics
+  - type: Pods
+    pods:
+      metric:
+        name: db_connections_active
+      target:
+        type: AverageValue
+        averageValue: "20"  # Target 20 active DB connections per pod
+  - type: Pods
+    pods:
+      metric:
+        name: db_query_duration
+      target:
+        type: AverageValue
+        averageValue: "25"  # Target 25ms average query time
+
+  # External API Integration Metrics
+  - type: External
+    external:
+      metric:
+        name: external_api_latency
+        selector:
+          matchLabels:
+            service: "critical-external-api"
+      target:
+        type: Value
+        value: "500"  # Scale up if external API latency > 500ms
+
+  # Revenue-based Scaling
+  - type: External
+    external:
+      metric:
+        name: revenue_hourly
+        selector:
+          matchLabels:
+            business_unit: "data-engineering"
+      target:
+        type: Value
+        value: "1000"  # Scale based on hourly revenue ($1000/hour)
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 minute stabilization
+      policies:
+      - type: Percent
+        value: 15        # Max 15% scale down
+        periodSeconds: 60
+      - type: Pods
+        value: 3         # Max 3 pods scale down
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60   # 1 minute stabilization
+      policies:
+      - type: Percent
+        value: 100       # Max 100% scale up
+        periodSeconds: 30
+      - type: Pods
+        value: 15        # Max 15 pods scale up
+        periodSeconds: 30
+      selectPolicy: Max
+
+---
+# Advanced HPA for Analytics Service with ML-aware Scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-analytics-ml-aware-hpa
+  namespace: pwc-data-engineering
+  labels:
+    app: pwc-analytics
+    component: ml-aware-autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-analytics-deployment
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+  # Resource metrics optimized for analytics workloads
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Higher CPU target for compute-intensive analytics
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85  # Higher memory target for data processing
+
+  # Analytics-specific metrics
+  - type: Pods
+    pods:
+      metric:
+        name: queue_depth
+      target:
+        type: AverageValue
+        averageValue: "100"  # Target 100 queued analytics jobs per pod
+  - type: Pods
+    pods:
+      metric:
+        name: queue_processing_time
+      target:
+        type: AverageValue
+        averageValue: "30000"  # Target 30 second processing time per job
+
+  # ML Model Performance Metrics
+  - type: Pods
+    pods:
+      metric:
+        name: ml_inference_latency
+      target:
+        type: AverageValue
+        averageValue: "100"  # Target 100ms ML inference latency
+  - type: Pods
+    pods:
+      metric:
+        name: ml_accuracy_score
+      target:
+        type: AverageValue
+        averageValue: "95"  # Maintain 95% model accuracy
+
+  # Data Processing Metrics
+  - type: External
+    external:
+      metric:
+        name: data_processing_backlog
+        selector:
+          matchLabels:
+            processing_type: "analytics"
+      target:
+        type: Value
+        value: "1000"  # Scale up if backlog > 1000 items
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # 10 minute stabilization for analytics
+      policies:
+      - type: Percent
+        value: 10        # Conservative scale down for analytics
+        periodSeconds: 120
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 120  # 2 minute stabilization
+      policies:
+      - type: Percent
+        value: 200       # Aggressive scale up for analytics bursts
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# HPA for Data Processing Service with Queue-aware Scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-data-processing-queue-aware-hpa
+  namespace: pwc-data-engineering
+  labels:
+    app: pwc-data-processing
+    component: queue-aware-autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-data-processing-deployment
+  minReplicas: 2
+  maxReplicas: 30
+  metrics:
+  # Standard resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Queue-based scaling metrics
+  - type: External
+    external:
+      metric:
+        name: rabbitmq_queue_depth
+        selector:
+          matchLabels:
+            queue: "data-processing"
+      target:
+        type: Value
+        value: "50"  # Scale up if queue depth > 50
+
+  - type: External
+    external:
+      metric:
+        name: kafka_consumer_lag
+        selector:
+          matchLabels:
+            topic: "data-events"
+            consumer_group: "data-processors"
+      target:
+        type: Value
+        value: "100"  # Scale up if consumer lag > 100
+
+  # Data volume metrics
+  - type: Pods
+    pods:
+      metric:
+        name: data_throughput_mbps
+      target:
+        type: AverageValue
+        averageValue: "10"  # Target 10 Mbps per pod
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 2         # Scale down by 2 pods max
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 5         # Scale up by 5 pods max for burst processing
+        periodSeconds: 30
+
+---
+# HPA for Cache Service with Memory-aware Scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pwc-cache-memory-aware-hpa
+  namespace: pwc-data-engineering
+  labels:
+    app: pwc-cache
+    component: memory-aware-autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pwc-cache-deployment
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  # Memory-focused scaling for cache service
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85  # High memory utilization target
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60  # Lower CPU target for cache workloads
+
+  # Cache performance metrics
+  - type: Pods
+    pods:
+      metric:
+        name: cache_hit_ratio
+      target:
+        type: AverageValue
+        averageValue: "90"  # Target 90% cache hit ratio
+  - type: Pods
+    pods:
+      metric:
+        name: cache_memory_usage
+      target:
+        type: AverageValue
+        averageValue: "800000000"  # Target 800MB cache usage per pod
+
+  # Cache efficiency metrics
+  - type: External
+    external:
+      metric:
+        name: cache_miss_rate
+        selector:
+          matchLabels:
+            cache_type: "primary"
+      target:
+        type: Value
+        value: "10"  # Scale up if cache miss rate > 10%
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Conservative scale down for cache
+      policies:
+      - type: Pods
+        value: 1         # Scale down 1 pod at a time
+        periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Pods
+        value: 3         # Scale up 3 pods for cache expansion
+        periodSeconds: 60
+
+---
+# Custom Metrics Collector Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: custom-metrics-collector
+  namespace: custom-metrics
+  labels:
+    app: metrics-collector
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: metrics-collector
+  template:
+    metadata:
+      labels:
+        app: metrics-collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: metrics-collector
+        image: pwc/custom-metrics-collector:v1.0.0
+        ports:
+        - containerPort: 8080
+          name: metrics
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: COLLECTION_INTERVAL
+          value: "15"  # 15 seconds
+        - name: BUSINESS_METRICS_ENABLED
+          value: "true"
+        - name: DATABASE_METRICS_ENABLED
+          value: "true"
+        - name: EXTERNAL_METRICS_ENABLED
+          value: "true"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service for Custom Metrics Collector
+apiVersion: v1
+kind: Service
+metadata:
+  name: custom-metrics-collector
+  namespace: custom-metrics
+  labels:
+    app: metrics-collector
+spec:
+  selector:
+    app: metrics-collector
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: metrics
+  type: ClusterIP
+
+---
+# ServiceMonitor for Custom Metrics Collection
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: custom-metrics-monitor
+  namespace: custom-metrics
+  labels:
+    app: metrics-collector
+spec:
+  selector:
+    matchLabels:
+      app: metrics-collector
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+
+---
+# External Metrics Provider Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: external-metrics-config
+  namespace: custom-metrics
+data:
+  config.yaml: |
+    external_providers:
+      # Cloud provider cost metrics
+      aws_cost_explorer:
+        enabled: true
+        api_endpoint: "https://ce.us-east-1.amazonaws.com/"
+        metrics:
+          - name: "daily_cost_usd"
+            query: "GetDimensionValues"
+            dimension: "SERVICE"
+          - name: "cost_per_service_usd"
+            query: "GetRightsizingRecommendation"
+
+      # External API performance monitoring
+      external_apis:
+        enabled: true
+        endpoints:
+          - name: "critical-external-api"
+            url: "https://api.external-service.com/health"
+            timeout_ms: 5000
+            expected_response_time_ms: 200
+
+          - name: "payment-gateway-api"
+            url: "https://payments.external.com/ping"
+            timeout_ms: 3000
+            expected_response_time_ms: 100
+
+      # Business intelligence metrics
+      business_intelligence:
+        enabled: true
+        data_sources:
+          - name: "user_analytics"
+            type: "postgresql"
+            connection_string: "postgresql://analytics:secret@analytics-db:5432/analytics"
+            queries:
+              - name: "daily_active_users"
+                sql: "SELECT COUNT(DISTINCT user_id) FROM user_sessions WHERE created_at >= NOW() - INTERVAL '24 hours'"
+              - name: "hourly_revenue_usd"
+                sql: "SELECT SUM(amount_usd) FROM transactions WHERE created_at >= NOW() - INTERVAL '1 hour'"
+
+          - name: "operational_metrics"
+            type: "prometheus"
+            connection_string: "http://prometheus.monitoring.svc.cluster.local:9090"
+            queries:
+              - name: "error_budget_remaining"
+                promql: "1 - (rate(http_requests_total{status=~'5..'}[1h]) / rate(http_requests_total[1h]))"
+              - name: "sla_compliance_percentage"
+                promql: "(sum(rate(http_requests_total{status!~'5..'}[1h])) / sum(rate(http_requests_total[1h]))) * 100"
+
+---
+# KEDA ScaledObject for Advanced Event-Driven Autoscaling
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: pwc-advanced-event-scaler
+  namespace: pwc-data-engineering
+  labels:
+    app: pwc-worker
+    component: advanced-event-scaling
+spec:
+  scaleTargetRef:
+    name: pwc-worker-deployment
+  minReplicaCount: 2
+  maxReplicaCount: 100
+  pollingInterval: 15  # Reduced polling interval for responsiveness
+  cooldownPeriod: 180  # 3 minute cooldown
+  idleReplicaCount: 0  # Scale to zero when idle
+  triggers:
+  # Multi-queue scaling with different priorities
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+      metricName: high_priority_queue_depth
+      threshold: '10'
+      query: max(rabbitmq_queue_messages{queue="high-priority"})
+    authenticationRef:
+      name: prometheus-auth
+
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+      metricName: normal_priority_queue_depth
+      threshold: '50'
+      query: max(rabbitmq_queue_messages{queue="normal-priority"})
+
+  # Database connection pool scaling
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+      metricName: db_connection_pool_usage
+      threshold: '80'
+      query: avg(pg_stat_database_connections{database="pwc_production"}) / avg(pg_settings_max_connections) * 100
+
+  # API response time degradation scaling
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+      metricName: api_response_time_p95
+      threshold: '500'
+      query: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) * 1000
+
+  # Business metric scaling (revenue per hour)
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+      metricName: revenue_velocity_usd_per_hour
+      threshold: '1000'
+      query: rate(revenue_total_usd[1h])
+
+---
+# HPA Webhook Configuration for Advanced Scaling Logic
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hpa-webhook-config
+  namespace: custom-metrics
+data:
+  webhook_config.yaml: |
+    webhook_scaling:
+      enabled: true
+      endpoint: "http://scaling-webhook.custom-metrics.svc.cluster.local:8080/scale"
+      timeout_seconds: 5
+      retry_attempts: 3
+
+      # Advanced scaling algorithms
+      scaling_algorithms:
+        predictive_scaling:
+          enabled: true
+          model_endpoint: "http://ml-predictor.custom-metrics.svc.cluster.local:8080/predict"
+          prediction_window_minutes: 15
+          confidence_threshold: 0.85
+
+        reinforcement_learning:
+          enabled: true
+          agent_endpoint: "http://rl-agent.custom-metrics.svc.cluster.local:8080/action"
+          state_features: ["cpu_usage", "memory_usage", "request_rate", "response_time", "error_rate"]
+          reward_function: "performance_cost_ratio"
+
+        multi_objective_optimization:
+          enabled: true
+          objectives:
+            - name: "minimize_cost"
+              weight: 0.3
+              metric: "cost_per_hour_usd"
+            - name: "maximize_performance"
+              weight: 0.4
+              metric: "requests_per_second_per_pod"
+            - name: "maintain_sla"
+              weight: 0.3
+              metric: "sla_compliance_percentage"
+
+      # Business context awareness
+      business_context:
+        enabled: true
+        context_sources:
+          - name: "calendar_events"
+            endpoint: "http://calendar-api.business.svc.cluster.local:8080/events"
+            scaling_factors:
+              - event_type: "product_launch"
+                scale_multiplier: 2.0
+              - event_type: "maintenance_window"
+                scale_multiplier: 0.5
+
+          - name: "market_conditions"
+            endpoint: "http://market-data.business.svc.cluster.local:8080/conditions"
+            scaling_factors:
+              - condition: "high_volatility"
+                scale_multiplier: 1.5
+              - condition: "market_close"
+                scale_multiplier: 0.7
+
+      # Advanced scaling policies
+      scaling_policies:
+        emergency_scaling:
+          enabled: true
+          triggers:
+            - metric: "error_rate_percentage"
+              threshold: 5.0
+              action: "scale_up_aggressive"
+              scale_factor: 3.0
+            - metric: "response_time_p99_ms"
+              threshold: 2000
+              action: "scale_up_immediate"
+              scale_factor: 2.0
+
+        cost_optimization:
+          enabled: true
+          cost_thresholds:
+            - cost_per_hour_usd: 100
+              action: "optimize_resources"
+            - cost_increase_percentage: 50
+              action: "alert_and_review"
+
+        performance_optimization:
+          enabled: true
+          performance_targets:
+            - metric: "requests_per_second"
+              target: 1000
+              tolerance: 0.1
+            - metric: "response_time_p95_ms"
+              target: 200
+              tolerance: 0.2

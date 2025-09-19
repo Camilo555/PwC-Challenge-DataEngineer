@@ -1,0 +1,512 @@
+# Advanced Multi-Region Load Balancing with Health-Aware Routing
+# 99.99% Availability with <50ms inter-region latency and global failover
+
+---
+# Global Load Balancer with Health Checks
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: bmad-global-ssl-cert
+  namespace: default
+spec:
+  domains:
+  - api.bmad.pwc-challenge.com
+  - bmad.pwc-challenge.com
+  - analytics.bmad.pwc-challenge.com
+
+---
+# Multi-Region Ingress Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: bmad-global-gateway
+  namespace: istio-system
+  labels:
+    app: bmad-global-lb
+    component: ingress
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTPS with advanced TLS configuration
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: bmad-tls-secret
+      minProtocolVersion: TLSV1_3
+      maxProtocolVersion: TLSV1_3
+      cipherSuites:
+      - ECDHE-RSA-AES256-GCM-SHA384
+      - ECDHE-RSA-CHACHA20-POLY1305
+    hosts:
+    - "*.bmad.pwc-challenge.com"
+  # HTTP with redirect to HTTPS
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*.bmad.pwc-challenge.com"
+    tls:
+      httpsRedirect: true
+
+---
+# Advanced Virtual Service with Health-Based Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: bmad-global-routing
+  namespace: default
+  labels:
+    app: bmad-global-routing
+    component: traffic-management
+spec:
+  hosts:
+  - "*.bmad.pwc-challenge.com"
+  gateways:
+  - istio-system/bmad-global-gateway
+  http:
+  # API Routes with Circuit Breaker and Health Checks
+  - match:
+    - uri:
+        prefix: /api/v1/
+    route:
+    - destination:
+        host: bmad-api-service
+        port:
+          number: 8080
+        subset: primary-region
+      weight: 70
+      headers:
+        response:
+          add:
+            x-served-by: "primary-region"
+    - destination:
+        host: bmad-api-service
+        port:
+          number: 8080
+        subset: secondary-region
+      weight: 20
+      headers:
+        response:
+          add:
+            x-served-by: "secondary-region"
+    - destination:
+        host: bmad-api-service
+        port:
+          number: 8080
+        subset: tertiary-region
+      weight: 10
+      headers:
+        response:
+          add:
+            x-served-by: "tertiary-region"
+    fault:
+      delay:
+        percentage:
+          value: 0.1  # Minimal delay for testing
+        fixedDelay: 5ms
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+      retryRemoteLocalities: true
+    headers:
+      request:
+        add:
+          x-forwarded-proto: https
+          x-request-id: "%REQ(X-REQUEST-ID)%"
+        remove:
+        - x-internal-debug
+      response:
+        add:
+          x-cache-status: "MISS"
+          strict-transport-security: "max-age=31536000; includeSubDomains"
+          x-content-type-options: "nosniff"
+          x-frame-options: "DENY"
+  
+  # Mobile API Routes with Specialized Routing
+  - match:
+    - uri:
+        prefix: /mobile/api/
+    route:
+    - destination:
+        host: bmad-mobile-service
+        port:
+          number: 8080
+        subset: mobile-optimized
+      weight: 80
+    - destination:
+        host: bmad-mobile-service
+        port:
+          number: 8080
+        subset: mobile-fallback
+      weight: 20
+    timeout: 5s
+    retries:
+      attempts: 5
+      perTryTimeout: 1s
+      retryOn: 5xx,reset,connect-failure
+    headers:
+      request:
+        add:
+          x-mobile-optimized: "true"
+          x-compression-enabled: "true"
+
+  # Analytics Routes with Load-Based Routing
+  - match:
+    - uri:
+        prefix: /analytics/
+    route:
+    - destination:
+        host: bmad-analytics-service
+        port:
+          number: 8080
+        subset: analytics-primary
+      weight: 60
+    - destination:
+        host: bmad-analytics-service
+        port:
+          number: 8080
+        subset: analytics-secondary
+      weight: 40
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      retryOn: 5xx
+
+  # Vector Database Routes with Intelligent Routing
+  - match:
+    - uri:
+        prefix: /vector/
+    route:
+    - destination:
+        host: bmad-vector-db-service
+        port:
+          number: 8080
+        subset: vector-gpu-accelerated
+      weight: 90
+    - destination:
+        host: bmad-vector-db-service
+        port:
+          number: 8080
+        subset: vector-cpu-fallback
+      weight: 10
+    timeout: 20s
+    retries:
+      attempts: 3
+      perTryTimeout: 7s
+
+---
+# Destination Rules with Health Checks and Circuit Breaker
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: bmad-global-destination-rules
+  namespace: default
+  labels:
+    app: bmad-destination-rules
+    component: traffic-policy
+spec:
+  host: "*.bmad-service"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 10s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        idleTimeout: 60s
+        h2UpgradePolicy: UPGRADE
+    loadBalancer:
+      simple: LEAST_REQUEST  # Optimal for balanced load distribution
+      consistentHash:
+        httpHeaderName: "x-user-id"  # Session affinity for user sessions
+    circuitBreaker:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+      splitExternalLocalOriginErrors: true
+    healthCheck:
+      path: /health
+      intervalSeconds: 10
+      timeoutSeconds: 3
+      unhealthyThreshold: 3
+      healthyThreshold: 2
+      httpHeaders:
+      - name: x-health-check
+        value: istio
+  portLevelSettings:
+  - port:
+      number: 8080
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 5s
+    loadBalancer:
+      simple: ROUND_ROBIN
+  subsets:
+  # Primary Region (AWS US-East-1)
+  - name: primary-region
+    labels:
+      region: us-east-1
+      cloud: aws
+      tier: primary
+    trafficPolicy:
+      portLevelSettings:
+      - port:
+          number: 8080
+        connectionPool:
+          tcp:
+            maxConnections: 200
+  
+  # Secondary Region (Azure East US)
+  - name: secondary-region
+    labels:
+      region: eastus
+      cloud: azure
+      tier: secondary
+    trafficPolicy:
+      portLevelSettings:
+      - port:
+          number: 8080
+        connectionPool:
+          tcp:
+            maxConnections: 150
+  
+  # Tertiary Region (GCP US-Central1)
+  - name: tertiary-region
+    labels:
+      region: us-central1
+      cloud: gcp
+      tier: tertiary
+    trafficPolicy:
+      portLevelSettings:
+      - port:
+          number: 8080
+        connectionPool:
+          tcp:
+            maxConnections: 100
+
+---
+# Service Monitor for Health Checks
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bmad-load-balancer-monitor
+  namespace: monitoring
+  labels:
+    app: bmad-monitoring
+    component: load-balancer-health
+spec:
+  selector:
+    matchLabels:
+      app: bmad-service
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    honorLabels: true
+    scrapeTimeout: 10s
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'istio_request_duration_milliseconds.*'
+      targetLabel: __name__
+      replacement: 'bmad_${1}'
+  namespaceSelector:
+    matchNames:
+    - default
+    - istio-system
+
+---
+# PodDisruptionBudget for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-api-pdb
+  namespace: default
+  labels:
+    app: bmad-api
+    component: availability
+spec:
+  minAvailable: 70%  # Ensure 70% of pods are always available
+  selector:
+    matchLabels:
+      app: bmad-api
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-mobile-pdb
+  namespace: default
+  labels:
+    app: bmad-mobile
+    component: availability
+spec:
+  minAvailable: 60%
+  selector:
+    matchLabels:
+      app: bmad-mobile
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bmad-analytics-pdb
+  namespace: default
+  labels:
+    app: bmad-analytics
+    component: availability
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: bmad-analytics
+
+---
+# Global Load Balancer Health Check Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-lb-health-config
+  namespace: istio-system
+  labels:
+    app: global-lb
+    component: health-checks
+data:
+  health_check_config.yaml: |
+    global_health_checks:
+      enabled: true
+      check_interval: 10s
+      timeout: 5s
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+      
+      endpoints:
+        api_service:
+          path: "/api/v1/health"
+          expected_codes: [200]
+          expected_body_contains: "healthy"
+          headers:
+            User-Agent: "BMAD-HealthCheck/1.0"
+            
+        mobile_service:
+          path: "/mobile/health"
+          expected_codes: [200, 202]
+          max_response_time: 2s
+          
+        analytics_service:
+          path: "/analytics/health"
+          expected_codes: [200]
+          max_response_time: 5s
+          
+        vector_db_service:
+          path: "/vector/health"
+          expected_codes: [200]
+          expected_body_contains: "vector_db_healthy"
+          max_response_time: 3s
+          
+      failover_policies:
+        primary_to_secondary:
+          trigger_threshold: 3
+          cooldown_period: 60s
+          traffic_shift: 
+            initial: 50%
+            increment: 25%
+            max: 100%
+            
+        cross_region_failover:
+          trigger_threshold: 5
+          cooldown_period: 120s
+          dns_ttl: 30s
+          
+      load_balancing:
+        algorithm: "weighted_least_connections"
+        session_affinity: true
+        session_timeout: 3600s
+        weights:
+          primary_region: 60
+          secondary_region: 30
+          tertiary_region: 10
+          
+      monitoring:
+        metrics_endpoint: "/lb-metrics"
+        prometheus_integration: true
+        alert_thresholds:
+          error_rate: 1%
+          response_time_p95: 500ms
+          availability: 99.99%
+
+---
+# Network Policy for Load Balancer Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-lb-network-policy
+  namespace: default
+  labels:
+    app: bmad-network-security
+    component: load-balancer
+spec:
+  podSelector:
+    matchLabels:
+      app: bmad-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Istio ingress gateway
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - podSelector:
+        matchLabels:
+          app: istio-proxy
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8443
+  # Allow health checks from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS to external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow internal service communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: bmad-service
+    ports:
+    - protocol: TCP
+      port: 8080

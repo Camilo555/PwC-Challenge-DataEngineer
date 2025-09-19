@@ -353,7 +353,7 @@ async def validate_batch_data(
 
 
 @router.get("/limits")
-def get_batch_limits() -> dict[str, Any]:
+async def get_batch_limits() -> dict[str, Any]:
     """
     Get information about batch operation limits and constraints.
     """

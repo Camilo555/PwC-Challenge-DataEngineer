@@ -1,0 +1,459 @@
+---
+# AlertManager Configuration for Comprehensive Alerting
+# ===================================================
+# Enterprise-grade alert routing and escalation configuration
+# Supports multi-channel notifications with severity-based escalation
+
+global:
+  # Global configuration
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@company.com'
+  smtp_auth_username: 'alerts@company.com'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+  # Slack configuration
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+  # PagerDuty configuration
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+  # Microsoft Teams configuration
+  victorops_api_url: '${TEAMS_WEBHOOK_URL}'
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Routing configuration
+route:
+  # Root route configuration
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default-receiver'
+
+  # Child routes for different severity levels and teams
+  routes:
+    # ========================================
+    # CRITICAL ALERTS - Immediate escalation
+    # ========================================
+    - match:
+        severity: critical
+        escalation_level: immediate
+      group_by: ['alertname']
+      group_wait: 0s
+      group_interval: 30s
+      repeat_interval: 5m
+      receiver: 'critical-immediate'
+      continue: false
+      routes:
+        # Infrastructure team critical alerts
+        - match:
+            team: infrastructure
+          receiver: 'critical-infrastructure'
+          continue: true
+        # Database team critical alerts
+        - match:
+            team: database
+          receiver: 'critical-database'
+          continue: true
+        # Security team critical alerts
+        - match:
+            team: security
+          receiver: 'critical-security'
+          continue: true
+        # Application team critical alerts
+        - match:
+            team: application
+          receiver: 'critical-application'
+          continue: true
+
+    # ========================================
+    # HIGH SEVERITY ALERTS - Urgent response
+    # ========================================
+    - match:
+        severity: high
+        escalation_level: urgent
+      group_by: ['alertname', 'team']
+      group_wait: 5s
+      group_interval: 1m
+      repeat_interval: 15m
+      receiver: 'high-urgent'
+      continue: false
+      routes:
+        # Data engineering team alerts
+        - match:
+            team: data_engineering
+          receiver: 'urgent-data-engineering'
+          continue: true
+        # Business team alerts
+        - match:
+            team: business
+          receiver: 'urgent-business'
+          continue: true
+        # Performance team alerts
+        - match:
+            team: performance
+          receiver: 'urgent-performance'
+          continue: true
+
+    # ========================================
+    # MEDIUM SEVERITY ALERTS - Standard response
+    # ========================================
+    - match:
+        severity: medium
+        escalation_level: standard
+      group_by: ['alertname', 'team']
+      group_wait: 2m
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'medium-standard'
+      continue: false
+      routes:
+        # Business intelligence team
+        - match:
+            team: business_intelligence
+          receiver: 'standard-business-intelligence'
+          continue: true
+        # Customer analytics team
+        - match:
+            team: customer_analytics
+          receiver: 'standard-customer-analytics'
+          continue: true
+        # Project management alerts
+        - match:
+            team: project_management
+          receiver: 'standard-project-management'
+          continue: true
+
+    # ========================================
+    # LOW SEVERITY ALERTS - Informational
+    # ========================================
+    - match:
+        severity: low
+        escalation_level: informational
+      group_by: ['alertname']
+      group_wait: 10m
+      group_interval: 30m
+      repeat_interval: 24h
+      receiver: 'low-informational'
+      continue: false
+
+    # ========================================
+    # MAINTENANCE MODE - Suppress alerts
+    # ========================================
+    - match:
+        alertname: MaintenanceMode
+      receiver: 'null'
+      continue: false
+
+    # ========================================
+    # TESTING ALERTS - Separate channel
+    # ========================================
+    - match_re:
+        environment: 'dev|test|staging'
+      receiver: 'testing-alerts'
+      continue: false
+
+# Inhibition rules to reduce noise
+inhibit_rules:
+  # Inhibit all alerts if service is down
+  - source_match:
+      alertname: ServiceDown
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance', 'service']
+
+  # Inhibit high CPU alerts if memory is critical
+  - source_match:
+      alertname: MemoryUsageCritical
+    target_match:
+      alertname: HighCPUUsage
+    equal: ['instance']
+
+  # Inhibit API latency alerts if error rate is high
+  - source_match:
+      alertname: HighErrorRate
+    target_match:
+      alertname: APIResponseTimeCritical
+    equal: ['service']
+
+  # Inhibit business metric alerts during ETL pipeline failures
+  - source_match:
+      alertname: ETLPipelineFailure
+    target_match_re:
+      alertname: '.*BusinessMetrics.*'
+    equal: ['cluster']
+
+# Receiver configurations
+receivers:
+  # ========================================
+  # DEFAULT RECEIVER
+  # ========================================
+  - name: 'default-receiver'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-general'
+        title: 'Default Alert'
+        text: 'Alert: {{ .GroupLabels.alertname }} - {{ .CommonAnnotations.summary }}'
+        color: 'warning'
+
+  # ========================================
+  # CRITICAL ALERT RECEIVERS
+  # ========================================
+  - name: 'critical-immediate'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+        description: 'CRITICAL: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+        details:
+          impact: '{{ .CommonAnnotations.impact }}'
+          action: '{{ .CommonAnnotations.action }}'
+          runbook: '{{ .CommonLabels.runbook }}'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-critical'
+        username: 'AlertManager'
+        title: '🚨 CRITICAL ALERT'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Impact:* {{ .CommonAnnotations.impact }}
+          *Action Required:* {{ .CommonAnnotations.action }}
+          *Runbook:* {{ .CommonLabels.runbook }}
+        color: 'danger'
+        send_resolved: true
+    email_configs:
+      - to: '${ONCALL_EMAIL}'
+        subject: 'CRITICAL ALERT: {{ .CommonAnnotations.summary }}'
+        body: |
+          Alert: {{ .GroupLabels.alertname }}
+          Summary: {{ .CommonAnnotations.summary }}
+          Description: {{ .CommonAnnotations.description }}
+          Impact: {{ .CommonAnnotations.impact }}
+          Action Required: {{ .CommonAnnotations.action }}
+          Runbook: {{ .CommonLabels.runbook }}
+
+          Time: {{ .FireTime.Format "2006-01-02 15:04:05" }}
+
+  - name: 'critical-infrastructure'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_INFRASTRUCTURE_KEY}'
+        description: 'INFRASTRUCTURE CRITICAL: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#infrastructure-alerts'
+        username: 'InfraBot'
+        title: '🔧 INFRASTRUCTURE CRITICAL'
+        text: '{{ .CommonAnnotations.summary }} - {{ .CommonAnnotations.action }}'
+        color: 'danger'
+
+  - name: 'critical-database'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_DATABASE_KEY}'
+        description: 'DATABASE CRITICAL: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#database-alerts'
+        username: 'DatabaseBot'
+        title: '🗄️ DATABASE CRITICAL'
+        text: '{{ .CommonAnnotations.summary }} - {{ .CommonAnnotations.action }}'
+        color: 'danger'
+
+  - name: 'critical-security'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_SECURITY_KEY}'
+        description: 'SECURITY CRITICAL: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#security-alerts'
+        username: 'SecurityBot'
+        title: '🔒 SECURITY CRITICAL'
+        text: |
+          *SECURITY ALERT:* {{ .CommonAnnotations.summary }}
+          *Immediate Action Required:* {{ .CommonAnnotations.action }}
+          *Runbook:* {{ .CommonLabels.runbook }}
+        color: 'danger'
+    email_configs:
+      - to: '${SECURITY_TEAM_EMAIL}'
+        subject: 'SECURITY CRITICAL: {{ .CommonAnnotations.summary }}'
+        body: |
+          SECURITY ALERT: {{ .CommonAnnotations.summary }}
+          Description: {{ .CommonAnnotations.description }}
+          Immediate Action Required: {{ .CommonAnnotations.action }}
+          Time: {{ .FireTime.Format "2006-01-02 15:04:05" }}
+
+  - name: 'critical-application'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_APPLICATION_KEY}'
+        description: 'APPLICATION CRITICAL: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#application-alerts'
+        username: 'AppBot'
+        title: '💻 APPLICATION CRITICAL'
+        text: '{{ .CommonAnnotations.summary }} - {{ .CommonAnnotations.action }}'
+        color: 'danger'
+
+  # ========================================
+  # HIGH SEVERITY RECEIVERS
+  # ========================================
+  - name: 'high-urgent'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-high'
+        username: 'AlertManager'
+        title: '⚠️ HIGH SEVERITY ALERT'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Impact:* {{ .CommonAnnotations.impact }}
+          *Action:* {{ .CommonAnnotations.action }}
+        color: '#ff9900'
+        send_resolved: true
+    email_configs:
+      - to: '${TEAM_LEAD_EMAIL}'
+        subject: 'HIGH ALERT: {{ .CommonAnnotations.summary }}'
+        body: |
+          Alert: {{ .GroupLabels.alertname }}
+          Summary: {{ .CommonAnnotations.summary }}
+          Impact: {{ .CommonAnnotations.impact }}
+          Action: {{ .CommonAnnotations.action }}
+
+  - name: 'urgent-data-engineering'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#data-engineering-alerts'
+        username: 'DataBot'
+        title: '📊 DATA ENGINEERING URGENT'
+        text: '{{ .CommonAnnotations.summary }} - {{ .CommonAnnotations.action }}'
+        color: '#ff9900'
+
+  - name: 'urgent-business'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#business-alerts'
+        username: 'BusinessBot'
+        title: '💼 BUSINESS URGENT'
+        text: |
+          *Business Impact Alert:* {{ .CommonAnnotations.summary }}
+          *Impact:* {{ .CommonAnnotations.impact }}
+          *Recommended Action:* {{ .CommonAnnotations.action }}
+        color: '#ff9900'
+    email_configs:
+      - to: '${BUSINESS_TEAM_EMAIL}'
+        subject: 'BUSINESS ALERT: {{ .CommonAnnotations.summary }}'
+
+  - name: 'urgent-performance'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#performance-alerts'
+        username: 'PerfBot'
+        title: '⚡ PERFORMANCE URGENT'
+        text: '{{ .CommonAnnotations.summary }} - {{ .CommonAnnotations.action }}'
+        color: '#ff9900'
+
+  # ========================================
+  # MEDIUM SEVERITY RECEIVERS
+  # ========================================
+  - name: 'medium-standard'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-medium'
+        username: 'AlertManager'
+        title: '📋 MEDIUM SEVERITY ALERT'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Action:* {{ .CommonAnnotations.action }}
+        color: '#ffcc00'
+        send_resolved: true
+
+  - name: 'standard-business-intelligence'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#bi-alerts'
+        username: 'BIBot'
+        title: '📈 BUSINESS INTELLIGENCE'
+        text: '{{ .CommonAnnotations.summary }}'
+        color: '#ffcc00'
+
+  - name: 'standard-customer-analytics'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#customer-analytics'
+        username: 'CustomerBot'
+        title: '👥 CUSTOMER ANALYTICS'
+        text: '{{ .CommonAnnotations.summary }}'
+        color: '#ffcc00'
+
+  - name: 'standard-project-management'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#project-alerts'
+        username: 'ProjectBot'
+        title: '📋 PROJECT MANAGEMENT'
+        text: |
+          *Project Alert:* {{ .CommonAnnotations.summary }}
+          *Action Required:* {{ .CommonAnnotations.action }}
+        color: '#ffcc00'
+    email_configs:
+      - to: '${PROJECT_MANAGER_EMAIL}'
+        subject: 'PROJECT ALERT: {{ .CommonAnnotations.summary }}'
+
+  # ========================================
+  # LOW SEVERITY RECEIVERS
+  # ========================================
+  - name: 'low-informational'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-info'
+        username: 'InfoBot'
+        title: 'ℹ️ INFORMATIONAL'
+        text: '{{ .CommonAnnotations.summary }}'
+        color: '#36a64f'
+        send_resolved: false
+
+  # ========================================
+  # SPECIAL RECEIVERS
+  # ========================================
+  - name: 'testing-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts-testing'
+        username: 'TestBot'
+        title: '🧪 TESTING ENVIRONMENT'
+        text: |
+          *Test Alert:* {{ .GroupLabels.alertname }}
+          *Environment:* {{ .CommonLabels.environment }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+        color: '#0066cc'
+
+  - name: 'null'
+    # Null receiver for suppressed alerts
+    slack_configs: []
+
+# Time-based silencing (optional)
+time_intervals:
+  - name: business_hours
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '17:00'
+        weekdays: ['monday:friday']
+        location: 'UTC'
+
+  - name: maintenance_window
+    time_intervals:
+      - times:
+          - start_time: '02:00'
+            end_time: '04:00'
+        weekdays: ['saturday']
+        location: 'UTC'

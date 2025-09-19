@@ -1,8 +1,9 @@
 """
-Story 4.2: AI/LLM Conversational Analytics API
+AI Conversational Analytics API Routes
+=====================================
 
-Enterprise-grade conversational analytics with:
-- Multi-LLM orchestration with fallback strategies
+FastAPI routes for AI/LLM conversational analytics platform serving the $3.5M opportunity.
+Natural language querying, AI-powered insights, and intelligent conversation interfaces.
 - Natural language query processing with 95%+ accuracy
 - Conversation management with context persistence
 - Real-time streaming responses
@@ -613,8 +614,8 @@ async def get_conversation_manager() -> ConversationManager:
 @router.post("/query/natural-language", response_model=ConversationalResponse)
 async def process_natural_language_query(
     orchestration_request: LLMOrchestrationRequest,
-    user_id: str = Query(...),
     background_tasks: BackgroundTasks,
+    user_id: str = Query(...),
     handler: ProcessNLQueryCommandHandler = Depends(get_query_handler)
 ) -> ConversationalResponse:
     """
@@ -671,7 +672,7 @@ async def process_natural_language_query(
 
 @router.post("/conversation/create", response_model=ConversationContext)
 async def create_conversation(
-    user_id: str = Query(...),
+    background_tasks: BackgroundTasks,
     initial_context: Dict[str, Any] = None,
     manager: ConversationManager = Depends(get_conversation_manager)
 ) -> ConversationContext:
@@ -710,7 +711,7 @@ async def create_conversation(
 @router.get("/conversation/{conversation_id}", response_model=ConversationContext)
 async def get_conversation(
     conversation_id: str,
-    user_id: str = Query(...),
+    background_tasks: BackgroundTasks,
     manager: ConversationManager = Depends(get_conversation_manager)
 ) -> ConversationContext:
     """Get conversation context and history"""
@@ -817,9 +818,8 @@ async def stream_ai_response(
 @router.get("/insights/generate/{query_id}")
 async def generate_insights(
     query_id: str,
-    user_id: str = Query(...),
+    background_tasks: BackgroundTasks,
     insight_types: List[str] = Query(["trend", "anomaly", "forecast"]),
-    background_tasks: BackgroundTasks
 ) -> Dict[str, Any]:
     """
     Generate analytics insights with caching optimization

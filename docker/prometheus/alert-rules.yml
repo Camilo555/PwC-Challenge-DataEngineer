@@ -1,247 +1,1127 @@
 groups:
-  - name: infrastructure.rules
+  # =============================================
+  # ENHANCED INFRASTRUCTURE MONITORING
+  # Intelligent alerting with severity escalation
+  # =============================================
+  - name: infrastructure-enhanced.rules
     interval: 30s
     rules:
-      # High CPU Usage
-      - alert: HighCPUUsage
-        expr: (100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+      # =============================================
+      # CPU MONITORING - Multi-tier severity
+      # =============================================
+      
+      # CPU Warning Level (75%+)
+      - alert: CPUUsageWarning
+        expr: (100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 75
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+          resource: cpu
+          tier: "75-percent"
+          escalation: "team-lead"
+        annotations:
+          summary: "CPU usage elevated on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} - monitoring closely"
+          business_impact: "Performance may be affected if trend continues"
+          action_required: "Monitor CPU-intensive processes, prepare scaling if needed"
+          runbook_url: "https://runbooks.pwc.com/cpu-warning"
+          
+      # CPU High Level (85%+)
+      - alert: CPUUsageHigh
+        expr: (100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 85
         for: 2m
         labels:
-          severity: warning
+          severity: error
           component: infrastructure
+          resource: cpu
+          tier: "85-percent"
+          escalation: "on-call-engineer"
+          business_impact: "performance-degradation"
         annotations:
-          summary: "High CPU usage on {{ $labels.instance }}"
-          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} for more than 2 minutes"
-          runbook_url: "https://runbooks.example.com/high-cpu"
-
-      # High Memory Usage
-      - alert: HighMemoryUsage
-        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 85
-        for: 2m
-        labels:
-          severity: warning
-          component: infrastructure
-        annotations:
-          summary: "High memory usage on {{ $labels.instance }}"
-          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
-
-      # Disk Space Low
-      - alert: DiskSpaceLow
-        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 80
-        for: 1m
-        labels:
-          severity: warning
-          component: infrastructure
-        annotations:
-          summary: "Low disk space on {{ $labels.instance }}"
-          description: "Disk usage is {{ $value }}% on filesystem {{ $labels.mountpoint }}"
-
-      # Disk Space Critical
-      - alert: DiskSpaceCritical
-        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 95
+          summary: "HIGH CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} - immediate attention required"
+          business_impact: "$27.8M platform performance impact likely"
+          action_required: "Scale resources immediately, investigate high-CPU processes"
+          runbook_url: "https://runbooks.pwc.com/cpu-high"
+          
+      # CPU Critical Level (95%+)
+      - alert: CPUUsageCritical
+        expr: (100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 95
         for: 1m
         labels:
           severity: critical
           component: infrastructure
+          resource: cpu
+          tier: "95-percent"
+          escalation: "incident-commander"
+          business_impact: "critical-service-impact"
         annotations:
-          summary: "Critical disk space on {{ $labels.instance }}"
-          description: "Disk usage is {{ $value }}% on filesystem {{ $labels.mountpoint }}"
+          summary: "CRITICAL CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }} - system overload imminent"
+          business_impact: "CRITICAL - $27.8M platform at risk of failure"
+          action_required: "EMERGENCY scaling, traffic redirection, incident response activation"
+          runbook_url: "https://runbooks.pwc.com/cpu-critical"
+          paging_required: "true"
+          
+      # CPU Load Average Critical
+      - alert: CPULoadAverageCritical
+        expr: node_load5 / on(instance) node_cpu_count > 1.5
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+          resource: cpu-load
+          escalation: "platform-team"
+        annotations:
+          summary: "CRITICAL CPU load average on {{ $labels.instance }}"
+          description: "5-minute load average {{ $value }} exceeds 1.5x CPU cores"
+          business_impact: "System responsiveness severely degraded"
+          action_required: "Immediate load balancing, process optimization"
 
-  - name: application.rules
+      # =============================================
+      # MEMORY MONITORING - Multi-tier severity
+      # =============================================
+      
+      # Memory Warning Level (80%+)
+      - alert: MemoryUsageWarning
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+          resource: memory
+          tier: "80-percent"
+          escalation: "team-lead"
+        annotations:
+          summary: "Memory usage elevated on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }} - approaching limits"
+          business_impact: "Performance degradation possible if trend continues"
+          action_required: "Monitor memory-intensive processes, prepare memory scaling"
+          
+      # Memory High Level (90%+)
+      - alert: MemoryUsageHigh
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 90
+        for: 2m
+        labels:
+          severity: error
+          component: infrastructure
+          resource: memory
+          tier: "90-percent"
+          escalation: "on-call-engineer"
+          business_impact: "performance-degradation"
+        annotations:
+          summary: "HIGH memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }} - immediate action required"
+          business_impact: "High risk of OOM conditions affecting $27.8M platform"
+          action_required: "Scale memory immediately, investigate memory leaks"
+          
+      # Memory Critical Level (95%+)
+      - alert: MemoryUsageCritical
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+          resource: memory
+          tier: "95-percent"
+          escalation: "incident-commander"
+          business_impact: "critical-service-impact"
+        annotations:
+          summary: "CRITICAL memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }} - OOM imminent"
+          business_impact: "CRITICAL - System failure imminent, $27.8M platform at risk"
+          action_required: "EMERGENCY memory scaling, process termination, incident response"
+          paging_required: "true"
+          
+      # Swap Usage Critical
+      - alert: SwapUsageCritical
+        expr: ((node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / node_memory_SwapTotal_bytes) * 100 > 50
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+          resource: swap
+          escalation: "platform-team"
+        annotations:
+          summary: "CRITICAL swap usage on {{ $labels.instance }}"
+          description: "Swap usage is {{ $value }}% - severe memory pressure"
+          business_impact: "Severe performance degradation due to memory pressure"
+          action_required: "Immediate memory scaling, application optimization"
+
+      # =============================================
+      # DISK MONITORING - Multi-tier severity
+      # =============================================
+      
+      # Disk Warning Level (80%+)
+      - alert: DiskSpaceWarning
+        expr: ((node_filesystem_size_bytes{fstype!="tmpfs"} - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+          resource: disk
+          tier: "80-percent"
+          escalation: "team-lead"
+        annotations:
+          summary: "Disk space elevated on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} - monitoring closely"
+          business_impact: "Storage capacity approaching limits"
+          action_required: "Plan storage expansion, cleanup unnecessary files"
+          
+      # Disk High Level (90%+)
+      - alert: DiskSpaceHigh
+        expr: ((node_filesystem_size_bytes{fstype!="tmpfs"} - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 90
+        for: 2m
+        labels:
+          severity: error
+          component: infrastructure
+          resource: disk
+          tier: "90-percent"
+          escalation: "on-call-engineer"
+          business_impact: "storage-impact"
+        annotations:
+          summary: "HIGH disk usage on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} - immediate attention needed"
+          business_impact: "Risk of write failures affecting $27.8M platform operations"
+          action_required: "Expand storage immediately, cleanup large files"
+          
+      # Disk Critical Level (95%+)
+      - alert: DiskSpaceCritical
+        expr: ((node_filesystem_size_bytes{fstype!="tmpfs"} - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+          resource: disk
+          tier: "95-percent"
+          escalation: "incident-commander"
+          business_impact: "critical-service-impact"
+        annotations:
+          summary: "CRITICAL disk space on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} - write failures imminent"
+          business_impact: "CRITICAL - Write failures imminent, $27.8M platform data at risk"
+          action_required: "EMERGENCY storage expansion, immediate cleanup, incident response"
+          paging_required: "true"
+          
+      # Disk I/O Saturation
+      - alert: DiskIOSaturation
+        expr: rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          resource: disk-io
+          escalation: "performance-team"
+        annotations:
+          summary: "Disk I/O saturation on {{ $labels.instance }}"
+          description: "Disk I/O utilization {{ $value }} exceeding 80% for 10+ minutes"
+          business_impact: "Storage performance degradation affecting applications"
+          action_required: "Investigate I/O bottlenecks, consider storage optimization"
+
+      # =============================================
+      # NETWORK MONITORING - Multi-tier severity
+      # =============================================
+      
+      # Network Error Rate High
+      - alert: NetworkErrorRateHigh
+        expr: (
+          rate(node_network_receive_errs_total[5m]) + 
+          rate(node_network_transmit_errs_total[5m])
+        ) / (
+          rate(node_network_receive_packets_total[5m]) + 
+          rate(node_network_transmit_packets_total[5m])
+        ) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          resource: network
+          escalation: "network-team"
+        annotations:
+          summary: "High network error rate on {{ $labels.instance }}"
+          description: "Network error rate {{ $value }} exceeding 1% for 10+ minutes"
+          business_impact: "Network reliability degraded, connection issues possible"
+          action_required: "Investigate network interface issues, check cable connections"
+          
+      # Network Drops Critical
+      - alert: NetworkDropsCritical
+        expr: (
+          rate(node_network_receive_drop_total[5m]) + 
+          rate(node_network_transmit_drop_total[5m])
+        ) > 1000
+        for: 5m
+        labels:
+          severity: error
+          component: infrastructure
+          resource: network
+          escalation: "on-call-engineer"
+        annotations:
+          summary: "Critical network packet drops on {{ $labels.instance }}"
+          description: "Network dropping {{ $value }} packets/sec - significant packet loss"
+          business_impact: "High packet loss affecting application performance"
+          action_required: "Immediate network diagnostics, traffic analysis"
+
+  # =============================================
+  # ENHANCED APPLICATION MONITORING
+  # =============================================
+  - name: application-enhanced.rules
     interval: 15s
     rules:
-      # Critical <15ms SLA Monitoring Rules
+      # =============================================
+      # CRITICAL <15ms SLA MONITORING - Enhanced
+      # =============================================
+      
+      # 15ms SLA Warning (12ms+)
+      - alert: API15msSLAWarning
+        expr: histogram_quantile(0.95, rate(api_response_time_ms_bucket[5m])) > 12
+        for: 3m
+        labels:
+          severity: warning
+          component: api-performance
+          sla_type: "15ms_warning"
+          business_impact: "2.1M"
+          escalation: "performance-team"
+        annotations:
+          summary: "WARNING: API approaching 15ms SLA limit"
+          description: "95th percentile API response time {{ $value }}ms approaching 15ms SLA"
+          business_impact: "$2.1M API story at risk - proactive optimization needed"
+          action_required: "Optimize slow endpoints, review caching strategy"
+          runbook_url: "https://runbooks.pwc.com/15ms-sla-warning"
+          
+      # 15ms SLA Violation Critical
       - alert: API15msSLAViolationCritical
         expr: histogram_quantile(0.95, rate(api_response_time_ms_bucket[5m])) > 15
         for: 1m
         labels:
           severity: critical
           component: api-performance
-          sla_type: "15ms_target"
+          sla_type: "15ms_critical"
+          business_impact: "2.1M"
+          escalation: "incident-commander"
+          paging_required: "true"
         annotations:
-          summary: "CRITICAL: <15ms SLA violation detected"
+          summary: "CRITICAL: <15ms SLA violation - IMMEDIATE ACTION REQUIRED"
           description: "95th percentile API response time {{ $value }}ms exceeds 15ms SLA target"
-          business_impact: "Production SLA breach affecting $27.8M+ platform performance"
+          business_impact: "CRITICAL: Production SLA breach affecting $2.1M API performance story"
+          action_required: "EMERGENCY API optimization, traffic routing, infrastructure scaling"
           runbook_url: "https://runbooks.pwc.com/15ms-sla-violation"
+          
+      # 15ms SLA Severe Violation (25ms+)
+      - alert: API15msSLASevereViolation
+        expr: histogram_quantile(0.95, rate(api_response_time_ms_bucket[5m])) > 25
+        for: 30s
+        labels:
+          severity: critical
+          component: api-performance
+          sla_type: "15ms_severe"
+          business_impact: "2.1M"
+          escalation: "emergency-response"
+          paging_required: "true"
+        annotations:
+          summary: "SEVERE: <15ms SLA severely breached - EMERGENCY RESPONSE"
+          description: "95th percentile API response time {{ $value }}ms - SEVERE SLA breach"
+          business_impact: "EMERGENCY: $2.1M API story in critical state - platform stability at risk"
+          action_required: "EMERGENCY traffic redirection, immediate scaling, incident response activation"
+          runbook_url: "https://runbooks.pwc.com/15ms-sla-emergency"
 
-      # <15ms SLA Compliance Rate
+      # 15ms SLA Compliance Monitoring - Enhanced
+      - alert: API15msSLAComplianceBelow98Percent
+        expr: (api_sla_compliant_total / api_requests_total) * 100 < 98
+        for: 2m
+        labels:
+          severity: warning
+          component: api-performance
+          sla_type: "compliance_rate_warning"
+          business_impact: "2.1M"
+          escalation: "performance-team"
+        annotations:
+          summary: "<15ms SLA compliance below optimal 98% target"
+          description: "SLA compliance rate {{ $value }}% below 98% optimal target"
+          business_impact: "$2.1M API story performance declining - optimization needed"
+          action_required: "Review slow endpoints, optimize critical paths"
+          
       - alert: API15msSLAComplianceBelow95Percent
         expr: (api_sla_compliant_total / api_requests_total) * 100 < 95
         for: 5m
         labels:
-          severity: warning
+          severity: error
           component: api-performance
-          sla_type: "compliance_rate"
+          sla_type: "compliance_rate_error"
+          business_impact: "2.1M"
+          escalation: "on-call-engineer"
         annotations:
-          summary: "<15ms SLA compliance below 95% target"
-          description: "SLA compliance rate {{ $value }}% below 95% target over 5 minutes"
-          business_impact: "SLA target not met, performance degradation detected"
+          summary: "<15ms SLA compliance below 95% SLO target"
+          description: "SLA compliance rate {{ $value }}% below 95% SLO target"
+          business_impact: "$2.1M API story SLO breach - immediate action required"
+          action_required: "Immediate performance optimization, infrastructure review"
+          
+      - alert: API15msSLAComplianceBelow90Percent
+        expr: (api_sla_compliant_total / api_requests_total) * 100 < 90
+        for: 3m
+        labels:
+          severity: critical
+          component: api-performance
+          sla_type: "compliance_rate_critical"
+          business_impact: "2.1M"
+          escalation: "incident-commander"
+          paging_required: "true"
+        annotations:
+          summary: "CRITICAL: <15ms SLA compliance below 90% - MAJOR DEGRADATION"
+          description: "SLA compliance rate {{ $value }}% - major performance degradation"
+          business_impact: "CRITICAL: $2.1M API story severely compromised"
+          action_required: "EMERGENCY response, immediate scaling, incident activation"
 
-      # Ultra-fast Response Time Achievement
+      # =============================================
+      # ULTRA-FAST <5ms PERFORMANCE MONITORING
+      # =============================================
+      
+      # Ultra-fast Target Achievement
       - alert: API5msUltraFastTargetMissed
         expr: histogram_quantile(0.50, rate(api_response_time_ms_bucket[5m])) > 5
+        for: 15m
+        labels:
+          severity: info
+          component: api-performance
+          sla_type: "ultra_fast_median"
+          optimization: "opportunity"
+        annotations:
+          summary: "Ultra-fast <5ms median target missed"
+          description: "Median response time {{ $value }}ms exceeds 5ms ultra-fast target"
+          business_impact: "Performance optimization opportunity - could improve competitive advantage"
+          action_required: "Analyze and optimize fastest endpoints for ultra-low latency"
+          
+      # Ultra-fast 95th Percentile
+      - alert: API5msUltraFast95thPercentileMissed
+        expr: histogram_quantile(0.95, rate(api_response_time_ms_bucket[5m])) > 8
         for: 10m
         labels:
           severity: info
           component: api-performance
-          sla_type: "ultra_fast"
+          sla_type: "ultra_fast_95th"
+          optimization: "high-value"
         annotations:
-          summary: "Ultra-fast <5ms target missed"
-          description: "Median response time {{ $value }}ms exceeds 5ms ultra-fast target"
-          business_impact: "Opportunity for performance optimization identified"
+          summary: "Ultra-fast <8ms 95th percentile target missed"
+          description: "95th percentile response time {{ $value }}ms exceeds 8ms ultra-fast target"
+          business_impact: "High-value optimization opportunity for premium performance tier"
+          action_required: "Focus on optimizing top-tier performance for critical endpoints"
 
-      # Cache Hit Rate Below Target (affecting <15ms SLA)
+      # =============================================
+      # CACHE PERFORMANCE MONITORING
+      # =============================================
+      
+      # Cache Hit Rate Monitoring - Multi-tier
+      - alert: CacheHitRateBelow98Percent
+        expr: api_cache_hit_rate < 98
+        for: 10m
+        labels:
+          severity: info
+          component: cache-performance
+          sla_type: "cache_efficiency_optimal"
+        annotations:
+          summary: "Cache hit rate below optimal 98% target"
+          description: "Cache hit rate {{ $value }}% below 98% optimal target"
+          business_impact: "Cache optimization opportunity identified"
+          action_required: "Review cache strategy, optimize cache keys and TTL"
+          
       - alert: CacheHitRateBelow95Percent
         expr: api_cache_hit_rate < 95
         for: 5m
         labels:
           severity: warning
           component: cache-performance
-          sla_type: "cache_efficiency"
+          sla_type: "cache_efficiency_warning"
+          business_impact: "2.1M"
         annotations:
-          summary: "Cache hit rate below 95% target"
-          description: "Cache hit rate {{ $value }}% below 95% target, impacting <15ms SLA"
-          business_impact: "Cache efficiency degraded, response times may increase"
+          summary: "Cache hit rate below 95% target - impacting <15ms SLA"
+          description: "Cache hit rate {{ $value }}% below 95% target, impacting <15ms SLA performance"
+          business_impact: "$2.1M API story at risk - cache efficiency degraded"
+          action_required: "Immediate cache optimization, review cache warming strategy"
+          
+      - alert: CacheHitRateBelow90Percent
+        expr: api_cache_hit_rate < 90
+        for: 3m
+        labels:
+          severity: error
+          component: cache-performance
+          sla_type: "cache_efficiency_error"
+          business_impact: "2.1M"
+          escalation: "performance-team"
+        annotations:
+          summary: "Cache hit rate critically low - severe <15ms SLA impact"
+          description: "Cache hit rate {{ $value }}% critically low - severe performance impact"
+          business_impact: "$2.1M API story severely impacted by poor cache performance"
+          action_required: "Emergency cache investigation, potential cache cluster issues"
 
-      # Legacy High Response Time Alert (kept for backwards compatibility)
-      - alert: HighAPIResponseTime
+      # =============================================
+      # COMPREHENSIVE API MONITORING
+      # =============================================
+      
+      # API Response Time Tiers - Enhanced
+      - alert: APIResponseTimeElevated
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-service"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: info
+          component: api-performance
+          tier: "100ms"
+        annotations:
+          summary: "API response time elevated above 100ms"
+          description: "95th percentile response time is {{ $value }}s for API service"
+          business_impact: "Performance opportunity - still within acceptable range"
+          action_required: "Monitor trend, consider optimization if sustained"
+          
+      - alert: APIResponseTimeHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-service"}[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: api-performance
+          tier: "500ms"
+          escalation: "performance-team"
+        annotations:
+          summary: "High API response time above 500ms"
+          description: "95th percentile response time is {{ $value }}s for API service"
+          business_impact: "User experience degradation, performance optimization needed"
+          action_required: "Investigate slow endpoints, optimize database queries"
+          
+      - alert: APIResponseTimeCritical
         expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-service"}[5m])) > 2.0
         for: 2m
         labels:
-          severity: warning
-          component: api
+          severity: error
+          component: api-performance
+          tier: "2000ms"
+          escalation: "on-call-engineer"
         annotations:
-          summary: "High API response time (legacy alert)"
+          summary: "CRITICAL API response time above 2 seconds"
           description: "95th percentile response time is {{ $value }}s for API service"
+          business_impact: "Severe user experience degradation, platform reputation at risk"
+          action_required: "Immediate performance investigation, emergency optimization"
 
-      # API Error Rate
-      - alert: HighAPIErrorRate
+      # =============================================
+      # API ERROR RATE MONITORING - Enhanced
+      # =============================================
+      
+      # API Error Rate - Multi-tier monitoring
+      - alert: APIErrorRateElevated
+        expr: (rate(http_requests_total{job="api-service",status=~"5.."}[5m]) / rate(http_requests_total{job="api-service"}[5m])) * 100 > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api-reliability
+          tier: "1-percent"
+        annotations:
+          summary: "API error rate elevated above 1%"
+          description: "API 5xx error rate is {{ $value }}% over the last 5 minutes"
+          business_impact: "Error rate increasing, user experience impact possible"
+          action_required: "Investigate error patterns, review recent deployments"
+          
+      - alert: APIErrorRateHigh
+        expr: (rate(http_requests_total{job="api-service",status=~"5.."}[5m]) / rate(http_requests_total{job="api-service"}[5m])) * 100 > 3
+        for: 2m
+        labels:
+          severity: error
+          component: api-reliability
+          tier: "3-percent"
+          escalation: "development-team"
+        annotations:
+          summary: "HIGH API error rate above 3%"
+          description: "API 5xx error rate is {{ $value }}% over the last 5 minutes"
+          business_impact: "Significant user impact, service reliability compromised"
+          action_required: "Immediate investigation, error analysis, potential rollback"
+          
+      - alert: APIErrorRateCritical
         expr: (rate(http_requests_total{job="api-service",status=~"5.."}[5m]) / rate(http_requests_total{job="api-service"}[5m])) * 100 > 5
         for: 1m
         labels:
           severity: critical
-          component: api
+          component: api-reliability
+          tier: "5-percent"
+          escalation: "incident-commander"
+          paging_required: "true"
         annotations:
-          summary: "High API error rate"
-          description: "API error rate is {{ $value }}% over the last 5 minutes"
+          summary: "CRITICAL API error rate above 5%"
+          description: "API 5xx error rate is {{ $value }}% over the last 5 minutes"
+          business_impact: "CRITICAL: Major service degradation, $27.8M platform reliability at risk"
+          action_required: "EMERGENCY incident response, immediate service recovery actions"
+          
+      # 4xx Error Rate Monitoring
+      - alert: APIClientErrorRateHigh
+        expr: (rate(http_requests_total{job="api-service",status=~"4.."}[5m]) / rate(http_requests_total{job="api-service"}[5m])) * 100 > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: api-usability
+          tier: "client-errors"
+        annotations:
+          summary: "High API client error rate (4xx)"
+          description: "API 4xx error rate is {{ $value }}% over the last 5 minutes"
+          business_impact: "High client error rate may indicate API usability issues"
+          action_required: "Review API documentation, validate client implementations"
 
-      # Service Down
-      - alert: ServiceDown
-        expr: up{job=~"api-service|dagster|postgres"} == 0
-        for: 1m
+      # =============================================
+      # SERVICE AVAILABILITY MONITORING - Enhanced
+      # =============================================
+      
+      # Critical Service Down - Immediate Response
+      - alert: CriticalServiceDown
+        expr: up{job=~"api-service|postgres"} == 0
+        for: 30s
         labels:
           severity: critical
-          component: service
+          component: service-availability
+          service_tier: "critical"
+          escalation: "incident-commander"
+          paging_required: "true"
         annotations:
-          summary: "Service {{ $labels.job }} is down"
-          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute"
-
-      # Too Many Concurrent Connections
-      - alert: TooManyConcurrentConnections
-        expr: service_mesh_active_connections > 1000
-        for: 2m
+          summary: "CRITICAL SERVICE DOWN: {{ $labels.job }}"
+          description: "Critical service {{ $labels.job }} on {{ $labels.instance }} is DOWN"
+          business_impact: "CRITICAL: Core platform services offline, $27.8M platform at risk"
+          action_required: "EMERGENCY service recovery, immediate incident response activation"
+          runbook_url: "https://runbooks.pwc.com/service-down-critical"
+          
+      # Important Service Down
+      - alert: ImportantServiceDown
+        expr: up{job=~"dagster|rabbitmq|kafka|typesense"} == 0
+        for: 1m
         labels:
-          severity: warning
-          component: api
+          severity: error
+          component: service-availability
+          service_tier: "important"
+          escalation: "on-call-engineer"
         annotations:
-          summary: "Too many concurrent connections"
-          description: "{{ $labels.service }} has {{ $value }} active connections"
-
-  - name: database.rules
-    interval: 30s
-    rules:
-      # Database Connection Pool Exhausted
-      - alert: DatabaseConnectionPoolExhausted
-        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
-        for: 2m
-        labels:
-          severity: warning
-          component: database
-        annotations:
-          summary: "Database connection pool nearly exhausted"
-          description: "Connection pool usage is {{ $value }}% of maximum connections"
-
-      # Slow Database Queries
-      - alert: SlowDatabaseQueries
-        expr: rate(pg_stat_user_tables_n_tup_upd[5m]) + rate(pg_stat_user_tables_n_tup_del[5m]) + rate(pg_stat_user_tables_n_tup_ins[5m]) < 1
+          summary: "IMPORTANT SERVICE DOWN: {{ $labels.job }}"
+          description: "Important service {{ $labels.job }} on {{ $labels.instance }} has been down for 1+ minute"
+          business_impact: "Platform functionality impacted, data pipeline disruption likely"
+          action_required: "Immediate service recovery, investigate root cause"
+          
+      # Supporting Service Down
+      - alert: SupportingServiceDown
+        expr: up{job=~"spark-master|spark-worker"} == 0
         for: 5m
         labels:
           severity: warning
-          component: database
+          component: service-availability
+          service_tier: "supporting"
+          escalation: "team-lead"
         annotations:
-          summary: "Database appears to be running slowly"
-          description: "Very low database activity detected, possible performance issue"
+          summary: "Supporting service down: {{ $labels.job }}"
+          description: "Supporting service {{ $labels.job }} on {{ $labels.instance }} has been down for 5+ minutes"
+          business_impact: "Non-critical service down, some features may be unavailable"
+          action_required: "Schedule service recovery during next maintenance window or investigate if urgent"
 
-      # Database Replication Lag
-      - alert: DatabaseReplicationLag
+      # =============================================
+      # CONNECTION AND CAPACITY MONITORING
+      # =============================================
+      
+      # Connection Pool Monitoring - Multi-tier
+      - alert: HighConcurrentConnections
+        expr: service_mesh_active_connections > 800
+        for: 5m
+        labels:
+          severity: warning
+          component: connection-pool
+          tier: "80-percent"
+        annotations:
+          summary: "High concurrent connections"
+          description: "{{ $labels.service }} has {{ $value }} active connections (>80% of capacity)"
+          business_impact: "Connection pool utilization high, scaling may be needed"
+          action_required: "Monitor connection patterns, prepare for scaling"
+          
+      - alert: CriticalConcurrentConnections
+        expr: service_mesh_active_connections > 1000
+        for: 2m
+        labels:
+          severity: error
+          component: connection-pool
+          tier: "capacity-limit"
+          escalation: "platform-team"
+        annotations:
+          summary: "CRITICAL: Connection pool near capacity"
+          description: "{{ $labels.service }} has {{ $value }} active connections (near maximum capacity)"
+          business_impact: "Connection pool exhaustion imminent, new connections may be rejected"
+          action_required: "Immediate connection pool scaling, investigate connection leaks"
+          
+      # Request Queue Depth
+      - alert: HighRequestQueueDepth
+        expr: http_request_queue_depth > 100
+        for: 3m
+        labels:
+          severity: warning
+          component: request-processing
+          escalation: "performance-team"
+        annotations:
+          summary: "High request queue depth"
+          description: "Request queue depth is {{ $value }} - processing backlog detected"
+          business_impact: "Request processing delayed, response times may increase"
+          action_required: "Scale processing capacity, optimize request handling"
+
+  # =============================================
+  # ENHANCED DATABASE MONITORING
+  # =============================================
+  - name: database-enhanced.rules
+    interval: 30s
+    rules:
+      # =============================================
+      # DATABASE CONNECTION MONITORING - Enhanced
+      # =============================================
+      
+      # Connection Pool Warning
+      - alert: DatabaseConnectionPoolHigh
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100 > 70
+        for: 5m
+        labels:
+          severity: warning
+          component: database-connections
+          tier: "70-percent"
+        annotations:
+          summary: "Database connection pool usage elevated"
+          description: "Connection pool usage is {{ $value }}% of maximum connections"
+          business_impact: "Database connection pool utilization high"
+          action_required: "Monitor connection usage, optimize connection pooling"
+          
+      # Connection Pool Error
+      - alert: DatabaseConnectionPoolNearExhaustion
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100 > 85
+        for: 2m
+        labels:
+          severity: error
+          component: database-connections
+          tier: "85-percent"
+          escalation: "database-team"
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Connection pool usage is {{ $value }}% of maximum connections"
+          business_impact: "Database performance degradation, connection rejections possible"
+          action_required: "Immediate connection pool scaling, investigate connection leaks"
+          
+      # Connection Pool Critical
+      - alert: DatabaseConnectionPoolCritical
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: database-connections
+          tier: "95-percent"
+          escalation: "incident-commander"
+          paging_required: "true"
+        annotations:
+          summary: "CRITICAL: Database connection pool exhausted"
+          description: "Connection pool usage is {{ $value }}% - exhaustion imminent"
+          business_impact: "CRITICAL: Database connections exhausted, application failures imminent"
+          action_required: "EMERGENCY connection pool expansion, immediate connection cleanup"
+
+      # =============================================
+      # DATABASE PERFORMANCE MONITORING - Enhanced
+      # =============================================
+      
+      # Slow Query Monitoring
+      - alert: DatabaseSlowQueriesHigh
+        expr: rate(database_slow_queries_total[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: database-performance
+          query_type: "slow-queries"
+        annotations:
+          summary: "High rate of slow database queries"
+          description: "{{ $value }} slow queries per second detected"
+          business_impact: "Database performance degraded, <15ms SLA at risk"
+          action_required: "Analyze slow queries, optimize indexes, review query plans"
+          
+      # Query Duration Critical
+      - alert: DatabaseQueryDurationCritical
+        expr: histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m])) > 5.0
+        for: 2m
+        labels:
+          severity: error
+          component: database-performance
+          query_type: "duration"
+          escalation: "database-team"
+        annotations:
+          summary: "CRITICAL database query duration"
+          description: "95th percentile query duration {{ $value }}s exceeding 5 second threshold"
+          business_impact: "Severe database performance impact, all dependent services affected"
+          action_required: "Emergency query optimization, investigate blocking operations"
+          
+      # Database Lock Contention
+      - alert: DatabaseLockContentionHigh
+        expr: rate(pg_stat_database_conflicts[5m]) > 1
+        for: 3m
+        labels:
+          severity: warning
+          component: database-locks
+          escalation: "database-team"
+        annotations:
+          summary: "High database lock contention"
+          description: "{{ $value }} database conflicts per second detected"
+          business_impact: "Database lock contention causing performance degradation"
+          action_required: "Investigate locking queries, optimize transaction isolation"
+
+      # =============================================
+      # DATABASE REPLICATION MONITORING
+      # =============================================
+      
+      # Replication Lag Warning
+      - alert: DatabaseReplicationLagWarning
+        expr: (pg_stat_replication_lag_bytes / 1024 / 1024) > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: database-replication
+          tier: "50mb"
+        annotations:
+          summary: "Database replication lag elevated"
+          description: "Replication lag is {{ $value }}MB - monitoring closely"
+          business_impact: "Replication lag increasing, data freshness may be affected"
+          action_required: "Monitor replication performance, check network connectivity"
+          
+      # Replication Lag Critical
+      - alert: DatabaseReplicationLagCritical
         expr: (pg_stat_replication_lag_bytes / 1024 / 1024) > 100
         for: 2m
         labels:
           severity: critical
-          component: database
+          component: database-replication
+          tier: "100mb"
+          escalation: "database-team"
         annotations:
-          summary: "Database replication lag is high"
-          description: "Replication lag is {{ $value }}MB"
+          summary: "CRITICAL: Database replication lag high"
+          description: "Replication lag is {{ $value }}MB - immediate attention required"
+          business_impact: "High replication lag, data consistency and disaster recovery at risk"
+          action_required: "Immediate replication optimization, investigate network issues"
+          
+      # Replica Down
+      - alert: DatabaseReplicaDown
+        expr: pg_stat_replication_state == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database-replication
+          escalation: "database-team"
+          paging_required: "true"
+        annotations:
+          summary: "CRITICAL: Database replica is down"
+          description: "Database replica {{ $labels.replica_name }} is not responding"
+          business_impact: "CRITICAL: Database redundancy lost, disaster recovery compromised"
+          action_required: "EMERGENCY replica recovery, investigate replica health"
 
-      # Redis Memory Usage High
-      - alert: RedisMemoryHigh
-        expr: (redis_memory_used_bytes / redis_config_maxmemory) * 100 > 80
-        for: 2m
+      # =============================================
+      # REDIS CACHE MONITORING - Enhanced
+      # =============================================
+      
+      # Redis Memory Monitoring - Multi-tier
+      - alert: RedisMemoryWarning
+        expr: (redis_memory_used_bytes / redis_config_maxmemory) * 100 > 75
+        for: 5m
         labels:
           severity: warning
-          component: cache
+          component: cache-memory
+          tier: "75-percent"
         annotations:
-          summary: "Redis memory usage is high"
-          description: "Redis memory usage is {{ $value }}%"
+          summary: "Redis memory usage elevated"
+          description: "Redis memory usage is {{ $value }}% - approaching limits"
+          business_impact: "Cache performance may degrade if memory continues to increase"
+          action_required: "Monitor cache usage patterns, consider memory optimization"
+          
+      - alert: RedisMemoryHigh
+        expr: (redis_memory_used_bytes / redis_config_maxmemory) * 100 > 85
+        for: 2m
+        labels:
+          severity: error
+          component: cache-memory
+          tier: "85-percent"
+          escalation: "cache-team"
+        annotations:
+          summary: "HIGH Redis memory usage"
+          description: "Redis memory usage is {{ $value }}% - immediate attention needed"
+          business_impact: "High cache memory usage affecting <15ms SLA performance"
+          action_required: "Immediate memory optimization, review cache eviction policies"
+          
+      - alert: RedisMemoryCritical
+        expr: (redis_memory_used_bytes / redis_config_maxmemory) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: cache-memory
+          tier: "95-percent"
+          escalation: "incident-commander"
+        annotations:
+          summary: "CRITICAL: Redis memory near exhaustion"
+          description: "Redis memory usage is {{ $value }}% - exhaustion imminent"
+          business_impact: "CRITICAL: Cache failures imminent, severe <15ms SLA impact expected"
+          action_required: "EMERGENCY memory scaling, immediate cache optimization"
+          
+      # Redis Connection Monitoring
+      - alert: RedisConnectionsHigh
+        expr: redis_connected_clients > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: cache-connections
+        annotations:
+          summary: "High Redis connection count"
+          description: "Redis has {{ $value }} active connections"
+          business_impact: "High connection count may indicate connection pool issues"
+          action_required: "Review connection pool configuration, investigate connection leaks"
+          
+      # Redis Command Latency
+      - alert: RedisCommandLatencyHigh
+        expr: redis_command_latency_seconds > 0.01
+        for: 3m
+        labels:
+          severity: warning
+          component: cache-performance
+          escalation: "performance-team"
+        annotations:
+          summary: "High Redis command latency"
+          description: "Redis command latency {{ $value }}s exceeding 10ms threshold"
+          business_impact: "Cache latency impacting <15ms SLA performance"
+          action_required: "Optimize Redis commands, review data structures"
 
-  - name: etl.rules
+  # =============================================
+  # ENHANCED ETL PIPELINE MONITORING
+  # =============================================
+  - name: etl-enhanced.rules
     interval: 60s
     rules:
-      # ETL Job Failed
-      - alert: ETLJobFailed
-        expr: increase(dagster_job_failure_total[1h]) > 0
+      # =============================================
+      # ETL JOB FAILURE MONITORING - Enhanced
+      # =============================================
+      
+      # Single ETL Job Failure
+      - alert: ETLJobFailureSingle
+        expr: increase(dagster_job_failure_total[10m]) > 0
+        for: 0s
+        labels:
+          severity: warning
+          component: etl-reliability
+          failure_type: "single"
+          escalation: "data-engineering"
+        annotations:
+          summary: "ETL job failure detected"
+          description: "{{ $labels.job_name }} job failed - investigating single failure"
+          business_impact: "Single ETL failure, data pipeline disruption possible"
+          action_required: "Investigate job failure, check logs, retry if appropriate"
+          
+      # Multiple ETL Job Failures
+      - alert: ETLJobFailureMultiple
+        expr: increase(dagster_job_failure_total[1h]) > 2
+        for: 0s
+        labels:
+          severity: error
+          component: etl-reliability
+          failure_type: "multiple"
+          escalation: "data-engineering-lead"
+        annotations:
+          summary: "Multiple ETL job failures"
+          description: "{{ $labels.job_name }} job has failed {{ $value }} times in the last hour"
+          business_impact: "Multiple failures indicate systematic issue, data quality at risk"
+          action_required: "Immediate investigation, check infrastructure, review recent changes"
+          
+      # Critical ETL Job Failure Pattern
+      - alert: ETLJobFailurePattern
+        expr: increase(dagster_job_failure_total[6h]) > 5
         for: 0s
         labels:
           severity: critical
-          component: etl
+          component: etl-reliability
+          failure_type: "pattern"
+          escalation: "incident-commander"
+          business_impact: "1.8M"
         annotations:
-          summary: "ETL job failed"
-          description: "{{ $labels.job_name }} job has failed {{ $value }} times in the last hour"
+          summary: "CRITICAL: ETL job failure pattern detected"
+          description: "{{ $labels.job_name }} job has failed {{ $value }} times in 6 hours - critical pattern"
+          business_impact: "CRITICAL: $1.8M Data Quality story at risk - systematic ETL failures"
+          action_required: "EMERGENCY ETL investigation, data pipeline recovery, incident response"
 
-      # ETL Job Duration Too Long
-      - alert: ETLJobDurationTooLong
-        expr: dagster_job_duration_seconds > 3600
+      # =============================================
+      # ETL PERFORMANCE MONITORING - Enhanced
+      # =============================================
+      
+      # ETL Job Duration - Multi-tier
+      - alert: ETLJobDurationElevated
+        expr: dagster_job_duration_seconds > 1800  # 30 minutes
+        for: 0s
+        labels:
+          severity: info
+          component: etl-performance
+          duration_tier: "30min"
+        annotations:
+          summary: "ETL job duration elevated"
+          description: "{{ $labels.job_name }} running for {{ $value | humanizeDuration }} - longer than typical"
+          business_impact: "Extended processing time, data freshness may be affected"
+          action_required: "Monitor job progress, investigate if pattern continues"
+          
+      - alert: ETLJobDurationLong
+        expr: dagster_job_duration_seconds > 3600  # 1 hour
         for: 0s
         labels:
           severity: warning
-          component: etl
+          component: etl-performance
+          duration_tier: "1hour"
+          escalation: "data-engineering"
         annotations:
-          summary: "ETL job running too long"
-          description: "{{ $labels.job_name }} has been running for {{ $value }} seconds"
+          summary: "ETL job running longer than expected"
+          description: "{{ $labels.job_name }} has been running for {{ $value | humanizeDuration }}"
+          business_impact: "Extended processing affecting data pipeline SLAs"
+          action_required: "Investigate job performance, consider optimization or scaling"
+          
+      - alert: ETLJobDurationCritical
+        expr: dagster_job_duration_seconds > 7200  # 2 hours
+        for: 0s
+        labels:
+          severity: error
+          component: etl-performance
+          duration_tier: "2hours"
+          escalation: "data-engineering-lead"
+        annotations:
+          summary: "CRITICAL ETL job duration"
+          description: "{{ $labels.job_name }} has been running for {{ $value | humanizeDuration }} - critical duration"
+          business_impact: "Critical processing delay, data freshness SLA breach likely"
+          action_required: "Immediate investigation, consider job termination and restart"
+          
+      # ETL Throughput Monitoring
+      - alert: ETLThroughputDegraded
+        expr: etl_throughput_records_per_second < 100
+        for: 10m
+        labels:
+          severity: warning
+          component: etl-performance
+          performance: "throughput"
+        annotations:
+          summary: "ETL throughput degraded"
+          description: "{{ $labels.job_name }} processing only {{ $value }} records/second"
+          business_impact: "ETL processing slower than expected, data pipeline efficiency reduced"
+          action_required: "Investigate performance bottlenecks, optimize data processing"
 
-      # Data Quality Issues
-      - alert: DataQualityIssue
+      # =============================================
+      # DATA QUALITY MONITORING - Enhanced
+      # =============================================
+      
+      # Data Quality Issue Tiers
+      - alert: DataQualityIssuesEmerging
+        expr: increase(data_quality_issues_total[1h]) > 5
+        for: 0s
+        labels:
+          severity: info
+          component: data-quality
+          issue_tier: "emerging"
+        annotations:
+          summary: "Data quality issues emerging"
+          description: "{{ $value }} data quality issues detected in the last hour - monitoring trend"
+          business_impact: "Data quality concerns emerging, monitoring required"
+          action_required: "Review data quality patterns, investigate potential causes"
+          
+      - alert: DataQualityIssuesElevated
         expr: increase(data_quality_issues_total[1h]) > 10
         for: 0s
         labels:
           severity: warning
           component: data-quality
+          issue_tier: "elevated"
+          business_impact: "1.8M"
         annotations:
-          summary: "Data quality issues detected"
+          summary: "Data quality issues elevated"
           description: "{{ $value }} data quality issues detected in the last hour"
-
-      # Data Freshness Issue
-      - alert: DataFreshnessIssue
-        expr: time() - data_last_updated_timestamp > 7200  # 2 hours
+          business_impact: "$1.8M Data Quality story at risk - elevated issue count"
+          action_required: "Investigate data quality rules, validate data sources"
+          
+      - alert: DataQualityIssuesCritical
+        expr: increase(data_quality_issues_total[1h]) > 25
+        for: 0s
+        labels:
+          severity: critical
+          component: data-quality
+          issue_tier: "critical"
+          escalation: "data-engineering-lead"
+          business_impact: "1.8M"
+        annotations:
+          summary: "CRITICAL: High data quality issue count"
+          description: "{{ $value }} data quality issues detected in the last hour - critical threshold breached"
+          business_impact: "CRITICAL: $1.8M Data Quality story severely compromised"
+          action_required: "EMERGENCY data quality investigation, data pipeline review"
+          
+      # Data Quality Score Monitoring
+      - alert: DataQualityScoreLow
+        expr: etl_data_quality_score_percentage < 90
         for: 5m
         labels:
           severity: warning
-          component: data-freshness
+          component: data-quality-score
+          business_impact: "1.8M"
         annotations:
-          summary: "Data is stale"
-          description: "Data was last updated {{ $value | humanizeDuration }} ago"
+          summary: "Data quality score below target"
+          description: "Data quality score {{ $value }}% below 90% target for {{ $labels.job_name }}"
+          business_impact: "$1.8M Data Quality story performance declining"
+          action_required: "Investigate quality issues, optimize validation rules"
+          
+      - alert: DataQualityScoreCritical
+        expr: etl_data_quality_score_percentage < 80
+        for: 2m
+        labels:
+          severity: critical
+          component: data-quality-score
+          escalation: "data-engineering-lead"
+          business_impact: "1.8M"
+        annotations:
+          summary: "CRITICAL: Data quality score severely degraded"
+          description: "Data quality score {{ $value }}% critically low for {{ $labels.job_name }}"
+          business_impact: "CRITICAL: $1.8M Data Quality story failing - immediate action required"
+          action_required: "EMERGENCY data quality recovery, validate data integrity"
 
-  - name: business.rules
+      # =============================================
+      # DATA FRESHNESS MONITORING - Enhanced
+      # =============================================
+      
+      # Data Freshness - Multi-tier monitoring
+      - alert: DataFreshnessWarning
+        expr: time() - data_last_updated_timestamp > 3600  # 1 hour
+        for: 10m
+        labels:
+          severity: warning
+          component: data-freshness
+          freshness_tier: "1hour"
+        annotations:
+          summary: "Data freshness approaching limit"
+          description: "Data was last updated {{ $value | humanizeDuration }} ago - approaching freshness SLA"
+          business_impact: "Data freshness declining, analytics accuracy may be affected"
+          action_required: "Check ETL pipeline health, investigate update delays"
+          
+      - alert: DataFreshnessViolation
+        expr: time() - data_last_updated_timestamp > 7200  # 2 hours
+        for: 5m
+        labels:
+          severity: error
+          component: data-freshness
+          freshness_tier: "2hours"
+          escalation: "data-engineering"
+        annotations:
+          summary: "Data freshness SLA violation"
+          description: "Data was last updated {{ $value | humanizeDuration }} ago - SLA breach"
+          business_impact: "Data freshness SLA breached, analytics and reporting affected"
+          action_required: "Immediate ETL pipeline investigation, data update recovery"
+          
+      - alert: DataFreshnessCritical
+        expr: time() - data_last_updated_timestamp > 14400  # 4 hours
+        for: 2m
+        labels:
+          severity: critical
+          component: data-freshness
+          freshness_tier: "4hours"
+          escalation: "data-engineering-lead"
+          business_impact: "1.8M"
+        annotations:
+          summary: "CRITICAL: Data severely stale"
+          description: "Data was last updated {{ $value | humanizeDuration }} ago - critically stale"
+          business_impact: "CRITICAL: $1.8M Data Quality story compromised - data severely outdated"
+          action_required: "EMERGENCY data pipeline recovery, investigate systematic failure"
+
+  # =============================================
+  # ENHANCED BUSINESS METRICS MONITORING
+  # =============================================
+  - name: business-enhanced.rules
     interval: 60s
     rules:
       # Revenue Drop

@@ -2,14 +2,25 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 from core.config import settings
 
 _engine = create_engine(settings.get_database_url(async_mode=False), echo=False, future=True)
+_async_engine = None
 
 
 def get_engine():
     return _engine
+
+
+async def get_async_engine() -> AsyncEngine:
+    """Get or create async database engine."""
+    global _async_engine
+    if _async_engine is None:
+        async_url = settings.get_database_url(async_mode=True)
+        _async_engine = create_async_engine(async_url, echo=False, future=True)
+    return _async_engine
 
 
 def create_all() -> None:

@@ -64,74 +64,226 @@ class IndexManager:
         - Transactional queries (invoice lookups, order processing)
         """
         return [
-            # === FACT_SALE TABLE INDEXES ===
+            # === FACT_SALE TABLE INDEXES - OPTIMIZED FOR <15MS QUERIES ===
 
-            # Primary time-series index for sales analytics
+            # Primary time-series index for sales analytics (ENHANCED)
             IndexDefinition(
-                name="idx_fact_sale_date_performance",
+                name="idx_fact_sale_date_performance_v2",
                 table_name="fact_sale",
-                columns=["date_key"],
-                description="Primary index for time-based sales queries"
+                columns=["date_key", "total_amount"],
+                index_type=IndexType.BTREE,
+                include_columns=["quantity", "profit_amount"],
+                description="Enhanced primary index for time-based sales queries with covering data"
             ),
 
-            # Customer analytics index
+            # Customer analytics index (ENHANCED WITH RFM)
             IndexDefinition(
-                name="idx_fact_sale_customer_analytics",
+                name="idx_fact_sale_customer_analytics_v2",
                 table_name="fact_sale",
-                columns=["customer_key", "date_key"],
-                description="Customer behavior and RFM analysis"
+                columns=["customer_key", "date_key", "total_amount"],
+                index_type=IndexType.COMPOSITE,
+                description="Enhanced customer behavior and RFM analysis with covering amounts"
             ),
 
-            # Product performance index
+            # Product performance index (ENHANCED)
             IndexDefinition(
-                name="idx_fact_sale_product_performance",
+                name="idx_fact_sale_product_performance_v2",
                 table_name="fact_sale",
-                columns=["product_key", "date_key"],
-                description="Product sales performance and trends"
+                columns=["product_key", "date_key", "total_amount"],
+                include_columns=["quantity", "profit_amount", "unit_price"],
+                description="Enhanced product sales performance with all key metrics"
             ),
 
-            # Geographic analytics index
+            # Geographic analytics index (ENHANCED)
             IndexDefinition(
-                name="idx_fact_sale_country_analytics",
+                name="idx_fact_sale_country_analytics_v2",
                 table_name="fact_sale",
-                columns=["country_key", "date_key"],
-                description="Geographic sales analysis"
+                columns=["country_key", "date_key", "total_amount"],
+                include_columns=["quantity", "profit_amount"],
+                description="Enhanced geographic sales analysis with revenue metrics"
             ),
 
-            # Invoice processing index
+            # Invoice processing index (ENHANCED)
             IndexDefinition(
-                name="idx_fact_sale_invoice_lookup",
+                name="idx_fact_sale_invoice_lookup_v2",
                 table_name="fact_sale",
-                columns=["invoice_key"],
-                description="Fast invoice detail lookups"
+                columns=["invoice_key", "date_key"],
+                include_columns=["customer_key", "total_amount", "quantity"],
+                description="Enhanced invoice detail lookups with key context"
             ),
 
-            # High-value sales index (partial index)
+            # High-value sales index (ENHANCED PARTIAL INDEX)
             IndexDefinition(
-                name="idx_fact_sale_high_value",
+                name="idx_fact_sale_high_value_v2",
                 table_name="fact_sale",
-                columns=["total_amount", "date_key"],
+                columns=["total_amount", "date_key", "customer_key"],
                 index_type=IndexType.PARTIAL,
                 partial_condition="total_amount > 100.00",
-                description="High-value transactions for executive reporting"
+                include_columns=["profit_amount", "product_key", "country_key"],
+                description="Enhanced high-value transactions with complete context"
             ),
 
-            # Batch processing index
+            # Batch processing index (ENHANCED)
             IndexDefinition(
-                name="idx_fact_sale_batch_processing",
+                name="idx_fact_sale_batch_processing_v2",
                 table_name="fact_sale",
-                columns=["batch_id", "created_at"],
-                description="ETL batch processing and data lineage"
+                columns=["batch_id", "created_at", "source_system"],
+                include_columns=["data_quality_score"],
+                description="Enhanced ETL batch processing with quality metrics"
             ),
 
-            # Revenue covering index
+            # Revenue covering index (ENHANCED COVERING INDEX)
             IndexDefinition(
-                name="idx_fact_sale_revenue_covering",
+                name="idx_fact_sale_revenue_covering_v2",
                 table_name="fact_sale",
-                columns=["date_key", "country_key"],
+                columns=["date_key", "country_key", "product_key"],
                 index_type=IndexType.COVERING,
+                include_columns=["total_amount", "quantity", "profit_amount", "customer_key", "unit_price"],
+                description="Comprehensive covering index for revenue analytics - includes all key measures"
+            ),
+
+            # CRITICAL NEW INDEXES FOR <15MS PERFORMANCE
+
+            # Multi-dimensional analytics index for dashboard queries
+            IndexDefinition(
+                name="idx_fact_sale_dashboard_analytics",
+                table_name="fact_sale",
+                columns=["date_key", "customer_key", "product_key", "country_key"],
+                index_type=IndexType.COMPOSITE,
                 include_columns=["total_amount", "quantity", "profit_amount"],
-                description="Covering index for revenue reports (includes data in index)"
+                description="CRITICAL: Multi-dimensional index for dashboard analytics - targets <15ms"
+            ),
+
+            # Time-series revenue aggregation index
+            IndexDefinition(
+                name="idx_fact_sale_timeseries_revenue",
+                table_name="fact_sale",
+                columns=["date_key", "total_amount", "profit_amount"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "customer_key", "product_key", "country_key"],
+                description="CRITICAL: Time-series revenue aggregation - optimized for reporting queries"
+            ),
+
+            # Customer segment analysis index
+            IndexDefinition(
+                name="idx_fact_sale_customer_segment",
+                table_name="fact_sale",
+                columns=["customer_key", "total_amount", "date_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "profit_amount", "product_key", "invoice_key"],
+                description="CRITICAL: Customer segmentation and lifetime value calculations"
+            ),
+
+            # Product category performance index
+            IndexDefinition(
+                name="idx_fact_sale_product_category",
+                table_name="fact_sale",
+                columns=["product_key", "total_amount", "date_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "profit_amount", "customer_key", "country_key"],
+                description="CRITICAL: Product category performance analysis"
+            ),
+
+            # Geographic revenue analysis index
+            IndexDefinition(
+                name="idx_fact_sale_geographic_revenue",
+                table_name="fact_sale",
+                columns=["country_key", "total_amount", "date_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "profit_amount", "product_key", "customer_key"],
+                description="CRITICAL: Geographic revenue analysis and regional reporting"
+            ),
+
+            # High-performance aggregation index for SUM operations
+            IndexDefinition(
+                name="idx_fact_sale_aggregation_optimized",
+                table_name="fact_sale",
+                columns=["date_key", "country_key", "product_key", "customer_key", "total_amount"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "profit_amount", "unit_price", "discount_amount"],
+                description="CRITICAL: Optimized for GROUP BY and aggregation operations"
+            ),
+
+            # Profit margin analysis index
+            IndexDefinition(
+                name="idx_fact_sale_profit_margin",
+                table_name="fact_sale",
+                columns=["profit_amount", "total_amount", "date_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["product_key", "customer_key", "country_key", "margin_percentage"],
+                description="CRITICAL: Profit margin analysis and profitability reporting"
+            ),
+
+            # NEW ULTRA-PERFORMANCE INDEXES FOR <15MS TARGET
+
+            # Lightning-fast dashboard queries index
+            IndexDefinition(
+                name="idx_fact_sale_lightning_dashboard",
+                table_name="fact_sale",
+                columns=["date_key", "total_amount", "profit_amount", "quantity"],
+                index_type=IndexType.COVERING,
+                include_columns=["customer_key", "product_key", "country_key", "invoice_key", "unit_price"],
+                description="ULTRA-CRITICAL: Lightning-fast dashboard queries <15ms target"
+            ),
+
+            # Real-time analytics index for instant queries
+            IndexDefinition(
+                name="idx_fact_sale_realtime_analytics",
+                table_name="fact_sale",
+                columns=["date_key", "country_key", "total_amount"],
+                index_type=IndexType.COVERING,
+                include_columns=["profit_amount", "quantity", "product_key", "customer_key", "margin_percentage"],
+                description="ULTRA-CRITICAL: Real-time analytics with sub-10ms response times"
+            ),
+
+            # Top-performing products instant lookup
+            IndexDefinition(
+                name="idx_fact_sale_top_products_instant",
+                table_name="fact_sale",
+                columns=["product_key", "total_amount", "quantity"],
+                index_type=IndexType.COVERING,
+                include_columns=["date_key", "profit_amount", "customer_key", "country_key"],
+                description="ULTRA-CRITICAL: Instant top-performing products queries"
+            ),
+
+            # Customer lifetime value instant calculation
+            IndexDefinition(
+                name="idx_fact_sale_clv_instant",
+                table_name="fact_sale",
+                columns=["customer_key", "date_key", "total_amount"],
+                index_type=IndexType.COVERING,
+                include_columns=["profit_amount", "quantity", "product_key", "invoice_key"],
+                description="ULTRA-CRITICAL: Instant customer lifetime value calculations"
+            ),
+
+            # Geographic revenue instant aggregation
+            IndexDefinition(
+                name="idx_fact_sale_geo_instant",
+                table_name="fact_sale",
+                columns=["country_key", "date_key", "total_amount", "profit_amount"],
+                index_type=IndexType.COVERING,
+                include_columns=["quantity", "product_key", "customer_key"],
+                description="ULTRA-CRITICAL: Instant geographic revenue aggregations"
+            ),
+
+            # Time-series trend analysis ultra-fast
+            IndexDefinition(
+                name="idx_fact_sale_trends_ultrafast",
+                table_name="fact_sale",
+                columns=["date_key", "total_amount", "profit_amount", "quantity"],
+                index_type=IndexType.COVERING,
+                include_columns=["customer_key", "product_key", "country_key", "unit_price", "margin_percentage"],
+                description="ULTRA-CRITICAL: Ultra-fast time-series trend analysis"
+            ),
+
+            # Hot data access pattern optimization
+            IndexDefinition(
+                name="idx_fact_sale_hot_data_access",
+                table_name="fact_sale",
+                columns=["date_key", "customer_key", "product_key", "country_key"],
+                index_type=IndexType.COVERING,
+                include_columns=["total_amount", "profit_amount", "quantity", "unit_price", "discount_amount"],
+                description="ULTRA-CRITICAL: Hot data access pattern optimization for frequent queries"
             ),
 
             # === DIM_DATE TABLE INDEXES ===

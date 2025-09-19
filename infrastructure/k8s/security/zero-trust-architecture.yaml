@@ -1,0 +1,750 @@
+# Zero-Trust Security Architecture for BMAD Platform
+# Network segmentation, micro-segmentation, and comprehensive security policies
+
+---
+# Security Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-system
+  labels:
+    name: security-system
+    security.policy: zero-trust
+    monitoring: enabled
+    compliance: required
+
+---
+# Zero-Trust Network Policy - Default Deny All
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: security-system
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Zero-Trust Network Policy - API Services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-api-zero-trust
+  namespace: default
+  labels:
+    app: bmad-api
+    security-tier: api
+spec:
+  podSelector:
+    matchLabels:
+      app: bmad-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Istio ingress gateway only
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+      podSelector:
+        matchLabels:
+          app: istio-proxy
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow health checks from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090  # metrics
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow communication to database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: bmad-database
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow communication to vector database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: bmad-vector-db
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow HTTPS external calls (for integrations)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# Zero-Trust Network Policy - Database Layer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-database-zero-trust
+  namespace: default
+  labels:
+    app: bmad-database
+    security-tier: database
+spec:
+  podSelector:
+    matchLabels:
+      app: bmad-database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow traffic from API services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: bmad-api
+    - podSelector:
+        matchLabels:
+          app: bmad-analytics
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow monitoring and health checks
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow backup/replication traffic
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Pod Security Policy Replacement - Pod Security Standards
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-baseline
+  namespace: security-system
+  annotations:
+    pod-security.kubernetes.io/enforce: "restricted"
+    pod-security.kubernetes.io/audit: "restricted"
+    pod-security.kubernetes.io/warn: "restricted"
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: security-baseline
+    image: alpine:3.18
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+---
+# Service Account for Security Controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-controller
+  namespace: security-system
+  labels:
+    app: security-controller
+
+---
+# ClusterRole for Security Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: security-controller
+  labels:
+    app: security-controller
+rules:
+# Network Policy management
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Pod Security monitoring
+- apiGroups: [""]
+  resources: ["pods", "pods/status"]
+  verbs: ["get", "list", "watch"]
+# Service monitoring  
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+# RBAC auditing
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for Security Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-controller
+  labels:
+    app: security-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: security-controller
+subjects:
+- kind: ServiceAccount
+  name: security-controller
+  namespace: security-system
+
+---
+# Security Controller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-controller
+  namespace: security-system
+  labels:
+    app: security-controller
+    security-tier: control-plane
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: security-controller
+  template:
+    metadata:
+      labels:
+        app: security-controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: security-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: security-controller
+        image: bmad/security-controller:v1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8443
+          name: webhook
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ZERO_TRUST_MODE
+          value: "strict"
+        - name: COMPLIANCE_FRAMEWORK
+          value: "SOC2,ISO27001,PCI-DSS"
+        - name: THREAT_DETECTION_ENABLED
+          value: "true"
+        - name: AUTOMATIC_RESPONSE_ENABLED
+          value: "true"
+        - name: WEBHOOK_CERT_PATH
+          value: "/etc/certs/tls.crt"
+        - name: WEBHOOK_KEY_PATH
+          value: "/etc/certs/tls.key"
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /etc/certs
+          readOnly: true
+        - name: security-config
+          mountPath: /etc/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: security-webhook-certs
+      - name: security-config
+        configMap:
+          name: security-config
+      - name: tmp
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - security-controller
+              topologyKey: kubernetes.io/hostname
+
+---
+# Security Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-config
+  namespace: security-system
+  labels:
+    app: security-controller
+data:
+  security-policies.yaml: |
+    zero_trust:
+      default_deny: true
+      micro_segmentation: true
+      continuous_verification: true
+      
+    network_policies:
+      default_action: "deny"
+      allowed_protocols:
+        - tcp
+        - udp
+      blocked_protocols:
+        - icmp
+        - sctp
+      
+    pod_security:
+      run_as_non_root: true
+      read_only_root_filesystem: true
+      drop_all_capabilities: true
+      disable_privilege_escalation: true
+      seccomp_profile: "runtime/default"
+      
+    rbac_policies:
+      least_privilege: true
+      regular_audit: true
+      service_account_tokens: false
+      
+    compliance:
+      frameworks:
+        - SOC2
+        - ISO27001 
+        - PCI-DSS
+        - HIPAA
+      audit_logs: true
+      encryption_at_rest: true
+      encryption_in_transit: true
+      
+    threat_detection:
+      behavioral_analysis: true
+      anomaly_detection: true
+      runtime_protection: true
+      image_scanning: true
+      vulnerability_scanning: true
+      
+    automated_response:
+      quarantine_pods: true
+      block_suspicious_traffic: true
+      alert_security_team: true
+      create_incident: true
+      
+    monitoring:
+      security_events: true
+      compliance_status: true
+      threat_intelligence: true
+      audit_trail: true
+
+---
+# Admission Controller Webhook Configuration
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionWebhook
+metadata:
+  name: security-validation-webhook
+  labels:
+    app: security-controller
+webhooks:
+- name: pod-security.bmad.com
+  clientConfig:
+    service:
+      name: security-webhook
+      namespace: security-system
+      path: /validate-pods
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t... # Base64 encoded CA cert
+  rules:
+  - operations: ["CREATE", "UPDATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  admissionReviewVersions: ["v1", "v1beta1"]
+  sideEffects: None
+  failurePolicy: Fail
+- name: networkpolicy-security.bmad.com
+  clientConfig:
+    service:
+      name: security-webhook
+      namespace: security-system
+      path: /validate-networkpolicies
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t... # Base64 encoded CA cert
+  rules:
+  - operations: ["CREATE", "UPDATE", "DELETE"]
+    apiGroups: ["networking.k8s.io"]
+    apiVersions: ["v1"]
+    resources: ["networkpolicies"]
+  admissionReviewVersions: ["v1", "v1beta1"]
+  sideEffects: None
+  failurePolicy: Fail
+
+---
+# Mutating Admission Controller for Security Injection
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionWebhook
+metadata:
+  name: security-mutation-webhook
+  labels:
+    app: security-controller
+webhooks:
+- name: inject-security.bmad.com
+  clientConfig:
+    service:
+      name: security-webhook
+      namespace: security-system
+      path: /mutate-pods
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t... # Base64 encoded CA cert
+  rules:
+  - operations: ["CREATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  admissionReviewVersions: ["v1", "v1beta1"]
+  sideEffects: None
+  failurePolicy: Fail
+
+---
+# Security Webhook Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-webhook
+  namespace: security-system
+  labels:
+    app: security-controller
+spec:
+  selector:
+    app: security-controller
+  ports:
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+    name: webhook
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+
+---
+# Certificate for Webhook TLS
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: security-webhook-cert
+  namespace: security-system
+spec:
+  secretName: security-webhook-certs
+  issuerRef:
+    name: cluster-issuer
+    kind: ClusterIssuer
+  dnsNames:
+  - security-webhook.security-system.svc
+  - security-webhook.security-system.svc.cluster.local
+
+---
+# Istio Security Policies for Service Mesh Zero Trust
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-zero-trust
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Istio Authorization Policy - API Services
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: bmad-api-authz
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: bmad-api
+  rules:
+  # Allow traffic from authenticated sources only
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+    - source:
+        namespaces: ["monitoring"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        paths: ["/api/v1/*"]
+    when:
+    - key: source.ip
+      notValues: ["0.0.0.0/0"]  # Block all external direct access
+
+---
+# Istio Authorization Policy - Database Access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: bmad-database-authz
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: bmad-database
+  rules:
+  # Only allow database access from authorized services
+  - from:
+    - source:
+        principals: 
+        - "cluster.local/ns/default/sa/bmad-api"
+        - "cluster.local/ns/default/sa/bmad-analytics"
+    to:
+    - operation:
+        ports: ["5432"]
+    when:
+    - key: source.namespace
+      values: ["default"]
+
+---
+# Network Segmentation for Vector Database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bmad-vector-db-segmentation
+  namespace: default
+  labels:
+    app: bmad-vector-db
+    security-tier: ai-ml
+spec:
+  podSelector:
+    matchLabels:
+      app: bmad-vector-db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from AI/ML services only
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: ai-ml
+    - podSelector:
+        matchLabels:
+          app: bmad-api
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  # DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # External AI model APIs (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# Runtime Security with Falco Rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-security-rules
+  namespace: security-system
+  labels:
+    app: falco-security
+data:
+  bmad_security_rules.yaml: |
+    - rule: Unauthorized Process in Container
+      desc: Detect processes not in allowed list
+      condition: >
+        spawned_process and container and
+        not proc.name in (allowed_processes) and
+        not proc.pname in (allowed_processes)
+      output: >
+        Unauthorized process started (user=%user.name command=%proc.cmdline 
+        container_id=%container.id container_name=%container.name 
+        image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [process, security]
+      
+    - rule: Network Connection Outside Cluster
+      desc: Detect connections to external IPs
+      condition: >
+        outbound and not fd.sip in (cluster_ips) and
+        not fd.dip in (allowed_external_ips)
+      output: >
+        External network connection detected (user=%user.name 
+        command=%proc.cmdline connection=%fd.name 
+        container_name=%container.name image=%container.image.repository)
+      priority: ERROR  
+      tags: [network, security]
+      
+    - rule: Sensitive File Access
+      desc: Detect access to sensitive files
+      condition: >
+        open_read and sensitive_files and
+        not proc.name in (allowed_file_readers)
+      output: >
+        Sensitive file accessed (user=%user.name file=%fd.name 
+        command=%proc.cmdline container_name=%container.name)
+      priority: CRITICAL
+      tags: [filesystem, security]
+
+---
+# ServiceMonitor for Security Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: security-controller-metrics
+  namespace: security-system
+  labels:
+    app: security-controller
+spec:
+  selector:
+    matchLabels:
+      app: security-controller
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+
+---
+# PrometheusRule for Security Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: security-alerts
+  namespace: security-system
+  labels:
+    app: security-monitoring
+spec:
+  groups:
+  - name: bmad.security
+    rules:
+    - alert: UnauthorizedPodCreation
+      expr: increase(security_pod_violations_total[5m]) > 0
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Unauthorized pod creation detected"
+        description: "Pod created without proper security context: {{ $labels.pod_name }}"
+        
+    - alert: NetworkPolicyViolation
+      expr: increase(security_network_violations_total[5m]) > 0
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Network policy violation detected"
+        description: "Traffic blocked by network policy: {{ $labels.source_pod }} -> {{ $labels.target_pod }}"
+        
+    - alert: TLSCertificateExpiringSoon
+      expr: (security_certificate_expiry_timestamp - time()) / 86400 < 30
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "TLS certificate expiring soon"
+        description: "Certificate {{ $labels.certificate_name }} expires in {{ $value }} days"
+        
+    - alert: ComplianceViolation
+      expr: security_compliance_score < 0.95
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Compliance score below threshold"
+        description: "Current compliance score: {{ $value }}. Threshold: 0.95"
